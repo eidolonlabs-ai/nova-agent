@@ -1,0 +1,29 @@
+# .nova.md — Project-Specific Agent Instructions
+
+This file contains project-specific instructions for Nova Agent.
+It is automatically discovered and loaded when you chat from this directory.
+
+## About This Project
+
+<!-- Describe your project here -->
+This is my personal workspace.
+
+## Conventions
+
+<!-- Add project-specific conventions -->
+- Use absolute paths when referencing files
+- Prefer Python 3.12+ for new scripts
+- Keep the workspace clean — archive old work
+
+## Tools & Workflows
+
+<!-- Document your preferred tools and workflows -->
+- Editor: VS Code
+- Shell: zsh
+- Package manager: Homebrew
+
+## Notes
+
+<!-- Any other notes Nova should know about -->
+- I prefer concise responses
+- Don't ask for confirmation before running safe commands

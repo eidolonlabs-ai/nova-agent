@@ -1,0 +1,52 @@
+# Byte-compiled / optimized / distribution files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff
+.ruff_cache/
+
+# Nova runtime data (memory, sessions, logs)
+memory.json
+*.db
+*.jsonl
+*.log
+logs/
+
+# Config (user-specific)
+config.yaml
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# mypy
+.mypy_cache/
+
+# Logs
+*.log
+logs/

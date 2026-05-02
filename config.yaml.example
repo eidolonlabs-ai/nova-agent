@@ -1,0 +1,61 @@
+# Nova Agent Configuration
+
+# OpenRouter API
+openrouter:
+  api_key: "${OPENROUTER_API_KEY}"  # or set OPENROUTER_API_KEY env var
+  model: "anthropic/claude-sonnet-4-20250514"
+  base_url: "https://openrouter.ai/api/v1"
+
+# Agent settings
+agent:
+  identity: "You are Nova, a helpful personal assistant."
+  max_iterations: 50          # Max tool calls per turn
+  temperature: 0.7
+  top_p: 1.0
+
+# Token budgets (explicit caps at every layer)
+budgets:
+  system_prompt_max: 8000           # Total system prompt tokens
+  skills_max_chars: 15000           # Skills section character limit
+  skills_max_count: 50              # Max skills in prompt
+  context_file_max_chars: 10000     # Per context file
+  context_total_max_chars: 50000    # Total across all context files
+  tool_result_max_chars: 8000       # Per tool result
+  conversation_turn_limit: 15       # DM session turn limit before compression
+
+# Context compression
+compression:
+  enabled: true
+  threshold_percent: 0.40    # Compress at 40% of context window
+  summary_model: "google/gemini-2.0-flash-exp:free"  # Cheap model for summarization
+  reserve_tokens: 15000      # Reserve for compaction overhead
+
+# Context files to discover (in priority order)
+context_files:
+  - ".nova.md"
+  - "NOVA.md"
+  - "AGENTS.md"
+  - "SOUL.md"
+  - "CLAUDE.md"
+  - ".cursorrules"
+
+# Memory
+memory:
+  enabled: true
+  max_entries: 100
+  file: "~/.nova/memory.json"
+
+# Skills
+skills:
+  enabled: true
+  directory: "~/.nova/skills"
+
+# Session storage
+session:
+  enabled: true
+  directory: "~/.nova/sessions"
+
+# Logging
+logging:
+  level: "INFO"
+  file: "~/.nova/nova.log"
