@@ -121,8 +121,8 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
         return f"No matches found for '{pattern}' (searched {total_files} files)."
 
     lines = [f"Found {len(matches)} match(es) for '{pattern}' in {total_files} files:\n"]
-    for file_path, line_num, preview in matches:
-        lines.append(f"  {file_path}:{line_num}: {preview}")
+    for match_path, line_num, preview in matches:
+        lines.append(f"  {match_path}:{line_num}: {preview}")
 
     if len(matches) >= max_results:
         lines.append(f"\n[...limited to {max_results} results, refine your search...]")

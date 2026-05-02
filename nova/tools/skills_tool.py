@@ -135,11 +135,11 @@ def _skill_manage(args: dict[str, Any], **kwargs) -> str:
             return "Error: 'content' is required for patch action."
 
         existing = skill_file.read_text(encoding="utf-8")
-        frontmatter, body = parse_frontmatter(existing)
+        frontmatter_dict, body = parse_frontmatter(existing)
 
         # Rebuild with updated body
         fm_text = "---\n"
-        for k, v in frontmatter.items():
+        for k, v in frontmatter_dict.items():
             if isinstance(v, list):
                 fm_text += f"{k}: {json.dumps(v)}\n"
             else:

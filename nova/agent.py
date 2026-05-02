@@ -26,7 +26,14 @@ logger = logging.getLogger(__name__)
 class NovaAgent:
     """Main agent class with explicit token budgets and smart context management."""
 
-    def __init__(self, config: dict | None = None, session_id: str | None = None):
+    def __init__(
+        self,
+        config: dict | None = None,
+        session_id: str | None = None,
+        http_client: httpx.Client | None = None,
+        session_store: SessionStore | None = None,
+        memory_store: MemoryStore | None = None,
+    ):
         self.config = config or load_config()
         self.session_id = session_id
         self.messages: list[dict[str, Any]] = []
@@ -36,12 +43,17 @@ class NovaAgent:
         # Initialize components
         ensure_nova_home()
 
-        # Session store
-        session_dir = Path(self.config["session"]["directory"]).expanduser()
-        self.session_store = SessionStore(session_dir / "sessions.db")
+        # Session store (injectable for testing)
+        if session_store is not None:
+            self.session_store = session_store
+        else:
+            session_dir = Path(self.config["session"]["directory"]).expanduser()
+            self.session_store = SessionStore(session_dir / "sessions.db")
 
-        # Memory store
-        if self.config["memory"]["enabled"]:
+        # Memory store (injectable for testing)
+        if memory_store is not None:
+            self.memory: MemoryStore | None = memory_store
+        elif self.config["memory"]["enabled"]:
             memory_file = Path(self.config["memory"]["file"]).expanduser()
             self.memory = MemoryStore(
                 memory_file,
@@ -50,18 +62,21 @@ class NovaAgent:
         else:
             self.memory = None
 
-        # HTTP client
-        openrouter_config = self.config["openrouter"]
-        self.client = httpx.Client(
-            base_url=openrouter_config["base_url"],
-            headers={
-                "Authorization": f"Bearer {openrouter_config['api_key']}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://nova-agent.local",
-                "X-Title": "Nova Agent",
-            },
-            timeout=120.0,
-        )
+        # HTTP client (injectable for testing)
+        if http_client is not None:
+            self.client = http_client
+        else:
+            openrouter_config = self.config["openrouter"]
+            self.client = httpx.Client(
+                base_url=openrouter_config["base_url"],
+                headers={
+                    "Authorization": f"Bearer {openrouter_config['api_key']}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://nova-agent.local",
+                    "X-Title": "Nova Agent",
+                },
+                timeout=120.0,
+            )
 
         # Discover tools
         discover_builtin_tools()
@@ -82,6 +97,10 @@ class NovaAgent:
 
     def _load_session(self):
         """Load an existing session."""
+        if not self.session_id:
+            self._create_session()
+            return
+
         info = self.session_store.get_session_info(self.session_id)
         if info:
             # Load recent messages only — respect conversation turn limit
@@ -160,7 +179,7 @@ class NovaAgent:
         payload["stream"] = True
 
         full_content = ""
-        tool_calls = []
+        tool_calls: list[dict[str, Any]] = []
 
         with self.client.stream("POST", "/chat/completions", json=payload) as response:
             if response.status_code == 400:
@@ -249,7 +268,7 @@ class NovaAgent:
         """
         # Add user message
         self.messages.append({"role": "user", "content": user_message})
-        self.session_store.add_message(self.session_id, "user", user_message)
+        self.session_store.add_message(self.session_id or "", "user", user_message)
 
         # Build messages for API
         api_messages = [{"role": "system", "content": self._cached_system_prompt or ""}]
@@ -324,7 +343,7 @@ class NovaAgent:
 
             self.messages.append(assistant_msg)
             self.session_store.add_message(
-                self.session_id,
+                self.session_id or "",
                 "assistant",
                 content or "",
                 tool_calls=tool_calls,
@@ -358,7 +377,7 @@ class NovaAgent:
                 }
                 self.messages.append(tool_result_msg)
                 self.session_store.add_message(
-                    self.session_id,
+                    self.session_id or "",
                     "tool",
                     result,
                 )

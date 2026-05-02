@@ -33,14 +33,24 @@ Nova Agent is a minimalist personal AI agent with explicit token budgets and sma
 ## Development Commands
 - Lint: `ruff check .`
 - Auto-fix: `ruff check --fix .`
+- Type check: `mypy nova/`
 - Test: `pytest`
+- Full CI check: `ruff check . && mypy nova/ && pytest`
 - Run: `nova chat` or `nova ask "question"`
+
+## Code Quality Standards
+- **Type hints**: All public functions should have type annotations. Run `mypy nova/` to verify.
+- **Linting**: Code must pass `ruff check .` with no errors.
+- **Tests**: All 101 tests must pass. New features should include tests.
+- **Test structure**: Tests use dependency injection — pass mock `http_client`, `session_store`, and `memory_store` to `NovaAgent` for isolated testing.
+- **Test files**: `tests/test_agent.py`, `tests/test_config.py`, `tests/test_context.py`, `tests/test_cli.py`, `tests/test_memory.py`, `tests/test_model_metadata.py`, `tests/test_prompt.py`, `tests/test_registry.py`, `tests/test_session.py`, `tests/test_skills.py`, `tests/test_tokens.py`, `tests/test_tools.py`
 
 ## Configuration
 Copy `config.yaml.example` to `config.yaml` and set your OpenRouter API key.
 
 ## Project Status
-- All 18 tests passing
+- All 101 tests passing
 - Linting clean (ruff)
+- Type checking clean (mypy — 0 errors in 20 files)
 - CLI functional (chat, ask, sessions, reset)
-- Ready for configuration and first run
+- 10 tools available (terminal, read_file, write_file, patch_file, search_files, web_search, skills_list, skill_view, skill_manage, memory)

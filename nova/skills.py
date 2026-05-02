@@ -40,7 +40,7 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
                 items = [item.strip().strip('"').strip("'") for item in value[1:-1].split(",")]
                 frontmatter[key] = [i for i in items if i]
             else:
-                frontmatter[key] = value
+                frontmatter[key] = value  # type: ignore[assignment]
 
     return frontmatter, body
 
