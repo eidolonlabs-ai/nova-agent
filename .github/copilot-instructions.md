@@ -8,20 +8,24 @@ Nova Agent is a minimalist personal AI agent with explicit token budgets and sma
 
 ## Architecture
 - **nova/** - Main package
-  - `agent.py` - Main agent loop with OpenRouter API integration
-  - `config.py` - Configuration loading from YAML
-  - `context.py` - Context file discovery with budgets and truncation
-  - `memory.py` - Simple file-based memory system
-  - `prompt.py` - System prompt assembly with mode gating
-  - `session.py` - SQLite session storage with FTS5
-  - `skills.py` - Skill discovery and loading
-  - `tokens.py` - Token estimation utilities
+  - `agent.py` - Main agent loop with OpenRouter API, streaming, tool calling, history truncation
+  - `cli.py` - CLI entry point (chat, ask, sessions, reset commands)
+  - `config.py` - YAML config loading with env var resolution, deep merge
+  - `context.py` - Context file discovery with budgets, head/tail truncation, injection scanning
+  - `memory.py` - File-based memory store with LRU eviction
+  - `model_metadata.py` - Model context window sizes for 20+ OpenRouter models
+  - `prompt.py` - System prompt assembly with mode gating (full/minimal/none)
+  - `session.py` - SQLite session storage with FTS5 full-text search
+  - `skills.py` - Skill discovery, YAML frontmatter parsing, XML-style prompt generation
+  - `tokens.py` - Token estimation via tiktoken with character fallback
   - `tools/` - Tool registry and built-in tools
-    - `registry.py` - Central tool registry
-    - `terminal.py` - Shell command execution
-    - `file_ops.py` - File read/write/patch
-    - `web.py` - Web search (placeholder)
-  - `cli.py` - CLI entry point
+    - `registry.py` - Central tool registry with auto-discovery
+    - `terminal.py` - Shell command execution with timeout and output truncation
+    - `file_ops.py` - read_file, write_file, patch_file tools
+    - `search_files.py` - Grep/regex search across project files
+    - `web.py` - DuckDuckGo HTML web search (zero dependencies)
+    - `skills_tool.py` - skills_list, skill_view, skill_manage tools
+    - `memory_tool.py` - memory tool (add/search/delete/clear)
 
 ## Key Design Principles
 1. **Explicit token budgets** at every layer (system prompt, skills, context files, tool results)

@@ -178,16 +178,20 @@ The agent is instructed to:
 
 ## Tools
 
-Nova comes with 6 built-in tools:
+Nova comes with 10 built-in tools:
 
 | Tool | Toolset | Description |
 |------|---------|-------------|
-| `terminal` | terminal | Execute shell commands |
+| `terminal` | terminal | Execute shell commands with timeout |
 | `read_file` | file | Read file contents with line ranges |
-| `write_file` | file | Write/overwrite files |
-| `patch_file` | file | Search/replace patches |
-| `search_files` | file | Grep/regex search across files |
-| `web_search` | web | Web search (placeholder — see below) |
+| `write_file` | file | Write/overwrite files with atomic saves |
+| `patch_file` | file | Search/replace patches for targeted edits |
+| `search_files` | file | Grep/regex search across project files |
+| `web_search` | web | Web search via DuckDuckGo HTML (zero dependencies) |
+| `skills_list` | skills | List all available skills by category |
+| `skill_view` | skills | Load a skill's full instructions |
+| `skill_manage` | skills | Create, update, or delete skills |
+| `memory` | memory | Add, search, delete, or clear persistent memories |
 
 ### Adding Custom Tools
 
@@ -228,42 +232,37 @@ registry.register(
 
 The tool is automatically discovered and available in the next session.
 
-### Enabling Web Search
-
-The `web_search` tool is a placeholder by default. To enable it, implement the handler in `nova/tools/web.py`:
-
-```python
-def _web_search(args, **kwargs):
-    query = args.get("query", "")
-    # Implement with DuckDuckGo, Tavily, Firecrawl, etc.
-    # Return search results as a string
-    return results
-```
-
 ## Session Management
 
-Sessions are stored in SQLite at `~/.nova/sessions/sessions.db`.
+Sessions are stored in SQLite at `~/.nova/sessions/sessions.db` with FTS5 full-text search.
 
 ```bash
-# List sessions
+# List recent sessions
 nova sessions
 
-# Start fresh session
-nova chat          # or type 'new' in chat
+# List with custom limit
+nova sessions --limit 10
 
-# Query sessions (FTS5 search)
-# (Coming soon: nova search "topic")
+# Start fresh session
+nova chat
+
+# Ask a one-shot question
+nova ask "What is the capital of France?"
+
+# Reset (clear) a session
+nova reset --session <session-id>
 ```
 
 ## Data Directory Structure
 
 ```
 ~/.nova/
-├── SOUL.md              # Agent personality
-├── memory.json          # Persistent memories
+├── SOUL.md              # Agent personality (optional)
+├── .nova.md             # Project instructions (per-project)
+├── memory.json          # Persistent memories (LRU eviction)
 ├── nova.log             # Log file
 ├── sessions/
-│   └── sessions.db      # SQLite session storage
+│   └── sessions.db      # SQLite session storage with FTS5
 └── skills/
     ├── python-coding/
     │   └── SKILL.md
