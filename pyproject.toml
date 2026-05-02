@@ -61,7 +61,4 @@ disallow_untyped_defs = false
 check_untyped_defs = true
 ignore_missing_imports = true
 strict_optional = true
-
-[[tool.mypy.overrides]]
-module = "yaml"
-follow_imports = "skip"
+disable_error_code = ["import-untyped"]

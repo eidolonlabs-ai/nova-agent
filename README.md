@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/eidolonlabs-ai/nova-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/eidolonlabs-ai/nova-agent/actions/workflows/ci.yml)
 
 A minimalist personal AI agent with explicit token budgets and smart context management.
 
@@ -37,8 +38,8 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `write_file` | Write/overwrite files with atomic saves |
 | `patch_file` | Search/replace patches for targeted edits |
 | `search_files` | Grep/regex search across project files |
-| `web_search` | Web search via DuckDuckGo HTML |
-| `skills_list` | List all available skills |
+| `web_search` | Web search via DuckDuckGo HTML (zero dependencies) |
+| `skills_list` | List all available skills by category |
 | `skill_view` | Load a skill's full instructions |
 | `skill_manage` | Create, update, or delete skills |
 | `memory` | Add, search, delete, or clear persistent memories |
@@ -95,28 +96,30 @@ nova reset
 ```
 nova/
   __init__.py
-  agent.py          # Main agent loop
-  config.py         # Configuration loading
+  __main__.py       # Package entry point
+  agent.py          # Main agent loop with tool calling & streaming
+  cli.py            # CLI entry point (chat, ask, sessions, reset)
+  config.py         # YAML config loading with env var resolution
   context.py        # Context file discovery, budgets, truncation
-  memory.py         # Simple memory system
-  prompt.py         # System prompt assembly
-  session.py        # SQLite session storage
-  skills.py         # Skill discovery and loading
-  tokens.py         # Token estimation utilities
+  memory.py         # File-based memory with LRU eviction
+  model_metadata.py # Model context window sizes for 20+ models
+  prompt.py         # System prompt assembly with mode gating
+  session.py        # SQLite session storage with FTS5 search
+  skills.py         # Skill discovery, frontmatter parsing, prompt gen
+  tokens.py         # Token estimation via tiktoken
   tools/
     __init__.py
-    registry.py     # Tool registry
-    terminal.py     # Shell command execution
-    file_ops.py     # File read/write/patch tools
-    search_files.py # Grep/regex search across files
-    web.py          # Web search (DuckDuckGo)
-    skills_tool.py  # Skills list/view/manage
-    memory_tool.py  # Memory add/search/delete/clear
-  cli.py            # CLI entry point
+    registry.py     # Central tool registry with auto-discovery
+    terminal.py     # Shell command execution with timeout
+    file_ops.py     # read_file, write_file, patch_file
+    search_files.py # Grep/regex search across project files
+    web.py          # DuckDuckGo HTML web search
+    skills_tool.py  # skills_list, skill_view, skill_manage
+    memory_tool.py  # memory tool (add/search/delete/clear)
 config/
   SOUL.md.example   # Agent personality template
   .nova.md.example  # Project instructions template
-  skills/           # Starter skills
+  skills/           # 3 starter skills
     python-coding/
     git-workflow/
     file-editing/
@@ -124,8 +127,31 @@ docs/
   customizing.md    # Comprehensive customization guide
 ```
 
+## Development
+
+```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+pip install mypy
+
+# Run all checks
+ruff check .          # Lint
+mypy nova/            # Type check
+pytest                # Tests (101 passing)
+
+# Full CI check
+ruff check . && mypy nova/ && pytest
+```
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
 ## License
 
 MIT — see [LICENSE](LICENSE) for details.
 
 © 2026 Eidolon Labs LLC
+
+## Contributing
+
+Contributions welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+For security issues, see [SECURITY.md](SECURITY.md).
