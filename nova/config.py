@@ -90,11 +90,26 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def load_config(config_path: Path | None = None) -> dict[str, Any]:
-    """Load configuration from YAML file, falling back to defaults."""
+    """Load configuration from YAML files, falling back to defaults.
+
+    Config is loaded in layers (later layers override earlier ones):
+    1. DEFAULT_CONFIG (built-in defaults)
+    2. ~/.nova/config.yaml (global config, if it exists)
+    3. config.yaml in the current directory (local config, if it exists)
+    4. Explicit config_path (if provided, overrides local config)
+    """
+    config = DEFAULT_CONFIG.copy()
+
+    # Layer 2: Global config (~/.nova/config.yaml)
+    global_config_path = get_nova_home() / "config.yaml"
+    if global_config_path.exists():
+        with open(global_config_path, encoding="utf-8") as f:
+            global_config: dict[str, Any] = yaml.safe_load(f) or {}
+        config = _deep_merge(config, global_config)
+
+    # Layer 3: Local config (config.yaml in current directory)
     if config_path is None:
         config_path = Path.cwd() / "config.yaml"
-
-    config = DEFAULT_CONFIG.copy()
 
     if config_path.exists():
         with open(config_path, encoding="utf-8") as f:
