@@ -46,23 +46,56 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 
 ## Installation
 
+### Quick Install (End Users)
+
 ```bash
-pip install -e .
+curl -fsSL https://raw.githubusercontent.com/eidolonlabs-ai/nova-agent/main/scripts/install.sh | bash
+```
+
+Then configure your API key:
+
+```bash
+nova setup
+```
+
+That's it. Nova lives in `~/.nova/nova-agent/` and updates with `nova update`.
+
+### Developer Install
+
+```bash
+git clone https://github.com/eidolonlabs-ai/nova-agent.git
+cd nova-agent
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
 ## Configuration
 
-Copy the example config and edit:
+Nova loads config in layers (later overrides earlier):
+
+1. **Built-in defaults** — sensible fallbacks for everything
+2. **`~/.nova/config.yaml`** — global config (API key, model, budgets)
+3. **`config.yaml`** in current directory — project-specific overrides
+
+### Quick Setup
+
+Run the interactive wizard:
 
 ```bash
-cp config.yaml.example config.yaml
+nova setup
 ```
 
-Set your OpenRouter API key and preferred model.
+Or create `~/.nova/config.yaml` manually:
+
+```yaml
+openrouter:
+  api_key: "sk-or-..."        # or set OPENROUTER_API_KEY env var
+  model: "anthropic/claude-sonnet-4-20250514"
+```
 
 ### Default Files (Recommended)
 
-Copy the starter files to your Nova home directory:
+Copy starter files to your Nova home directory:
 
 ```bash
 mkdir -p ~/.nova/skills
@@ -75,9 +108,6 @@ See [docs/customizing.md](docs/customizing.md) for the full customization guide.
 ## Usage
 
 ```bash
-# Activate the virtual environment
-source .venv/bin/activate
-
 # Interactive chat
 nova chat
 
@@ -89,6 +119,9 @@ nova sessions
 
 # Clear current session
 nova reset
+
+# Update to latest version
+nova update
 ```
 
 ## Project Structure
