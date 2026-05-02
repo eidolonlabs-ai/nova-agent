@@ -46,21 +46,37 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 
 ## Installation
 
-### Quick Install (End Users)
+### For End Users
+
+**One-line install:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/eidolonlabs-ai/nova-agent/main/scripts/install.sh | bash
 ```
 
-Then configure your API key:
+This clones Nova to `~/.nova/nova-agent/`, creates a virtual environment, installs dependencies, and adds the `nova` command to your PATH.
+
+**Configure:**
 
 ```bash
 nova setup
 ```
 
-That's it. Nova lives in `~/.nova/nova-agent/` and updates with `nova update`.
+The interactive wizard walks you through setting your OpenRouter API key and choosing a model.
 
-### Developer Install
+**Update:**
+
+```bash
+nova update
+```
+
+Pulls the latest code and reinstalls dependencies.
+
+---
+
+### For Developers
+
+**Clone and install:**
 
 ```bash
 git clone https://github.com/eidolonlabs-ai/nova-agent.git
@@ -68,6 +84,20 @@ cd nova-agent
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
+
+**Run tests:**
+
+```bash
+ruff check . && mypy nova/ && pytest
+```
+
+**Run:**
+
+```bash
+nova chat
+```
+
+Developer installs use the repo's local `.venv` and `config.yaml` in the project root. Changes to source code take effect immediately (editable install).
 
 ## Configuration
 
@@ -77,7 +107,7 @@ Nova loads config in layers (later overrides earlier):
 2. **`~/.nova/config.yaml`** — global config (API key, model, budgets)
 3. **`config.yaml`** in current directory — project-specific overrides
 
-### Quick Setup
+### For End Users
 
 Run the interactive wizard:
 
@@ -90,8 +120,18 @@ Or create `~/.nova/config.yaml` manually:
 ```yaml
 openrouter:
   api_key: "sk-or-..."        # or set OPENROUTER_API_KEY env var
-  model: "anthropic/claude-sonnet-4-20250514"
+  model: "qwen/qwen3.6-flash" # Fast, capable, affordable
 ```
+
+### For Developers
+
+Copy the example config to the project root:
+
+```bash
+cp config.yaml.example config.yaml
+```
+
+Edit `config.yaml` in the repo root. This overrides the global config for this project only.
 
 ### Default Files (Recommended)
 
@@ -120,7 +160,7 @@ nova sessions
 # Clear current session
 nova reset
 
-# Update to latest version
+# Update to latest version (end users)
 nova update
 ```
 

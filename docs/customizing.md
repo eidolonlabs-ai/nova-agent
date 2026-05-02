@@ -4,8 +4,22 @@ Nova Agent is designed to be personalized. This guide covers every way you can c
 
 ## Quick Start
 
+### For End Users
+
 ```bash
-# 1. Copy the config
+# 1. Run the setup wizard
+nova setup
+
+# 2. Copy default files to your Nova home
+mkdir -p ~/.nova/skills
+cp -r config/skills/* ~/.nova/skills/
+cp config/SOUL.md.example ~/.nova/SOUL.md
+```
+
+### For Developers
+
+```bash
+# 1. Copy the config to the project root
 cp config.yaml.example config.yaml
 
 # 2. Set your API key (or use env var)
@@ -21,16 +35,32 @@ cp config/SOUL.md.example ~/.nova/SOUL.md
 
 ### Model Selection
 
-Nova uses OpenRouter, giving you access to 100+ models. Change the model in `config.yaml`:
+Nova uses OpenRouter, giving you access to 100+ models. The default model is **`qwen/qwen3.6-flash`** — fast, capable, and affordable.
+
+Change the model in your config:
 
 ```yaml
 openrouter:
-  model: "anthropic/claude-sonnet-4-20250514"  # Fast, capable, affordable
-  # model: "anthropic/claude-opus-4-20250514"  # Most capable
-  # model: "google/gemini-2.5-pro"              # Large context window
-  # model: "openai/gpt-4o"                      # Good all-rounder
-  # model: "qwen/qwen3.6-flash"                 # Fast and cheap
+  model: "qwen/qwen3.6-flash"         # Default — fast and affordable
+  # model: "anthropic/claude-sonnet-4-20250514"  # More capable
+  # model: "anthropic/claude-opus-4-20250514"    # Most capable
+  # model: "google/gemini-2.5-pro"               # Large context window
+  # model: "openai/gpt-4.1"                      # Good all-rounder
 ```
+
+### Summarization Model
+
+When context compression is triggered, Nova uses a separate (cheaper) model for summarization. The default is also **`qwen/qwen3.6-flash`**:
+
+```yaml
+compression:
+  enabled: true
+  threshold_percent: 0.40
+  summary_model: "qwen/qwen3.6-flash"  # Cheap model for summarization
+  reserve_tokens: 15000
+```
+
+You can use a different model here if you prefer — it only runs during compression, so cost impact is minimal.
 
 ### Token Budgets
 
