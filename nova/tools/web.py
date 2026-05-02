@@ -58,11 +58,12 @@ class _DDGResultParser(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]):
         attr_dict = dict(attrs)
-        if tag == "div" and attr_dict.get("class") == "result":
+        cls = attr_dict.get("class") or ""
+        if tag == "div" and cls == "result":
             self._in_result = True
             self._current = {}
-        elif tag == "a" and self._in_result and "result__snippet" not in attr_dict.get("class", ""):
-            href = attr_dict.get("href", "")
+        elif tag == "a" and self._in_result and "result__snippet" not in cls:
+            href = attr_dict.get("href") or ""
             # DuckDuckGo wraps URLs with a redirect — extract the real URL
             if href.startswith("/"):
                 # Extract actual URL from the redirect
@@ -71,10 +72,10 @@ class _DDGResultParser(HTMLParser):
                     from urllib.parse import unquote
                     href = unquote(match.group(1))
             self._current["url"] = href
-        elif tag == "a" and "result__title" in attr_dict.get("class", ""):
+        elif tag == "a" and "result__title" in cls:
             self._in_title = True
             self._text = ""
-        elif tag == "a" and "result__snippet" in attr_dict.get("class", ""):
+        elif tag == "a" and "result__snippet" in cls:
             self._in_snippet = True
             self._text = ""
 

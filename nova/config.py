@@ -69,10 +69,10 @@ def _resolve_env_vars(value: Any) -> Any:
 
 def _deep_resolve(config: dict[str, Any]) -> dict[str, Any]:
     """Recursively resolve env vars in config."""
-    result = {}
+    result: dict[str, Any] = {}
     for key, value in config.items():
         if isinstance(value, dict):
-            result[key] = _deep_resolve(value)
+            result[key] = _deep_resolve(value)  # type: ignore[arg-type]
         else:
             result[key] = _resolve_env_vars(value)
     return result
@@ -98,15 +98,16 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
 
     if config_path.exists():
         with open(config_path, encoding="utf-8") as f:
-            user_config = yaml.safe_load(f) or {}
+            user_config: dict[str, Any] = yaml.safe_load(f) or {}
         config = _deep_merge(config, user_config)
 
     # Resolve environment variable placeholders
     config = _deep_resolve(config)
 
     # Ensure API key from env var if not in config
-    if not config["openrouter"]["api_key"]:
-        config["openrouter"]["api_key"] = os.environ.get("OPENROUTER_API_KEY", "")
+    openrouter = config.get("openrouter", {})
+    if isinstance(openrouter, dict) and not openrouter.get("api_key"):
+        config["openrouter"]["api_key"] = os.environ.get("OPENROUTER_API_KEY", "")  # type: ignore[index]
 
     return config
 
