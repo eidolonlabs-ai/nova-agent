@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import Any
 
 from nova.agent import NovaAgent
 from nova.config import ensure_nova_home, load_config
@@ -67,7 +68,7 @@ def cmd_setup(args):
     print()
 
     # Load existing config if present
-    existing_config = {}
+    existing_config: dict[str, Any] = {}
     if config_path.exists():
         with open(config_path, encoding="utf-8") as f:
             existing_config = yaml.safe_load(f) or {}

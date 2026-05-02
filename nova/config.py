@@ -9,7 +9,7 @@ import yaml
 DEFAULT_CONFIG = {
     "openrouter": {
         "api_key": "",
-        "model": "anthropic/claude-sonnet-4-20250514",
+        "model": "qwen/qwen3.6-flash",
         "base_url": "https://openrouter.ai/api/v1",
     },
     "agent": {
@@ -30,7 +30,7 @@ DEFAULT_CONFIG = {
     "compression": {
         "enabled": True,
         "threshold_percent": 0.40,
-        "summary_model": "google/gemini-2.0-flash-exp:free",
+        "summary_model": "qwen/qwen3.6-flash",
         "reserve_tokens": 15000,
     },
     "context_files": [".nova.md", "NOVA.md", "AGENTS.md", "SOUL.md", "CLAUDE.md", ".cursorrules"],

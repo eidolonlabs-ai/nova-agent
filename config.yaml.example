@@ -3,7 +3,7 @@
 # OpenRouter API
 openrouter:
   api_key: "${OPENROUTER_API_KEY}"  # or set OPENROUTER_API_KEY env var
-  model: "anthropic/claude-sonnet-4-20250514"
+  model: "qwen/qwen3.6-flash"       # Fast, capable, affordable
   base_url: "https://openrouter.ai/api/v1"
 
 # Agent settings
@@ -27,7 +27,7 @@ budgets:
 compression:
   enabled: true
   threshold_percent: 0.40    # Compress at 40% of context window
-  summary_model: "google/gemini-2.0-flash-exp:free"  # Cheap model for summarization
+  summary_model: "qwen/qwen3.6-flash"  # Cheap model for summarization
   reserve_tokens: 15000      # Reserve for compaction overhead
 
 # Context files to discover (in priority order)
