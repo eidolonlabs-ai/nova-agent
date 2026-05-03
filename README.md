@@ -34,7 +34,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 - **OpenRouter API** for flexible model selection (100+ models)
 - **Streaming responses** with rich terminal UI
 - **Simple file-based memory** system with automatic system prompt refresh
-- **Web search** via DuckDuckGo (zero dependencies)
+- **Web search** via Bing RSS (zero dependencies, zero API key)
 
 ## Built-in Tools
 
@@ -45,7 +45,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `write_file` | Write/overwrite files with atomic saves |
 | `patch_file` | Search/replace patches for targeted edits |
 | `search_files` | Grep/regex search across project files |
-| `web_search` | Web search via DuckDuckGo HTML (zero dependencies) |
+| `web_search` | Web search via Bing RSS (zero dependencies, zero API key) |
 | `skills_list` | List all available skills by category |
 | `skill_view` | Load a skill's full instructions |
 | `skill_manage` | Create, update, or delete skills |
@@ -233,7 +233,7 @@ nova/
     terminal.py     # Shell command execution with timeout
     file_ops.py     # read_file, write_file, patch_file
     search_files.py # Grep/regex search across project files
-    web.py          # DuckDuckGo HTML web search
+    web.py          # Bing RSS web search
     skills_tool.py  # skills_list, skill_view, skill_manage
     memory_tool.py  # memory tool (add/search/delete/clear)
     delegate_tool.py # delegate_task sub-agent spawning (opt-in)

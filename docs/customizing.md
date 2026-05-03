@@ -181,7 +181,7 @@ Nova comes with 10 built-in tools:
 | `write_file` | file | Write/overwrite files with atomic saves |
 | `patch_file` | file | Search/replace patches for targeted edits |
 | `search_files` | file | Grep/regex search across project files |
-| `web_search` | web | Web search via DuckDuckGo HTML (zero dependencies) |
+| `web_search` | web | Web search via Bing RSS (zero dependencies, zero API key) |
 | `skills_list` | skills | List all available skills by category |
 | `skill_view` | skills | Load a skill's full instructions |
 | `skill_manage` | skills | Create, update, or delete skills |
