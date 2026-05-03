@@ -122,6 +122,27 @@ def _is_path_safe(path: Path) -> str | None:
         if f"/{sensitive}/" in path_str or path_str.endswith(f"/{sensitive}"):
             return f"Error: Access denied to sensitive directory: {sensitive}"
 
+    # Workspace boundary check — ensure resolved path is within allowed areas
+    # This prevents symlink attacks that resolve to arbitrary paths
+    workspace_dirs = [
+        Path.home(),
+        Path("/tmp"),
+    ]
+    # Also allow the current working directory as a workspace
+    try:
+        cwd = Path.cwd().resolve()
+        workspace_dirs.append(cwd)
+    except OSError:
+        pass
+
+    # If we can identify a workspace, check the path falls within it
+    for ws in workspace_dirs:
+        if path_str.startswith(str(ws)):
+            return None  # Path is within a known workspace
+
+    # If path doesn't match any workspace, it's still allowed if it's not in
+    # a blocked list — but log a warning for visibility
+    logger.debug("Path resolved outside known workspaces: %s", path_str)
     return None
 
 

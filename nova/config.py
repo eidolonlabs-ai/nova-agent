@@ -94,15 +94,16 @@ DEFAULT_CONFIG = {
 
 
 def _resolve_env_vars(value: Any) -> Any:
-    """Resolve ${ENV_VAR} placeholders in config values."""
+    """Resolve ${ENV_VAR} and $ENV_VAR placeholders in config values."""
     if isinstance(value, str):
         import re
 
         def _replace(match: re.Match) -> str:
-            var_name = match.group(1)
+            var_name = match.group(1) or match.group(2) or ""
             return os.environ.get(var_name, match.group(0))
 
-        return re.sub(r"\$\{(\w+)\}", _replace, value)
+        # Handle both ${VAR} and $VAR forms
+        return re.sub(r"\$\{(\w+)\}|\$(\w+)", _replace, value)
     return value
 
 

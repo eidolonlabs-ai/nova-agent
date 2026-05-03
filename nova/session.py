@@ -56,14 +56,23 @@ class SessionStore:
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id)
                 );
 
+                -- Standalone FTS5 table with session_id for search
                 CREATE VIRTUAL TABLE IF NOT EXISTS session_search
-                    USING fts5(title, content, content='session_fts', content_rowid='rowid');
+                    USING fts5(session_id, title, content);
 
                 CREATE TRIGGER IF NOT EXISTS session_fts_insert
                     AFTER INSERT ON session_fts
                 BEGIN
-                    INSERT INTO session_search(rowid, title, content)
-                    VALUES (new.rowid, new.title, new.content);
+                    INSERT INTO session_search(session_id, title, content)
+                    VALUES (new.session_id, new.title, new.content);
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS session_fts_update
+                    AFTER UPDATE ON session_fts
+                BEGIN
+                    UPDATE session_search
+                    SET title = new.title, content = new.content
+                    WHERE session_id = new.session_id;
                 END;
             """)
 

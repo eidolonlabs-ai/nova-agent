@@ -204,41 +204,42 @@ class BackgroundTaskManager:
             proc = self._processes.get(task_id)
             task = self._tasks.get(task_id)
 
-        if not task:
-            return f"Error: Task '{task_id}' not found."
+            if not task:
+                return f"Error: Task '{task_id}' not found."
 
-        if task.status in TERMINAL_STATUSES:
-            return f"Task '{task_id}' already {task.status}."
+            if task.status in TERMINAL_STATUSES:
+                return f"Task '{task_id}' already {task.status}."
 
-        if not proc or proc.poll() is not None:
-            task.status = STATUS_COMPLETED
-            task.ended_at = time.time()
-            return f"Task '{task_id}' already finished."
+            if not proc or proc.poll() is not None:
+                task.status = STATUS_COMPLETED
+                task.ended_at = time.time()
+                self._notify_completion(task)
+                return f"Task '{task_id}' already finished."
 
-        # SIGTERM first
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            logger.info("Sent SIGTERM to task %s (pid=%d)", task_id, proc.pid)
-        except OSError:
-            pass
-
-        # Wait up to 3 seconds
-        for _ in range(30):
-            if proc.poll() is not None:
-                break
-            time.sleep(0.1)
-        else:
-            # SIGKILL
+            # SIGTERM first
             try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                logger.info("Sent SIGKILL to task %s (pid=%d)", task_id, proc.pid)
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                logger.info("Sent SIGTERM to task %s (pid=%d)", task_id, proc.pid)
             except OSError:
                 pass
 
-        task.status = STATUS_KILLED
-        task.ended_at = time.time()
-        task.return_code = proc.returncode
-        self._notify_completion(task)
+            # Wait up to 3 seconds
+            for _ in range(30):
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.1)
+            else:
+                # SIGKILL
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    logger.info("Sent SIGKILL to task %s (pid=%d)", task_id, proc.pid)
+                except OSError:
+                    pass
+
+            task.status = STATUS_KILLED
+            task.ended_at = time.time()
+            task.return_code = proc.returncode
+            self._notify_completion(task)
         return f"Task '{task_id}' stopped."
 
     def update_task(

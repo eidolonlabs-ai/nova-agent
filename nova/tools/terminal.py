@@ -15,8 +15,13 @@ logger = logging.getLogger(__name__)
 # Destructive commands that should be flagged in logs
 _DESTRUCTIVE_PATTERNS = [
     "rm -rf", "rm -r /", "dd if=", "mkfs", "fdisk",
-    "curl", "wget", "bash -c", "sh -c", "eval",
+    "bash -c", "sh -c", "eval",
     "chmod 777", "chown", "sudo",
+]
+
+# Commands that are suspicious but not destructive (flagged for logging only)
+_SUSPICIOUS_PATTERNS = [
+    "curl", "wget",
 ]
 
 TERMINAL_SCHEMA = {

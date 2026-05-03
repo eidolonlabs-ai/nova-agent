@@ -94,31 +94,38 @@ class NovaAgent:
                 timeout=120.0,
             )
 
-        # Sub-agent depth tracking
-        self.depth: int = self.config.get("_subagent_depth", 0)
-        max_spawn_depth = self.config.get("delegation", {}).get("max_spawn_depth", 2)
-        self.is_leaf_agent: bool = self.depth >= max_spawn_depth
-
-        # Permission checker
-        self.permission_checker: PermissionChecker = build_permission_checker(self.config)
-
-        # Cost tracker
-        cost_cfg = self.config.get("cost_tracking", {})
-        self.cost_tracker: CostTracker | None = None
-        if cost_cfg.get("enabled", True):
-            self.cost_tracker = CostTracker(model=self.config["openrouter"]["model"])
-
         # Discover tools (pass config so delegation tool can be gated)
+        # Must happen before _create_session so system prompt includes tool summaries
         discover_builtin_tools(self.config)
 
-        # Create or load session
-        if self.session_id:
-            self._load_session()
-        else:
-            self._create_session()
+        try:
+            # Sub-agent depth tracking
+            self.depth: int = self.config.get("_subagent_depth", 0)
+            max_spawn_depth = self.config.get("delegation", {}).get("max_spawn_depth", 2)
+            self.is_leaf_agent: bool = self.depth >= max_spawn_depth
 
-        # Fire session_start hook
-        hooks.emit(EVENT_SESSION_START, session_id=self.session_id, config=self.config)
+            # Permission checker
+            self.permission_checker: PermissionChecker = build_permission_checker(self.config)
+
+            # Cost tracker
+            cost_cfg = self.config.get("cost_tracking", {})
+            self.cost_tracker: CostTracker | None = None
+            if cost_cfg.get("enabled", True):
+                self.cost_tracker = CostTracker(model=self.config["openrouter"]["model"])
+
+            # Create or load session (tools discovered above, so _build_system_prompt
+            # will include tool summaries from the start)
+            if self.session_id:
+                self._load_session()
+            else:
+                self._create_session()
+
+            # Fire session_start hook
+            hooks.emit(EVENT_SESSION_START, session_id=self.session_id, config=self.config)
+        except Exception:
+            # Clean up HTTP client if init fails after creating it
+            self.close()
+            raise
 
     def close(self) -> None:
         """Close the HTTP client and release resources."""
