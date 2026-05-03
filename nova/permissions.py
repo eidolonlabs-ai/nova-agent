@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
 
+from nova.tools.registry import _READ_ONLY_TOOLS
+
 logger = logging.getLogger(__name__)
 
 
@@ -63,15 +65,6 @@ _DEFAULT_DENIED_COMMANDS: tuple[str, ...] = (
     "init 0*",
     "init 6*",
 )
-
-# Tools that are inherently read-only (never need confirmation)
-_READ_ONLY_TOOLS: frozenset[str] = frozenset({
-    "read_file",
-    "search_files",
-    "web_search",
-    "skills_list",
-    "skill_view",
-})
 
 # Tools that mutate state (need confirmation in ask mode)
 _MUTATING_TOOLS: frozenset[str] = frozenset({

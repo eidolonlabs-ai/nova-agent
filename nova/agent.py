@@ -32,7 +32,12 @@ from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
 from nova.retry import retry_with_backoff
 from nova.session import SessionStore
-from nova.tokens import estimate_messages_tokens, estimate_tokens, estimate_total_request_tokens
+from nova.tokens import (
+    estimate_messages_tokens,
+    estimate_tokens,
+    estimate_tool_tokens,
+    estimate_total_request_tokens,
+)
 from nova.tools.registry import discover_builtin_tools, registry
 
 logger = logging.getLogger(__name__)
@@ -55,6 +60,8 @@ class NovaAgent:
         self._system_prompt: str | None = None
         self._cached_system_prompt: str | None = None
         self._interrupt_check: Callable[[], bool] | None = None
+        # Token estimate cache: hash(content) → token_count (bounded to 2048 entries)
+        self._token_cache: dict[int, int] = {}
 
         # Initialize components
         ensure_nova_home()
@@ -467,6 +474,44 @@ class NovaAgent:
 
         return [r if r is not None else "Error: Unexpected None result" for r in results]
 
+    def _estimate_messages_tokens_cached(self, messages: list[dict[str, Any]]) -> int:
+        """Estimate message list tokens using a per-agent content cache.
+
+        Messages that haven't changed since the last call are not re-encoded.
+        Cache is bounded to 2048 entries to prevent unbounded growth.
+        """
+        import json
+
+        from nova.tokens import estimate_tokens
+
+        total = 0
+        for msg in messages:
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                key = hash(content)
+            else:
+                key = hash(json.dumps(content, ensure_ascii=False, sort_keys=True))
+
+            if key not in self._token_cache:
+                if len(self._token_cache) >= 2048:
+                    # Evict a random entry to stay bounded
+                    self._token_cache.pop(next(iter(self._token_cache)))
+                if isinstance(content, str):
+                    self._token_cache[key] = estimate_tokens(content)
+                elif isinstance(content, list):
+                    subtotal = 0
+                    for part in content:
+                        if isinstance(part, dict):
+                            subtotal += estimate_tokens(part.get("text", "") or "")
+                        elif isinstance(part, str):
+                            subtotal += estimate_tokens(part)
+                    self._token_cache[key] = subtotal
+                else:
+                    self._token_cache[key] = 0
+            total += self._token_cache[key] + 4  # +4 for message framing
+
+        return total
+
     @staticmethod
     def _truncate_to_token_budget(text: str, max_tokens: int) -> str:
         """Truncate text to fit within a token budget.
@@ -548,10 +593,10 @@ class NovaAgent:
             iteration += 1
 
             # Check context window — apply microcompact if approaching budget
-            total_tokens = estimate_total_request_tokens(
-                api_messages,
-                system_prompt=self._cached_system_prompt or "",
-                tools=tools,
+            total_tokens = (
+                self._estimate_messages_tokens_cached(api_messages)
+                + estimate_tokens(self._cached_system_prompt or "")
+                + (estimate_tool_tokens(tools) if tools else 0)
             )
             compression_cfg = self.config.get("compression", {})
             microcompact_cfg = self.config.get("microcompact", {})
@@ -582,6 +627,7 @@ class NovaAgent:
                         "summary_model", self.config["openrouter"]["model"],
                     )
                     preserve_recent = microcompact_cfg.get("keep_recent", 6)
+                    tokens_before_t2 = total_tokens
                     compressed = compress_conversation(
                         messages=api_messages,
                         http_client=self.client,
@@ -596,6 +642,12 @@ class NovaAgent:
                             api_messages,
                             system_prompt=self._cached_system_prompt or "",
                             tools=tools,
+                        )
+                        t2_savings = tokens_before_t2 - total_tokens
+                        logger.info(
+                            "LLM compression: %d → %d tokens (saved %d, %.0f%%)",
+                            tokens_before_t2, total_tokens, t2_savings,
+                            100 * t2_savings / tokens_before_t2 if tokens_before_t2 else 0,
                         )
                     else:
                         logger.warning(
