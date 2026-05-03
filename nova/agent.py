@@ -8,6 +8,7 @@ import json
 import logging
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +32,7 @@ from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
 from nova.retry import retry_with_backoff
 from nova.session import SessionStore
-from nova.tokens import estimate_messages_tokens, estimate_total_request_tokens
+from nova.tokens import estimate_messages_tokens, estimate_tokens, estimate_total_request_tokens
 from nova.tools.registry import discover_builtin_tools, registry
 
 logger = logging.getLogger(__name__)
@@ -404,6 +405,101 @@ class NovaAgent:
 
         return result
 
+    def _execute_tool_calls_parallel(
+        self, tool_calls: list[dict],
+    ) -> list[str]:
+        """Execute tool calls, parallelizing independent ones.
+
+        Tool calls are considered independent if they don't share data
+        dependencies (i.e., none reads a file another writes). For safety,
+        we parallelize only read-only tool calls; write/mutate tools run
+        sequentially after the parallel batch.
+        """
+        from nova.tools.registry import _READ_ONLY_TOOLS
+
+        read_only_calls = []
+        write_calls = []
+
+        for tc in tool_calls:
+            fn_name = tc.get("function", {}).get("name", "")
+            if fn_name in _READ_ONLY_TOOLS:
+                read_only_calls.append(tc)
+            else:
+                write_calls.append(tc)
+
+        results: list[str | None] = [None] * len(tool_calls)
+
+        # Execute read-only tools in parallel
+        if read_only_calls:
+            max_workers = min(len(read_only_calls), 4)
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                future_to_idx = {}
+                for tc in read_only_calls:
+                    idx = tool_calls.index(tc)
+                    future = executor.submit(self._execute_tool_call, tc)
+                    future_to_idx[future] = idx
+
+                for future in as_completed(future_to_idx):
+                    idx = future_to_idx[future]
+                    try:
+                        results[idx] = future.result()
+                    except Exception as e:
+                        fn_name = tool_calls[idx].get("function", {}).get("name", "")
+                        logger.error("Parallel tool call '%s' failed: %s", fn_name, e)
+                        results[idx] = f"Error: Tool '{fn_name}' failed: {e}"
+
+                    # Report tool name to UI callback
+                    tool_cb = getattr(self, "_tool_callback", None)
+                    if tool_cb:
+                        fn_name = tool_calls[idx].get("function", {}).get("name", "")
+                        if fn_name:
+                            tool_cb(fn_name)
+
+        # Execute write/mutate tools sequentially
+        for tc in write_calls:
+            idx = tool_calls.index(tc)
+            tool_cb = getattr(self, "_tool_callback", None)
+            if tool_cb:
+                fn_name = tc.get("function", {}).get("name", "")
+                if fn_name:
+                    tool_cb(fn_name)
+            results[idx] = self._execute_tool_call(tc)
+
+        return [r if r is not None else "Error: Unexpected None result" for r in results]
+
+    @staticmethod
+    def _truncate_to_token_budget(text: str, max_tokens: int) -> str:
+        """Truncate text to fit within a token budget.
+
+        Uses head/tail truncation (70/20 ratio) to preserve beginning
+        and end of the content.
+        """
+        from nova.tokens import estimate_tokens
+
+        total_tokens = estimate_tokens(text)
+        if total_tokens <= max_tokens:
+            return text
+
+        # Estimate chars per token ratio
+        chars_per_token = len(text) / total_tokens if total_tokens > 0 else 4
+        max_chars = int(max_tokens * chars_per_token)
+
+        head_chars = int(max_chars * 0.70)
+        tail_chars = int(max_chars * 0.20)
+
+        if head_chars + tail_chars >= len(text):
+            return text
+
+        head = text[:head_chars]
+        tail = text[-tail_chars:]
+        truncated_tokens = total_tokens - int(max_chars * 0.70 / chars_per_token) - int(tail_chars / chars_per_token)
+
+        return (
+            f"{head}\n\n"
+            f"[...{truncated_tokens:,} tokens truncated...]\n\n"
+            f"{tail}"
+        )
+
     def run(
         self,
         user_message: str,
@@ -548,27 +644,17 @@ class NovaAgent:
                 logger.info("Agent interrupted by user")
                 return "[Interrupted]"
 
-            # Execute tool calls
-            tool_result_max = self.config["budgets"].get("tool_result_max_chars", 8000)
-            for tool_call in tool_calls:
+            # Execute tool calls — parallelize independent calls
+            tool_result_max_tokens = self.config["budgets"].get("tool_result_max_tokens", 3000)
+            results = self._execute_tool_calls_parallel(tool_calls)
+
+            for tool_call, result in zip(tool_calls, results, strict=True):
                 call_id = tool_call.get("id", "")
-                # Report tool name to UI callback if registered
-                tool_cb = getattr(self, "_tool_callback", None)
-                if tool_cb:
-                    fn_name = tool_call.get("function", {}).get("name", "")
-                    if fn_name:
-                        tool_cb(fn_name)
-                result = self._execute_tool_call(tool_call)
 
                 # Enforce per-result token budget
-                if len(result) > tool_result_max:
-                    head = int(tool_result_max * 0.7)
-                    tail = int(tool_result_max * 0.2)
-                    result = (
-                        f"{result[:head]}\n\n"
-                        f"[...{len(result) - head - tail:,} chars truncated...]\n\n"
-                        f"{result[-tail:]}"
-                    )
+                result_tokens = estimate_tokens(result)
+                if result_tokens > tool_result_max_tokens:
+                    result = self._truncate_to_token_budget(result, tool_result_max_tokens)
 
                 tool_result_msg = {
                     "role": "tool",
@@ -589,6 +675,8 @@ class NovaAgent:
         """Run an interactive chat loop with prompt_toolkit TUI."""
         from rich.console import Console
 
+        from nova.command_handlers import dispatch_command
+        from nova.commands import resolve_command
         from nova.display import (
             NovaTUI,
             StreamingReasoningBox,
@@ -605,10 +693,9 @@ class NovaAgent:
         self._reasoning_callback = None
 
         def on_input(user_input: str) -> None:
-            from nova.commands import resolve_command
-            from nova.display import _CYAN, _DIM, _RST, _cprint
+            from nova.display import _DIM, _RST, _cprint
 
-            # Slash command dispatch
+            # Slash command dispatch via handler registry
             if user_input.startswith("/"):
                 parts = user_input[1:].split(None, 1)
                 cmd_name = parts[0].lower()
@@ -618,131 +705,8 @@ class NovaAgent:
                 if cmd_def is None:
                     return
 
-                name = cmd_def.name
-
-                if name == "new":
-                    self._create_session()
-                    _cprint(f"{_DIM}New session started{_RST}")
-                    return
-
-                if name == "history":
-                    for msg in self.messages:
-                        role = msg.get("role", "")
-                        content = msg.get("content") or ""
-                        if role == "user":
-                            _cprint(f"\n{_CYAN}❯ {content}{_RST}")
-                        elif role == "assistant" and content:
-                            preview = content[:200] + "…" if len(content) > 200 else content
-                            _cprint(f"  {preview}")
-                    return
-
-                if name == "status":
-                    ctx = estimate_total_request_tokens(
-                        self.messages,
-                        system_prompt=self._cached_system_prompt or "",
-                    )
-                    _cprint(f"{_DIM}Session: {self.session_id}")
-                    _cprint(f"Model:   {self.config['openrouter']['model']}")
-                    _cprint(f"Context: {ctx:,} tokens")
-                    # Delegation state
-                    delegation_cfg = self.config.get("delegation", {})
-                    if delegation_cfg.get("enabled"):
-                        max_depth = delegation_cfg.get("max_spawn_depth", 2)
-                        role = "leaf" if self.is_leaf_agent else "orchestrator"
-                        _cprint(f"Delegation: enabled  depth={self.depth}/{max_depth}  role={role}")
-                    else:
-                        _cprint("Delegation: disabled")
-                    _cprint(f"Messages: {len(self.messages)}{_RST}")
-                    return
-
-                if name == "sessions":
-                    sessions = self.session_store.list_sessions(limit=10)
-                    if not sessions:
-                        _cprint(f"{_DIM}No sessions found{_RST}")
-                    for s in sessions:
-                        _cprint(f"{_DIM}{s.get('id', '')}  {s.get('created_at', '')}{_RST}")
-                    return
-
-                if name == "model":
-                    if cmd_args:
-                        self.config["openrouter"]["model"] = cmd_args.strip()
-                        tui.model_short = cmd_args.strip().split("/")[-1]
-                        _cprint(f"{_DIM}Model switched to: {cmd_args.strip()}{_RST}")
-                    else:
-                        _cprint(f"{_DIM}Current model: {self.config['openrouter']['model']}{_RST}")
-                    return
-
-                if name == "tools":
-                    from nova.tools.registry import registry
-                    tools = registry.get_definitions()
-                    _cprint(f"{_DIM}Available tools ({len(tools)}):{_RST}")
-                    for t in tools:
-                        _cprint(f"  {_CYAN}{t['function']['name']}{_RST}{_DIM}  —  {t['function'].get('description', '')[:60]}{_RST}")
-                    return
-
-                if name == "usage":
-                    ctx = estimate_total_request_tokens(
-                        self.messages,
-                        system_prompt=self._cached_system_prompt or "",
-                    )
-                    cw = get_model_context_window(self.config["openrouter"]["model"])
-                    pct = int(ctx / cw * 100) if cw else 0
-                    _cprint(f"{_DIM}Context used: {ctx:,} / {cw:,} tokens ({pct}%){_RST}")
-                    if self.cost_tracker:
-                        _cprint(f"{_DIM}{self.cost_tracker.format_summary()}{_RST}")
-                    return
-
-                if name == "undo":
-                    # Remove last user+assistant pair
-                    if len(self.messages) >= 2:
-                        self.messages = self.messages[:-2]
-                        _cprint(f"{_DIM}Last exchange removed{_RST}")
-                    else:
-                        _cprint(f"{_DIM}Nothing to undo{_RST}")
-                    return
-
-                if name == "compact":
-                    _cprint(f"{_DIM}Compacting context…{_RST}")
-                    # Keep system prompt + last 4 messages
-                    if len(self.messages) > 4:
-                        self.messages = self.messages[-4:]
-                    _cprint(f"{_DIM}Context compacted to {len(self.messages)} messages{_RST}")
-                    return
-
-                if name == "copy":
-                    # Find last assistant message
-                    for msg in reversed(self.messages):
-                        if msg.get("role") == "assistant" and msg.get("content"):
-                            import subprocess
-                            subprocess.run(
-                                ["pbcopy"],
-                                input=msg["content"].encode(),
-                                check=False,
-                            )
-                            _cprint(f"{_DIM}Copied to clipboard{_RST}")
-                            return
-                    _cprint(f"{_DIM}No response to copy{_RST}")
-                    return
-
-                if name == "memory":
-                    sub = cmd_args.split(None, 1)[0].lower() if cmd_args else "list"
-                    query = cmd_args.split(None, 1)[1] if len(cmd_args.split(None, 1)) > 1 else ""
-                    if not self.memory:
-                        _cprint(f"{_DIM}Memory is disabled{_RST}")
-                        return
-                    if sub == "clear":
-                        self.memory.clear()
-                        _cprint(f"{_DIM}Memory cleared{_RST}")
-                    elif sub == "search" and query:
-                        results = self.memory.search(query)
-                        for r in results:
-                            _cprint(f"  {_DIM}{r}{_RST}")
-                    else:
-                        entries = self.memory.get_all()
-                        if not entries:
-                            _cprint(f"{_DIM}No memories stored{_RST}")
-                        for e in entries:
-                            _cprint(f"  {_DIM}{e}{_RST}")
+                # Try the handler registry first; fall back to sending as message
+                if dispatch_command(cmd_name, self, cmd_args):
                     return
 
                 # Unknown/unhandled slash command — send as message to agent
