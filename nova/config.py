@@ -32,6 +32,7 @@ DEFAULT_CONFIG = {
         "context_file_max_chars": 10000,
         "context_total_max_chars": 50000,
         "tool_result_max_chars": 8000,
+        "tool_result_max_tokens": 3000,
         "conversation_turn_limit": 15,
     },
     "compression": {
@@ -66,6 +67,7 @@ DEFAULT_CONFIG = {
             "max_iterations": 30,
             "system_prompt_max": 4000,
             "tool_result_max_chars": 4000,
+            "tool_result_max_tokens": 1500,
         },
     },
     "permissions": {
