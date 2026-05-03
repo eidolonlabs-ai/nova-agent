@@ -63,6 +63,7 @@ class NovaAgent:
             self.memory = None
 
         # HTTP client (injectable for testing)
+        self._owns_client = http_client is None
         if http_client is not None:
             self.client = http_client
         else:
@@ -86,6 +87,11 @@ class NovaAgent:
             self._load_session()
         else:
             self._create_session()
+
+    def close(self) -> None:
+        """Close the HTTP client and release resources."""
+        if self._owns_client and hasattr(self.client, "close"):
+            self.client.close()
 
     def _create_session(self):
         """Create a new session."""
@@ -165,7 +171,13 @@ class NovaAgent:
 
         response = self.client.post("/chat/completions", json=payload)
         if response.status_code == 400:
-            logger.error("API 400 error. Payload: %s", json.dumps(payload, indent=2)[:2000])
+            # Sanitize payload before logging — never log API keys or full messages
+            safe_payload = {
+                "model": payload.get("model"),
+                "message_count": len(payload.get("messages", [])),
+                "has_tools": "tools" in payload,
+            }
+            logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
             logger.error("Response: %s", response.text[:1000])
         response.raise_for_status()
         return response.json()
@@ -184,7 +196,13 @@ class NovaAgent:
         with self.client.stream("POST", "/chat/completions", json=payload) as response:
             if response.status_code == 400:
                 body = response.read().decode()
-                logger.error("API 400 error. Payload: %s", json.dumps(payload, indent=2)[:2000])
+                # Sanitize payload before logging
+                safe_payload = {
+                    "model": payload.get("model"),
+                    "message_count": len(payload.get("messages", [])),
+                    "has_tools": "tools" in payload,
+                }
+                logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
                 logger.error("Response: %s", body[:1000])
                 raise httpx.HTTPStatusError(
                     f"Bad Request: {body[:500]}",

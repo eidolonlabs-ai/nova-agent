@@ -3,16 +3,18 @@
 Discovers project context files (AGENTS.md, SOUL.md, etc.) with:
 - Explicit character budgets per file and total
 - Head/tail truncation (70/20 ratio) preserving beginning and end
-- Prompt injection scanning
+- Prompt injection scanning with unicode normalization
 """
 
 import logging
 import re
+import unicodedata
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 # Threat patterns for prompt injection scanning
+# Patterns are checked against unicode-normalized content (NFKC form)
 _CONTEXT_THREAT_PATTERNS = [
     (r'ignore\s+(previous|all|above|prior)\s+instructions', "prompt_injection"),
     (r'do\s+not\s+tell\s+the\s+user', "deception_hide"),
@@ -25,11 +27,25 @@ _CONTEXT_THREAT_PATTERNS = [
     ),
     (r'curl\s+[^\n]*\$\{?\w*(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|API)', "exfil_curl"),
     (r'cat\s+[^\n]*(\.env|credentials|\.netrc|\.pgpass)', "read_secrets"),
+    # Additional patterns for common injection techniques
+    (r'forget\s+(all\s+)?(previous|prior|above)\s+(instructions|context)', "forget_instructions"),
+    (r'you\s+are\s+now\s+(in\s+)?(developer|debug|unrestricted)\s+mode', "mode_switch"),
+    (r'output\s+(only|just)\s+(the\s+)?(raw|full)\s+(response|answer)', "output_manipulation"),
+    (r'base64\s*:\s*[A-Za-z0-9+/=]{20,}', "base64_payload"),
+    (r'&#x[0-9a-fA-F]+;', "html_entity_encoding"),
+    (r'\\u[0-9a-fA-F]{4}', "unicode_escape"),
 ]
 
+# Invisible/zero-width characters that can be used to hide injection payloads
 _CONTEXT_INVISIBLE_CHARS = {
     '\u200b', '\u200c', '\u200d', '\u2060', '\ufeff',
     '\u202a', '\u202b', '\u202c', '\u202d', '\u202e',
+    '\u200e', '\u200f', '\u2066', '\u2067', '\u2068', '\u2069',
+    '\u00ad', '\u034f', '\u180e', '\u2000', '\u2001', '\u2002',
+    '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008',
+    '\u2009', '\u200a', '\u2061', '\u2062', '\u2063', '\u2064',
+    '\u206a', '\u206b', '\u206c', '\u206d', '\u206e', '\u206f',
+    '\u3164', '\uf8ff', '\uffa0',
 }
 
 # Truncation ratios (from OpenClaw)
@@ -37,16 +53,35 @@ _HEAD_RATIO = 0.70
 _TAIL_RATIO = 0.20
 
 
+def _normalize_for_scanning(content: str) -> str:
+    """Normalize content for injection scanning.
+
+    - Unicode NFKC normalization (converts homoglyphs to canonical form)
+    - Strips invisible/zero-width characters
+    - Lowercases for pattern matching
+    """
+    # NFKC normalization: converts compatibility characters to canonical form
+    normalized = unicodedata.normalize("NFKC", content)
+    # Remove invisible/zero-width characters
+    normalized = "".join(
+        ch for ch in normalized if ch not in _CONTEXT_INVISIBLE_CHARS
+    )
+    return normalized.lower()
+
+
 def scan_context_content(content: str, filename: str) -> str | None:
     """Scan context file for injection patterns. Returns sanitized content or blocked message."""
     findings = []
+
+    # Normalize content for scanning (NFKC + strip invisible chars)
+    normalized = _normalize_for_scanning(content)
 
     for char in _CONTEXT_INVISIBLE_CHARS:
         if char in content:
             findings.append(f"invisible unicode U+{ord(char):04X}")
 
     for pattern, pid in _CONTEXT_THREAT_PATTERNS:
-        if re.search(pattern, content, re.IGNORECASE):
+        if re.search(pattern, normalized, re.IGNORECASE):
             findings.append(pid)
 
     if findings:

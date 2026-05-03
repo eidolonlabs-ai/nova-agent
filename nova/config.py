@@ -1,6 +1,8 @@
 """Configuration loading and validation."""
 
+import logging
 import os
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -103,6 +105,15 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
     # Layer 2: Global config (~/.nova/config.yaml)
     global_config_path = get_nova_home() / "config.yaml"
     if global_config_path.exists():
+        # Check file permissions — warn if world-readable
+        file_stat = global_config_path.stat()
+        if file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH):
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Config file %s is world-readable. "
+                "Consider: chmod 600 %s",
+                global_config_path, global_config_path,
+            )
         with open(global_config_path, encoding="utf-8") as f:
             global_config: dict[str, Any] = yaml.safe_load(f) or {}
         config = _deep_merge(config, global_config)

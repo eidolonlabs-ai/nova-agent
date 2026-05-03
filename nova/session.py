@@ -127,11 +127,19 @@ class SessionStore:
     def get_messages(self, session_id: str, limit: int | None = None) -> list[dict]:
         """Get all messages for a session, optionally limited."""
         with sqlite3.connect(self.db_path) as conn:
-            query = "SELECT role, content, tool_calls FROM messages WHERE session_id = ? ORDER BY idx"
             if limit:
-                query += f" DESC LIMIT {limit}"
-
-            cursor = conn.execute(query, (session_id,))
+                # Use parameterized query to prevent SQL injection
+                query = (
+                    "SELECT role, content, tool_calls FROM messages "
+                    "WHERE session_id = ? ORDER BY idx DESC LIMIT ?"
+                )
+                cursor = conn.execute(query, (session_id, limit))
+            else:
+                query = (
+                    "SELECT role, content, tool_calls FROM messages "
+                    "WHERE session_id = ? ORDER BY idx"
+                )
+                cursor = conn.execute(query, (session_id,))
             messages = []
             for row in cursor.fetchall():
                 msg = {

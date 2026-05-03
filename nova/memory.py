@@ -6,6 +6,8 @@ Inspired by Hermes-Agent's memory provider pattern but simplified.
 
 import json
 import logging
+import os
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -32,10 +34,20 @@ class MemoryStore:
                 self._entries = []
 
     def _save(self):
-        """Persist entries to disk."""
+        """Persist entries to disk atomically."""
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(self.file_path, "w", encoding="utf-8") as f:
-            json.dump(self._entries, f, indent=2, ensure_ascii=False)
+
+        # Atomic write: write to temp file, then rename
+        fd, tmp_path = tempfile.mkstemp(
+            dir=self.file_path.parent, suffix=".tmp"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(self._entries, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, self.file_path)
+        except Exception:
+            os.unlink(tmp_path)
+            raise
 
     def add(self, content: str, category: str = "general") -> dict:
         """Add a memory entry."""
