@@ -151,10 +151,13 @@ def discover_context_files(
             logger.info("Context file budget exhausted (%d/%d chars)", total_chars, max_total_chars)
             break
 
-        # Search from cwd up to git root
+        # Search from cwd up to git root (inclusive)
         search_dirs = [cwd]
         if git_root and git_root != cwd:
-            search_dirs.extend(list(cwd.parents)[:list(Path.cwd().resolve().parents).index(git_root) + 1])
+            for parent in cwd.parents:
+                search_dirs.append(parent)
+                if parent == git_root:
+                    break
 
         found = False
         for search_dir in search_dirs:

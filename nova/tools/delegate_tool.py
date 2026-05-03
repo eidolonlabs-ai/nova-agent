@@ -169,19 +169,21 @@ def _run_subagent(
             },
             timeout=120.0,
         )
-        subagent = NovaAgent(
-            config=subagent_config,
-            http_client=subagent_http_client,
-            session_store=parent_agent.session_store,
-            memory_store=parent_agent.memory,
-        )
+        # Use context manager so the HTTP client is always closed on exit
+        with subagent_http_client:
+            subagent = NovaAgent(
+                config=subagent_config,
+                http_client=subagent_http_client,
+                session_store=parent_agent.session_store,
+                memory_store=parent_agent.memory,
+            )
 
-        # Inject prefill messages if forking
-        if prefill_messages:
-            subagent.messages = prefill_messages
+            # Inject prefill messages if forking
+            if prefill_messages:
+                subagent.messages = prefill_messages
 
-        # Run the task
-        result = subagent.run(task, stream=False)
+            # Run the task
+            result = subagent.run(task, stream=False)
 
         elapsed = time.monotonic() - start_time
         # Count messages to estimate iterations (each tool round = 2 messages: assistant + tool)

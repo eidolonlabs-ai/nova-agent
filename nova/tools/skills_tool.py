@@ -146,7 +146,17 @@ def _skill_manage(args: dict[str, Any], **kwargs) -> str:
                 fm_text += f"{k}: {v}\n"
         fm_text += "---\n\n"
 
-        skill_file.write_text(fm_text + content, encoding="utf-8")
+        # Atomic write — same pattern as write_file
+        import os as _os
+        import tempfile as _tempfile
+        fd, tmp_path = _tempfile.mkstemp(dir=skill_dir, suffix=".tmp")
+        try:
+            with _os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(fm_text + content)
+            _os.replace(tmp_path, skill_file)
+        except Exception:
+            _os.unlink(tmp_path)
+            raise
         return f"Updated skill '{name}'."
 
     elif action == "delete":
