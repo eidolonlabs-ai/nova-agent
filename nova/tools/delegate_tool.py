@@ -194,8 +194,9 @@ def _run_subagent(
         )
 
         usage_data = {}
-        if getattr(subagent, "cost_tracker", None):
-            total_usage = subagent.cost_tracker.total
+        cost_tracker = getattr(subagent, "cost_tracker", None)
+        if cost_tracker:
+            total_usage = cost_tracker.total
             usage_data = {
                 "input_tokens": total_usage.input_tokens,
                 "output_tokens": total_usage.output_tokens,
@@ -219,8 +220,9 @@ def _run_subagent(
         logger.error("%s failed after %.1fs: %s", log_prefix, elapsed, e)
 
         usage_data = {}
-        if "subagent" in locals() and getattr(subagent, "cost_tracker", None):
-            total_usage = subagent.cost_tracker.total
+        cost_tracker = getattr(subagent, "cost_tracker", None) if "subagent" in locals() else None
+        if cost_tracker:
+            total_usage = cost_tracker.total
             usage_data = {
                 "input_tokens": total_usage.input_tokens,
                 "output_tokens": total_usage.output_tokens,
