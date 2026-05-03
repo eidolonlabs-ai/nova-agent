@@ -40,6 +40,7 @@ class NovaAgent:
         self.messages: list[dict[str, Any]] = []
         self._system_prompt: str | None = None
         self._cached_system_prompt: str | None = None
+        self._interrupt_check: Callable[[], bool] | None = None
 
         # Initialize components
         ensure_nova_home()
@@ -347,7 +348,9 @@ class NovaAgent:
         max_iterations = self.config["agent"]["max_iterations"]
         iteration = 0
         # Optional interrupt hook — set by TUI via tui._interrupt_requested
-        _interrupt_check = getattr(self, "_interrupt_check", None)
+        _interrupt_check: Callable[[], bool] | None = getattr(
+            self, "_interrupt_check", None,
+        )
 
         while iteration < max_iterations:
             iteration += 1
