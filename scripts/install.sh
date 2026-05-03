@@ -409,14 +409,36 @@ setup_path() {
 
         PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
-        for SHELL_CONFIG in "${SHELL_CONFIGS[@]}"; do
-            if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null | grep -qE 'PATH=.*\.local/bin'; then
-                echo "" >> "$SHELL_CONFIG"
-                echo "# Nova Agent — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
-                echo "$PATH_LINE" >> "$SHELL_CONFIG"
-                log_success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
+        if [ "$IS_INTERACTIVE" = true ] && [ ${#SHELL_CONFIGS[@]} -gt 0 ]; then
+            echo ""
+            log_info "~/.local/bin is not on your PATH."
+            log_info "Nova needs to add it to your shell config(s):"
+            for sc in "${SHELL_CONFIGS[@]}"; do
+                log_info "  $sc"
+            done
+            if prompt_yes_no "Add ~/.local/bin to PATH in these files?" "yes"; then
+                for SHELL_CONFIG in "${SHELL_CONFIGS[@]}"; do
+                    if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null | grep -qE 'PATH=.*\.local/bin'; then
+                        echo "" >> "$SHELL_CONFIG"
+                        echo "# Nova Agent — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
+                        echo "$PATH_LINE" >> "$SHELL_CONFIG"
+                        log_success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
+                    fi
+                done
+            else
+                log_warn "Skipped PATH modification."
+                log_info "Add manually: $PATH_LINE"
             fi
-        done
+        else
+            for SHELL_CONFIG in "${SHELL_CONFIGS[@]}"; do
+                if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null | grep -qE 'PATH=.*\.local/bin'; then
+                    echo "" >> "$SHELL_CONFIG"
+                    echo "# Nova Agent — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
+                    echo "$PATH_LINE" >> "$SHELL_CONFIG"
+                    log_success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
+                fi
+            done
+        fi
     else
         log_info "~/.local/bin already on PATH"
     fi

@@ -127,9 +127,18 @@ def cmd_setup(args):
     config["openrouter"]["api_key"] = api_key
     config["openrouter"]["model"] = model
 
-    # Write config
-    with open(config_path, "w", encoding="utf-8") as f:
-        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    # Write config atomically (temp file + rename to prevent corruption)
+    import tempfile
+
+    nova_home = config_path.parent
+    fd, tmp_path = tempfile.mkstemp(dir=nova_home, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+        os.replace(tmp_path, config_path)
+    except Exception:
+        os.unlink(tmp_path)
+        raise
 
     print(f"\n✓ Configuration saved to {config_path}")
     print()

@@ -11,6 +11,13 @@ from nova.tools.registry import registry
 
 logger = logging.getLogger(__name__)
 
+# Destructive commands that should be flagged in logs
+_DESTRUCTIVE_PATTERNS = [
+    "rm -rf", "rm -r /", "dd if=", "mkfs", "fdisk",
+    "curl", "wget", "bash -c", "sh -c", "eval",
+    "chmod 777", "chown", "sudo",
+]
+
 TERMINAL_SCHEMA = {
     "name": "terminal",
     "description": "Execute a shell command and return its output. Use for system queries, file operations, git commands, and running scripts.",
@@ -36,6 +43,7 @@ TERMINAL_SCHEMA = {
 }
 
 _MAX_OUTPUT_CHARS = 8000
+_MAX_COMMAND_LENGTH = 10000
 
 
 def _truncate_output(output: str, max_chars: int = _MAX_OUTPUT_CHARS) -> str:
@@ -47,6 +55,12 @@ def _truncate_output(output: str, max_chars: int = _MAX_OUTPUT_CHARS) -> str:
     return f"{output[:head]}\n\n[...{len(output) - head - tail:,} chars truncated...]\n\n{output[-tail:]}"
 
 
+def _is_destructive(command: str) -> bool:
+    """Check if a command matches destructive patterns."""
+    cmd_lower = command.lower()
+    return any(pattern in cmd_lower for pattern in _DESTRUCTIVE_PATTERNS)
+
+
 def execute_terminal(args: dict[str, Any], **kwargs) -> str:
     """Execute a terminal command."""
     command = args.get("command", "")
@@ -56,7 +70,17 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
     if not command:
         return "Error: No command provided."
 
-    logger.info("Executing: %s", command[:200])
+    # Validate command length
+    if len(command) > _MAX_COMMAND_LENGTH:
+        return f"Error: Command too long (max {_MAX_COMMAND_LENGTH} chars)."
+
+    # Validate timeout range
+    if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > 3600:
+        return "Error: Timeout must be between 1 and 3600 seconds."
+
+    # Log with destructive flag
+    destructive_flag = " [DESTRUCTIVE]" if _is_destructive(command) else ""
+    logger.info("Executing%s: %s", destructive_flag, command[:200])
 
     try:
         result = subprocess.run(

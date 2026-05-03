@@ -14,6 +14,20 @@ from nova.tools.registry import registry
 
 logger = logging.getLogger(__name__)
 
+# Paths that should never be accessed by the agent
+_BLOCKED_PATHS = {
+    "/etc/shadow", "/etc/passwd", "/etc/sudoers",
+    "/etc/ssh", "/etc/ssl",
+}
+_BLOCKED_PREFIXES = [
+    "/proc/", "/sys/", "/dev/",
+]
+# Sensitive directories that should be blocked
+_SENSITIVE_DIRS = [
+    ".ssh", ".gnupg", ".aws", ".config/gcloud",
+    ".kube", ".docker", ".terraform",
+]
+
 READ_FILE_SCHEMA = {
     "name": "read_file",
     "description": "Read the contents of a file. Supports optional line range and offset.",
@@ -82,16 +96,63 @@ PATCH_FILE_SCHEMA = {
 }
 
 _MAX_READ_CHARS = 8000
+_MAX_WRITE_CHARS = 500000  # 500KB max write
+_MAX_PATCH_CHARS = 100000  # 100KB max patch string
+
+
+def _is_path_safe(path: Path) -> str | None:
+    """Check if a path is safe to access. Returns error message or None if safe."""
+    try:
+        resolved = path.resolve()
+    except (OSError, ValueError):
+        return f"Error: Cannot resolve path: {path}"
+
+    # Check blocked exact paths
+    path_str = str(resolved)
+    if path_str in _BLOCKED_PATHS:
+        return f"Error: Access denied to protected path: {path}"
+
+    # Check blocked prefixes
+    for prefix in _BLOCKED_PREFIXES:
+        if path_str.startswith(prefix):
+            return f"Error: Access denied to protected path: {path}"
+
+    # Check sensitive directories in the path
+    for sensitive in _SENSITIVE_DIRS:
+        if f"/{sensitive}/" in path_str or path_str.endswith(f"/{sensitive}"):
+            return f"Error: Access denied to sensitive directory: {sensitive}"
+
+    return None
+
+
+def _validate_offset_limit(offset: Any, limit: Any) -> str | None:
+    """Validate offset and limit parameters. Returns error message or None."""
+    if not isinstance(offset, int) or offset < 1:
+        return "Error: offset must be a positive integer (1-based line number)."
+    if not isinstance(limit, int) or limit < 1 or limit > 10000:
+        return "Error: limit must be between 1 and 10000."
+    return None
 
 
 def _read_file(args: dict[str, Any], **kwargs) -> str:
     """Read a file with optional line range."""
     path = Path(args.get("path", "")).expanduser()
+    path_str = str(path).strip()
+    if not path_str:
+        return "Error: No path provided."
+
+    # Security check
+    if error := _is_path_safe(path):
+        return error
+
     if not path.exists():
         return f"Error: File not found: {path}"
 
     offset = args.get("offset", 1)
     limit = args.get("limit", 500)
+
+    if error := _validate_offset_limit(offset, limit):
+        return error
 
     try:
         with open(path, encoding="utf-8") as f:
@@ -119,6 +180,18 @@ def _write_file(args: dict[str, Any], **kwargs) -> str:
     path = Path(args.get("path", "")).expanduser()
     content = args.get("content", "")
 
+    path_str = str(path).strip()
+    if not path_str:
+        return "Error: No path provided."
+
+    # Security check
+    if error := _is_path_safe(path):
+        return error
+
+    # Validate content size
+    if len(content) > _MAX_WRITE_CHARS:
+        return f"Error: Content too large (max {_MAX_WRITE_CHARS:,} chars, got {len(content):,})."
+
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -144,6 +217,20 @@ def _patch_file(args: dict[str, Any], **kwargs) -> str:
     path = Path(args.get("path", "")).expanduser()
     old_string = args.get("old_string", "")
     new_string = args.get("new_string", "")
+
+    path_str = str(path).strip()
+    if not path_str:
+        return "Error: No path provided."
+
+    # Security check
+    if error := _is_path_safe(path):
+        return error
+
+    # Validate patch string sizes
+    if len(old_string) > _MAX_PATCH_CHARS:
+        return f"Error: Search text too large (max {_MAX_PATCH_CHARS:,} chars)."
+    if len(new_string) > _MAX_PATCH_CHARS:
+        return f"Error: Replacement text too large (max {_MAX_PATCH_CHARS:,} chars)."
 
     if not path.exists():
         return f"Error: File not found: {path}"
@@ -184,5 +271,5 @@ registry.register(
     toolset="file",
     schema=PATCH_FILE_SCHEMA,
     handler=_patch_file,
-    emoji="🔧",
+    emoji="",
 )
