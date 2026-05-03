@@ -134,3 +134,10 @@ cost_tracking:
 microcompact:
   enabled: true
   keep_recent: 6                    # Number of recent messages to preserve fully
+
+# ── Retry Logic ─────────────────────────────────────────────────────────────
+# Automatic retry for transient API errors with exponential backoff.
+retry:
+  max_retries: 3                    # Max retry attempts
+  base_delay: 1.0                   # Initial delay in seconds
+  max_delay: 60.0                   # Maximum delay cap in seconds
