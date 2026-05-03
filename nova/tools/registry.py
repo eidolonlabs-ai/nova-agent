@@ -15,12 +15,15 @@ logger = logging.getLogger(__name__)
 
 
 # Tools that are inherently read-only (never mutate state)
+# delegate_task is included here to allow the parent agent to spawn multiple
+# sub-agents in parallel.
 _READ_ONLY_TOOLS: frozenset[str] = frozenset({
     "read_file",
     "search_files",
     "web_search",
     "skills_list",
     "skill_view",
+    "delegate_task",
 })
 
 
