@@ -68,6 +68,23 @@ DEFAULT_CONFIG = {
             "tool_result_max_chars": 4000,
         },
     },
+    "permissions": {
+        "mode": "auto",
+        "denied_tools": [],
+        "allowed_tools": [],
+        "denied_commands": [],
+        "path_rules": [],
+    },
+    "mcp": {
+        "servers": {},
+    },
+    "cost_tracking": {
+        "enabled": True,
+    },
+    "microcompact": {
+        "enabled": True,
+        "keep_recent": 6,
+    },
 }
 
 

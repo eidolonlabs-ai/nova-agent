@@ -14,11 +14,22 @@ from typing import Any
 import httpx
 
 from nova.config import ensure_nova_home, load_config
+from nova.cost_tracker import CostTracker, extract_usage_from_response
+from nova.hooks import (
+    EVENT_POST_LLM_CALL,
+    EVENT_POST_TOOL_CALL,
+    EVENT_PRE_LLM_CALL,
+    EVENT_PRE_TOOL_CALL,
+    EVENT_SESSION_START,
+    hooks,
+)
 from nova.memory import MemoryStore
+from nova.microcompact import microcompact_messages
 from nova.model_metadata import get_model_context_window
+from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
 from nova.session import SessionStore
-from nova.tokens import estimate_total_request_tokens
+from nova.tokens import estimate_messages_tokens, estimate_total_request_tokens
 from nova.tools.registry import discover_builtin_tools, registry
 
 logger = logging.getLogger(__name__)
@@ -86,6 +97,15 @@ class NovaAgent:
         max_spawn_depth = self.config.get("delegation", {}).get("max_spawn_depth", 2)
         self.is_leaf_agent: bool = self.depth >= max_spawn_depth
 
+        # Permission checker
+        self.permission_checker: PermissionChecker = build_permission_checker(self.config)
+
+        # Cost tracker
+        cost_cfg = self.config.get("cost_tracking", {})
+        self.cost_tracker: CostTracker | None = None
+        if cost_cfg.get("enabled", True):
+            self.cost_tracker = CostTracker(model=self.config["openrouter"]["model"])
+
         # Discover tools (pass config so delegation tool can be gated)
         discover_builtin_tools(self.config)
 
@@ -94,6 +114,9 @@ class NovaAgent:
             self._load_session()
         else:
             self._create_session()
+
+        # Fire session_start hook
+        hooks.emit(EVENT_SESSION_START, session_id=self.session_id, config=self.config)
 
     def close(self) -> None:
         """Close the HTTP client and release resources."""
@@ -163,6 +186,9 @@ class NovaAgent:
         stream_callback: Callable[[str], None] | None = None,
     ) -> dict:
         """Make an API call to OpenRouter."""
+        # Fire pre_llm_call hook
+        hooks.emit(EVENT_PRE_LLM_CALL, messages=messages, tools=tools)
+
         openrouter_config = self.config["openrouter"]
         agent_config = self.config["agent"]
 
@@ -181,20 +207,30 @@ class NovaAgent:
             pass
 
         if stream:
-            return self._stream_response(payload, stream_callback, getattr(self, "_reasoning_callback", None))
+            response_data: dict = self._stream_response(payload, stream_callback, getattr(self, "_reasoning_callback", None))
+        else:
+            http_response = self.client.post("/chat/completions", json=payload)
+            if http_response.status_code == 400:
+                # Sanitize payload before logging — never log API keys or full messages
+                safe_payload = {
+                    "model": payload.get("model"),
+                    "message_count": len(payload.get("messages", [])),
+                    "has_tools": "tools" in payload,
+                }
+                logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
+                logger.error("Response: %s", http_response.text[:1000])
+            http_response.raise_for_status()
+            response_data = http_response.json()
 
-        response = self.client.post("/chat/completions", json=payload)
-        if response.status_code == 400:
-            # Sanitize payload before logging — never log API keys or full messages
-            safe_payload = {
-                "model": payload.get("model"),
-                "message_count": len(payload.get("messages", [])),
-                "has_tools": "tools" in payload,
-            }
-            logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
-            logger.error("Response: %s", response.text[:1000])
-        response.raise_for_status()
-        return response.json()
+        # Track cost from response
+        if self.cost_tracker:
+            usage = extract_usage_from_response(response_data)
+            self.cost_tracker.add_usage(**usage)
+
+        # Fire post_llm_call hook
+        hooks.emit(EVENT_POST_LLM_CALL, response=response_data)
+
+        return response_data
 
     def _stream_response(
         self,
@@ -303,10 +339,42 @@ class NovaAgent:
         except json.JSONDecodeError:
             return f"Error: Invalid JSON arguments: {arguments_str}"
 
+        # Permission check
+        entry = registry._tools.get(name)
+        is_read_only = entry.is_read_only if entry else False
+
+        # Extract file_path and command for permission evaluation
+        file_path = arguments.get("path")
+        command = arguments.get("command")
+
+        perm_result = self.permission_checker.evaluate(
+            name,
+            is_read_only=is_read_only,
+            file_path=file_path,
+            command=command,
+        )
+
+        if not perm_result.allowed:
+            logger.warning("Tool call denied: %s — %s", name, perm_result.reason)
+            return f"Error: {perm_result.reason}"
+
+        if perm_result.requires_confirmation:
+            # In auto mode this won't fire, but in ask mode we log it
+            logger.info("Tool '%s' requires confirmation (mode=ask, auto-approved for CLI)", name)
+
+        # Fire pre_tool_call hook (also fired in registry.dispatch, but we fire here
+        # first so the permission check happens before the hook)
+        hooks.emit(EVENT_PRE_TOOL_CALL, tool_name=name, args=arguments)
+
         # Pass config, memory, and agent reference to tool handlers via kwargs
-        return registry.dispatch(
+        result = registry.dispatch(
             name, arguments, config=self.config, memory=self.memory, agent=self,
         )
+
+        # Fire post_tool_call hook (also fired in registry.dispatch)
+        hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=arguments, result=result)
+
+        return result
 
     def run(
         self,
@@ -355,24 +423,40 @@ class NovaAgent:
         while iteration < max_iterations:
             iteration += 1
 
-            # Check context window — warn when approaching budget
+            # Check context window — apply microcompact if approaching budget
             total_tokens = estimate_total_request_tokens(
                 api_messages,
                 system_prompt=self._cached_system_prompt or "",
                 tools=tools,
             )
             compression_cfg = self.config.get("compression", {})
+            microcompact_cfg = self.config.get("microcompact", {})
             if compression_cfg.get("enabled"):
                 # Use model-specific context window
                 context_window = get_model_context_window(
                     self.config["openrouter"]["model"],
                 )
                 threshold = int(context_window * compression_cfg.get("threshold_percent", 0.40))
+
+                # Tier 1: Microcompact — strip old tool content (cheap, no LLM call)
+                if microcompact_cfg.get("enabled", True) and total_tokens >= threshold:
+                    keep_recent = microcompact_cfg.get("keep_recent", 6)
+                    compacted = microcompact_messages(api_messages, keep_recent=keep_recent)
+                    compacted_tokens = estimate_messages_tokens(compacted)
+                    savings = total_tokens - compacted_tokens
+                    if savings > 0:
+                        logger.info(
+                            "Microcompact saved %d tokens (%d → %d)",
+                            savings, total_tokens, compacted_tokens,
+                        )
+                        api_messages = compacted
+                        total_tokens = compacted_tokens
+
                 if total_tokens >= threshold:
                     logger.warning(
                         "Context approaching compression threshold: %d >= %d tokens "
                         "(model: %s, window: %d). "
-                        "Compression not yet implemented — consider starting a new session.",
+                        "Consider starting a new session.",
                         total_tokens, threshold,
                         self.config["openrouter"]["model"], context_window,
                     )
@@ -555,6 +639,8 @@ class NovaAgent:
                     cw = get_model_context_window(self.config["openrouter"]["model"])
                     pct = int(ctx / cw * 100) if cw else 0
                     _cprint(f"{_DIM}Context used: {ctx:,} / {cw:,} tokens ({pct}%){_RST}")
+                    if self.cost_tracker:
+                        _cprint(f"{_DIM}{self.cost_tracker.format_summary()}{_RST}")
                     return
 
                 if name == "undo":

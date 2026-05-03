@@ -74,6 +74,49 @@ That's it. Restart `nova chat` and the agent can call `hello(name="Nova")`.
 
 ---
 
+## Read-Only vs Mutating Tools
+
+Tools are automatically classified as **read-only** or **mutating** for the permission system:
+
+**Read-only tools** (never need confirmation):
+- `read_file`, `search_files`, `web_search`
+- `skills_list`, `skill_view`
+
+**Mutating tools** (require confirmation in `ask` mode):
+- `write_file`, `patch_file`, `terminal`
+- `skill_manage`, `memory`, `delegate_task`
+
+To mark your custom tool as read-only:
+
+```python
+registry.register(
+    name="my_read_tool",
+    toolset="custom",
+    schema=MY_READ_TOOL_SCHEMA,
+    handler=_my_read_tool,
+    is_read_only=True,  # ← Mark as read-only
+)
+```
+
+See [docs/permissions.md](permissions.md) for details on the permission system.
+
+---
+
+## Hook Integration
+
+Every tool call fires `pre_tool_call` and `post_tool_call` hooks automatically. Your tool doesn't need to do anything — hooks are fired by the registry's `dispatch()` method.
+
+```python
+# Hooks fire automatically when the agent calls your tool:
+# 1. pre_tool_call(tool_name="my_tool", args={...})
+# 2. Your handler executes
+# 3. post_tool_call(tool_name="my_tool", args={...}, result="...")
+```
+
+See [docs/hooks.md](hooks.md) for details on registering hook callbacks.
+
+---
+
 ## Handler Signature
 
 Every handler must follow this signature:

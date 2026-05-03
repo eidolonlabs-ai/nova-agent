@@ -1,0 +1,72 @@
+# Nova Agent — Safe Configuration
+#
+# Permissions locked down for safe execution. Ideal for untrusted environments
+# or when you want strict control over what the agent can do.
+#
+# Usage:
+#   cp config-safe.yaml.example config.yaml
+#   # Edit config.yaml with your API key
+#   nova chat
+
+openrouter:
+  api_key: "${OPENROUTER_API_KEY}"
+  model: "qwen/qwen3.6-flash"
+
+# ── Permission System — Locked Down ─────────────────────────────────────────
+permissions:
+  mode: "ask"                       # Require confirmation for mutating tools
+  denied_tools: []                  # Add tools here to block entirely
+  allowed_tools: []                 # Tools that bypass confirmation
+  denied_commands:
+    - "rm -rf /"
+    - "rm -rf /*"
+    - ":(){*};:*"                   # Fork bomb
+    - "mkfs*"
+    - "fdisk*"
+    - "format*"
+    - "shutdown*"
+    - "reboot*"
+    - "halt*"
+    - "poweroff*"
+    - "curl *"
+    - "wget *"
+    - "bash -c *"
+    - "eval *"
+  path_rules:
+    - pattern: "/etc/*"
+      allow: false
+    - pattern: "/usr/bin/*"
+      allow: false
+    - pattern: "/usr/sbin/*"
+      allow: false
+    - pattern: "/var/*"
+      allow: false
+    - pattern: "/tmp/*"
+      allow: true                   # Allow temp directory
+
+# ── Budgets — Conservative ──────────────────────────────────────────────────
+budgets:
+  system_prompt_max: 6000
+  skills_max_chars: 10000
+  skills_max_count: 30
+  context_file_max_chars: 8000
+  context_total_max_chars: 40000
+  tool_result_max_chars: 6000
+  conversation_turn_limit: 12
+
+# ── Delegation — Disabled ───────────────────────────────────────────────────
+delegation:
+  enabled: false                    # No sub-agents in safe mode
+
+# ── MCP — Disabled ──────────────────────────────────────────────────────────
+mcp:
+  servers: {}                       # No external MCP servers
+
+# ── Cost Tracking ───────────────────────────────────────────────────────────
+cost_tracking:
+  enabled: true
+
+# ── Microcompact ────────────────────────────────────────────────────────────
+microcompact:
+  enabled: true
+  keep_recent: 6

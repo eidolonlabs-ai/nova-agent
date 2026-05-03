@@ -1,6 +1,7 @@
 """Terminal tool — execute shell commands.
 
 Supports local execution with timeout and output size limits.
+Integrates with the permission system for command deny checking.
 """
 
 import logging
@@ -87,6 +88,16 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
         if not wd.is_dir():
             return f"Error: Working directory is not a directory: {workdir}"
         workdir = str(wd)
+
+    # Permission check — denied commands
+    config = kwargs.get("config")
+    if config:
+        from nova.permissions import build_permission_checker
+        checker = build_permission_checker(config)
+        perm_result = checker.evaluate("terminal", command=command)
+        if not perm_result.allowed:
+            logger.warning("Terminal command denied: %s", perm_result.reason)
+            return f"Error: {perm_result.reason}"
 
     # Log with destructive flag
     destructive_flag = " [DESTRUCTIVE]" if _is_destructive(command) else ""

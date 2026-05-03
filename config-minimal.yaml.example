@@ -1,0 +1,12 @@
+# Nova Agent — Minimal Configuration
+#
+# The bare minimum to get started. Copy to config.yaml and set your API key.
+#
+# Usage:
+#   cp config-minimal.yaml.example config.yaml
+#   # Edit config.yaml with your API key
+#   nova chat
+
+openrouter:
+  api_key: "${OPENROUTER_API_KEY}"  # Set OPENROUTER_API_KEY env var, or put key here
+  model: "qwen/qwen3.6-flash"

@@ -172,7 +172,7 @@ The agent is instructed to:
 
 ## Tools
 
-Nova comes with 10 built-in tools:
+Nova comes with 16 built-in tools:
 
 | Tool | Toolset | Description |
 |------|---------|-------------|
@@ -186,6 +186,12 @@ Nova comes with 10 built-in tools:
 | `skill_view` | skills | Load a skill's full instructions |
 | `skill_manage` | skills | Create, update, or delete skills |
 | `memory` | memory | Add, search, delete, or clear persistent memories |
+| `delegate_task` | delegation | Spawn a sub-agent for isolated tasks |
+| `task_create` | tasks | Start a background shell command |
+| `task_status` | tasks | Check a background task's status |
+| `task_output` | tasks | Read the tail of a task's log |
+| `task_stop` | tasks | Stop a running background task |
+| `task_list` | tasks | List all background tasks |
 
 ### Adding Custom Tools
 
@@ -254,17 +260,20 @@ nova reset --session <session-id>
 ~/.nova/
 ├── SOUL.md              # Agent personality (optional)
 ├── .nova.md             # Project instructions (per-project)
+├── config.yaml          # Global configuration
 ├── memory.json          # Persistent memories (LRU eviction)
 ├── nova.log             # Log file
 ├── sessions/
 │   └── sessions.db      # SQLite session storage with FTS5
-└── skills/
-    ├── python-coding/
-    │   └── SKILL.md
-    ├── git-workflow/
-    │   └── SKILL.md
-    └── file-editing/
-        └── SKILL.md
+├── skills/
+│   ├── python-coding/
+│   │   └── SKILL.md
+│   ├── git-workflow/
+│   │   └── SKILL.md
+│   └── file-editing/
+│       └── SKILL.md
+└── tasks/               # Background task logs
+    └── b3f8a2c.log
 ```
 
 ## Environment Variables
@@ -272,6 +281,89 @@ nova reset --session <session-id>
 | Variable | Description |
 |----------|-------------|
 | `OPENROUTER_API_KEY` | Your OpenRouter API key (alternative to config.yaml) |
+| `GITHUB_TOKEN` | GitHub personal access token (for MCP GitHub server) |
+
+## Permissions
+
+Nova includes a configurable permission system with defense-in-depth protection.
+
+**→ Full guide: [Permissions](permissions.md)**
+
+Quick config:
+
+```yaml
+permissions:
+  mode: "auto"                    # "auto" (allow all) or "ask" (confirm mutating tools)
+  denied_tools: []                # Tools the agent can never use
+  denied_commands:                # Shell commands that are always blocked
+    - "rm -rf /"
+    - ":(){*};:*"                 # Fork bomb
+  path_rules: []                  # Path-level allow/deny rules
+```
+
+## Hooks
+
+Register callbacks for lifecycle events like pre/post tool calls, LLM calls, and session start/end.
+
+**→ Full guide: [Hooks](hooks.md)**
+
+Quick example:
+
+```python
+from nova.hooks import hooks, EVENT_PRE_TOOL_CALL
+
+def audit(tool_name, args, **kwargs):
+    print(f"[AUDIT] {tool_name}({args})")
+
+hooks.on(EVENT_PRE_TOOL_CALL, audit)
+```
+
+## Background Tasks
+
+Run long-running commands without blocking the conversation.
+
+**→ Full guide: [Background Tasks](background-tasks.md)**
+
+Use the built-in tools in chat:
+- `task_create("command", "description")` — start a background task
+- `task_status("task_id")` — check status
+- `task_output("task_id")` — read output
+- `task_stop("task_id")` — stop a task
+- `task_list()` — list all tasks
+
+## MCP Integration
+
+Connect to external Model Context Protocol servers for additional tools.
+
+**→ Full guide: [MCP Integration](mcp-integration.md)**
+
+Quick config:
+
+```yaml
+mcp:
+  servers:
+    filesystem:
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+```
+
+## Cost Tracking
+
+Track token usage and estimated dollar costs per session.
+
+**→ Full guide: [Cost Tracking](cost-tracking.md)**
+
+View with `/usage` in chat:
+```
+Context used: 12,450 / 128,000 tokens (9%)
+Tokens: 45,230 total (32,100 in, 13,130 out) | Cost: $0.002145
+```
+
+Disable in config:
+```yaml
+cost_tracking:
+  enabled: false
+```
 
 ## Tips
 
@@ -280,3 +372,6 @@ nova reset --session <session-id>
 3. **Use memory for facts** — preferences, environment details, conventions
 4. **Use .nova.md for projects** — project-specific instructions that override defaults
 5. **Lower budgets for cheaper models** — if using a fast/cheap model, reduce context budgets
+6. **Use `permissions.mode: "ask"`** — for safer tool execution (future TUI will show approval dialogs)
+7. **Use background tasks** — for long-running commands like test suites or builds
+8. **Connect MCP servers** — for filesystem, GitHub, database, and other external tool access

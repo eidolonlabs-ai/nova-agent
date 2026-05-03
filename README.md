@@ -25,7 +25,12 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 ## Features
 
 - **Explicit token budgets** at every layer — system prompt, skills, context files, conversation history
-- **Smart context management** with head/tail truncation (70/20 ratio) and compression warnings
+- **Smart context management** with head/tail truncation (70/20 ratio), microcompact, and compression warnings
+- **Permission system** with defense-in-depth cascade (sensitive paths, tool deny/allow, command deny, path rules)
+- **Hook/callback system** for lifecycle events (pre/post tool call, pre/post LLM call, session start/end)
+- **Cost tracking** with per-model pricing and dollar cost estimation
+- **Background task management** — fire-and-forget shell execution with status tracking
+- **MCP integration** — connect to external Model Context Protocol servers
 - **Tool registry** for extensible tools with JSON schema definitions
 - **Skills system** with SKILL.md files and starter skills for coding, git, and file editing
 - **Context file discovery** (AGENTS.md, SOUL.md, CLAUDE.md, .cursorrules) with injection scanning
@@ -51,6 +56,11 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `skill_manage` | Create, update, or delete skills |
 | `memory` | Add, search, delete, or clear persistent memories |
 | `delegate_task` | Spawn a sub-agent to handle an isolated task (opt-in) |
+| `task_create` | Start a background shell command |
+| `task_status` | Check a background task's status |
+| `task_output` | Read the tail of a task's log |
+| `task_stop` | Stop a running background task |
+| `task_list` | List all background tasks |
 
 ## Installation
 
@@ -229,7 +239,7 @@ While chatting, use slash commands to control the session. Press `/` to see the 
 | `/undo` | | Remove the last exchange |
 | `/compact` | | Compress context to last 4 messages |
 | `/copy` | | Copy last response to clipboard |
-| `/usage` | | Show token usage for this session |
+| `/usage` | | Show token usage and cost for this session |
 | `/help` | | Show all commands |
 | `/quit` | `/exit`, `/q` | Exit Nova |
 
@@ -250,11 +260,17 @@ nova/
   cli.py            # CLI entry point (chat, ask, sessions, reset)
   config.py         # YAML config loading with env var resolution
   context.py        # Context file discovery, budgets, truncation
+  cost_tracker.py   # Dollar cost tracking with per-model pricing
+  hooks.py          # Lifecycle hook/callback system
+  mcp_client.py     # MCP (Model Context Protocol) stdio client
   memory.py         # File-based memory with LRU eviction
+  microcompact.py   # Cheap context compaction (no LLM call)
   model_metadata.py # Model context window sizes for 20+ models
+  permissions.py    # Permission system with defense-in-depth cascade
   prompt.py         # System prompt assembly with mode gating
   session.py        # SQLite session storage with FTS5 search
   skills.py         # Skill discovery, frontmatter parsing, prompt gen
+  tasks.py          # Background task manager
   tokens.py         # Token estimation via tiktoken
   tools/
     __init__.py
@@ -266,6 +282,7 @@ nova/
     skills_tool.py  # skills_list, skill_view, skill_manage
     memory_tool.py  # memory tool (add/search/delete/clear)
     delegate_tool.py # delegate_task sub-agent spawning (opt-in)
+    task_tools.py   # Background task tools (create/status/output/stop/list)
 config/
   SOUL.md.example   # Agent personality template
   .nova.md.example  # Project instructions template
@@ -277,6 +294,11 @@ docs/
   customizing.md    # Comprehensive customization guide
   creating-tools.md # Developer guide: building custom tools
   creating-skills.md # Developer guide: building custom skills
+  permissions.md    # Permission system configuration
+  hooks.md          # Hook/callback system
+  background-tasks.md # Background task management
+  mcp-integration.md # MCP server integration
+  cost-tracking.md  # Cost tracking and usage monitoring
 ```
 
 ## Development
@@ -289,7 +311,7 @@ pip install mypy
 # Run all checks
 ruff check .          # Lint
 mypy nova/            # Type check
-pytest                # Tests (138 passing)
+pytest                # Tests (240 passing)
 
 # Full CI check
 ruff check . && mypy nova/ && pytest

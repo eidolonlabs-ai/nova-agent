@@ -72,3 +72,63 @@ delegation:
     max_iterations: 30            # Max tool calls per sub-agent turn
     system_prompt_max: 4000       # Smaller system prompt for sub-agents
     tool_result_max_chars: 4000   # Smaller tool result budget
+
+# Permission system — tool execution approval with defense-in-depth
+# Modes: "auto" (allow all, current default) or "ask" (confirm mutating tools)
+permissions:
+  mode: "auto"                    # "auto" or "ask"
+  denied_tools: []                # Tools the agent can never use
+  allowed_tools: []               # Tools that bypass confirmation (ask mode)
+  denied_commands:                # Shell command patterns that are always blocked
+    - "rm -rf /"
+    - "rm -rf /*"
+    - ":(){*};:*"                 # Fork bomb
+  path_rules: []                  # Path-level allow/deny rules (fnmatch patterns)
+    # Example:
+    # - pattern: "/etc/*"
+    #   allow: false
+
+# MCP (Model Context Protocol) — connect to external tool servers
+# Supports three transport types: stdio (local), http (Streamable HTTP), sse (Server-Sent Events)
+mcp:
+  servers: {}
+    # Example: Local filesystem server (stdio — default when command is present)
+    # filesystem:
+    #   type: stdio
+    #   command: npx
+    #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+
+    # Example: Remote API server (Streamable HTTP)
+    # remote-api:
+    #   type: http
+    #   url: https://api.example.com/mcp
+    #   headers:
+    #     Authorization: "Bearer ${API_TOKEN}"
+    #   timeout: 30.0
+
+    # Example: SSE-based server
+    # sse-server:
+    #   type: sse
+    #   url: https://api.example.com/sse
+    #   post_url: https://api.example.com/post  # optional, defaults to url
+    #   headers:
+    #     Authorization: "Bearer ${API_TOKEN}"
+    #   timeout: 30.0
+
+    # Example: GitHub server (stdio with env vars)
+    # github:
+    #   type: stdio
+    #   command: npx
+    #   args: ["-y", "@modelcontextprotocol/server-github"]
+    #   env:
+    #     GITHUB_PERSONAL_ACCESS_TOKEN: "${GITHUB_TOKEN}"
+
+# Cost tracking — token counts and dollar costs per session
+cost_tracking:
+  enabled: true                   # Track usage and estimate costs
+
+# Microcompact — cheap context window reduction (Tier 1 compaction)
+# Strips old tool result content while preserving message structure
+microcompact:
+  enabled: true                   # Enable microcompact before LLM-based compression
+  keep_recent: 6                  # Number of recent messages to preserve fully
