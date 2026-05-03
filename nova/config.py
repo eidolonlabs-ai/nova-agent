@@ -85,6 +85,11 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "keep_recent": 6,
     },
+    "retry": {
+        "max_retries": 3,
+        "base_delay": 1.0,
+        "max_delay": 60.0,
+    },
 }
 
 

@@ -13,6 +13,7 @@ from typing import Any
 
 import httpx
 
+from nova.compression import compress_conversation
 from nova.config import ensure_nova_home, load_config
 from nova.cost_tracker import CostTracker, extract_usage_from_response
 from nova.hooks import (
@@ -28,6 +29,7 @@ from nova.microcompact import microcompact_messages
 from nova.model_metadata import get_model_context_window
 from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
+from nova.retry import retry_with_backoff
 from nova.session import SessionStore
 from nova.tokens import estimate_messages_tokens, estimate_total_request_tokens
 from nova.tools.registry import discover_builtin_tools, registry
@@ -185,12 +187,13 @@ class NovaAgent:
         stream: bool = False,
         stream_callback: Callable[[str], None] | None = None,
     ) -> dict:
-        """Make an API call to OpenRouter."""
+        """Make an API call to OpenRouter with retry logic."""
         # Fire pre_llm_call hook
         hooks.emit(EVENT_PRE_LLM_CALL, messages=messages, tools=tools)
 
         openrouter_config = self.config["openrouter"]
         agent_config = self.config["agent"]
+        retry_cfg = self.config.get("retry", {})
 
         payload = {
             "model": openrouter_config["model"],
@@ -206,21 +209,39 @@ class NovaAgent:
             # Some models reject empty tools array
             pass
 
+        max_retries = retry_cfg.get("max_retries", 3)
+        base_delay = retry_cfg.get("base_delay", 1.0)
+        max_delay = retry_cfg.get("max_delay", 60.0)
+
         if stream:
-            response_data: dict = self._stream_response(payload, stream_callback, getattr(self, "_reasoning_callback", None))
+            response_data: dict = retry_with_backoff(
+                self._stream_response,
+                payload, stream_callback, getattr(self, "_reasoning_callback", None),
+                max_retries=max_retries,
+                base_delay=base_delay,
+                max_delay=max_delay,
+            )
         else:
-            http_response = self.client.post("/chat/completions", json=payload)
-            if http_response.status_code == 400:
-                # Sanitize payload before logging — never log API keys or full messages
-                safe_payload = {
-                    "model": payload.get("model"),
-                    "message_count": len(payload.get("messages", [])),
-                    "has_tools": "tools" in payload,
-                }
-                logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
-                logger.error("Response: %s", http_response.text[:1000])
-            http_response.raise_for_status()
-            response_data = http_response.json()
+            def _do_post() -> dict:
+                http_response = self.client.post("/chat/completions", json=payload)
+                if http_response.status_code == 400:
+                    # Sanitize payload before logging — never log API keys or full messages
+                    safe_payload = {
+                        "model": payload.get("model"),
+                        "message_count": len(payload.get("messages", [])),
+                        "has_tools": "tools" in payload,
+                    }
+                    logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
+                    logger.error("Response: %s", http_response.text[:1000])
+                http_response.raise_for_status()
+                return http_response.json()
+
+            response_data = retry_with_backoff(
+                _do_post,
+                max_retries=max_retries,
+                base_delay=base_delay,
+                max_delay=max_delay,
+            )
 
         # Track cost from response
         if self.cost_tracker:
@@ -452,14 +473,35 @@ class NovaAgent:
                         api_messages = compacted
                         total_tokens = compacted_tokens
 
+                # Tier 2: LLM-based context compression
                 if total_tokens >= threshold:
-                    logger.warning(
-                        "Context approaching compression threshold: %d >= %d tokens "
-                        "(model: %s, window: %d). "
-                        "Consider starting a new session.",
-                        total_tokens, threshold,
-                        self.config["openrouter"]["model"], context_window,
+                    summary_model = compression_cfg.get(
+                        "summary_model", self.config["openrouter"]["model"],
                     )
+                    preserve_recent = microcompact_cfg.get("keep_recent", 6)
+                    compressed = compress_conversation(
+                        messages=api_messages,
+                        http_client=self.client,
+                        model=summary_model,
+                        base_url=self.config["openrouter"]["base_url"],
+                        api_key=self.config["openrouter"]["api_key"],
+                        preserve_recent=preserve_recent,
+                    )
+                    if compressed:
+                        api_messages = compressed
+                        total_tokens = estimate_total_request_tokens(
+                            api_messages,
+                            system_prompt=self._cached_system_prompt or "",
+                            tools=tools,
+                        )
+                    else:
+                        logger.warning(
+                            "Context approaching compression threshold: %d >= %d tokens "
+                            "(model: %s, window: %d). "
+                            "Consider starting a new session.",
+                            total_tokens, threshold,
+                            self.config["openrouter"]["model"], context_window,
+                        )
 
             # Call LLM
             response = self._call_llm(

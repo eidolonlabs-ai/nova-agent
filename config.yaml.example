@@ -132,3 +132,9 @@ cost_tracking:
 microcompact:
   enabled: true                   # Enable microcompact before LLM-based compression
   keep_recent: 6                  # Number of recent messages to preserve fully
+
+# Retry logic — API call resilience
+retry:
+  max_retries: 3                  # Max retry attempts for transient errors
+  base_delay: 1.0                 # Initial delay in seconds (exponential backoff)
+  max_delay: 60.0                 # Maximum delay cap in seconds
