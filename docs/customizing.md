@@ -365,6 +365,47 @@ cost_tracking:
   enabled: false
 ```
 
+## Context Compression
+
+Nova uses a two-tier compaction strategy to manage context windows:
+
+**Tier 1: Microcompact** — Strips old tool result content while preserving message structure. Cheap, no LLM call needed.
+
+**Tier 2: LLM Summarization** — When microcompact isn't enough, Nova calls a summarization model to condense older messages into a summary, preserving recent context and tool call structure.
+
+```yaml
+compression:
+  enabled: true
+  threshold_percent: 0.40       # Compress at 40% of context window
+  summary_model: "qwen/qwen3.6-flash"  # Model for summarization
+  reserve_tokens: 15000         # Reserve for compaction overhead
+
+microcompact:
+  enabled: true                 # Enable Tier 1 (cheap, no LLM call)
+  keep_recent: 6                # Recent messages to preserve fully
+```
+
+The compression flow is:
+1. Check if total tokens exceed threshold (context_window × threshold_percent - reserve_tokens)
+2. **Tier 1**: Strip old tool content → if still over threshold →
+3. **Tier 2**: LLM summarizes older messages, injects summary as system message
+
+## Retry Logic
+
+Nova automatically retries failed API calls with exponential backoff and jitter:
+
+```yaml
+retry:
+  max_retries: 3                # Max retry attempts for transient errors
+  base_delay: 1.0               # Initial delay in seconds
+  max_delay: 60.0               # Maximum delay cap in seconds
+```
+
+**Error classification:**
+- **Retryable**: 429 (rate limit), 5xx (server errors), timeout, connection errors
+- **Non-retryable**: 4xx (bad request, auth errors) — raised immediately
+- **Context overflow**: Triggers compression instead of retry
+
 ## Tips
 
 1. **Keep SOUL.md concise** — it's in every API call, so shorter = cheaper
@@ -375,3 +416,5 @@ cost_tracking:
 6. **Use `permissions.mode: "ask"`** — for safer tool execution (future TUI will show approval dialogs)
 7. **Use background tasks** — for long-running commands like test suites or builds
 8. **Connect MCP servers** — for filesystem, GitHub, database, and other external tool access
+9. **Use a cheap model for `summary_model`** — compression runs frequently, so cost matters
+10. **Increase `max_retries` for rate-limited models** — if you hit 429s often, more retries help
