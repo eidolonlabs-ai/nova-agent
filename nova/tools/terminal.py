@@ -78,6 +78,16 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
     if not isinstance(timeout, (int, float)) or timeout <= 0 or timeout > 3600:
         return "Error: Timeout must be between 1 and 3600 seconds."
 
+    # Validate workdir if provided
+    if workdir is not None:
+        from pathlib import Path as _Path
+        wd = _Path(workdir).expanduser()
+        if not wd.exists():
+            return f"Error: Working directory not found: {workdir}"
+        if not wd.is_dir():
+            return f"Error: Working directory is not a directory: {workdir}"
+        workdir = str(wd)
+
     # Log with destructive flag
     destructive_flag = " [DESTRUCTIVE]" if _is_destructive(command) else ""
     logger.info("Executing%s: %s", destructive_flag, command[:200])

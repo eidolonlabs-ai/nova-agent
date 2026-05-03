@@ -14,7 +14,7 @@ We take security seriously. If you discover a security vulnerability in Nova Age
 
 **Do NOT open a public issue.** Instead, email us at:
 
-- **Security contact:** security@eidolonlabs.com
+- **Security contact:** security@eidolonlabs.ai
 
 Include as much detail as possible:
 - Description of the vulnerability

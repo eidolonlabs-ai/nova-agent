@@ -166,7 +166,10 @@ def _read_file(args: dict[str, Any], **kwargs) -> str:
         total_lines = len(lines)
 
         if len(content) > _MAX_READ_CHARS:
-            content = content[:_MAX_READ_CHARS] + f"\n\n[...truncated, {total_lines - offset - limit + 1:,} more lines...]"
+            content = content[:_MAX_READ_CHARS]
+            shown_end = start + content.count("\n") + 1
+            remaining = total_lines - shown_end
+            content += f"\n\n[...truncated, {remaining:,} more lines...]"
 
         line_info = f"Lines {start + 1}-{min(end, total_lines)} of {total_lines}"
         return f"{line_info}:\n{content}"
@@ -242,7 +245,16 @@ def _patch_file(args: dict[str, Any], **kwargs) -> str:
             return f"Error: Search text not found in {path}"
 
         new_content = content.replace(old_string, new_string, 1)
-        path.write_text(new_content, encoding="utf-8")
+
+        # Atomic write — same pattern as _write_file to avoid partial writes
+        fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(new_content)
+            os.replace(tmp_path, path)
+        except Exception:
+            os.unlink(tmp_path)
+            raise
 
         return f"Successfully patched {path}"
 
@@ -271,5 +283,5 @@ registry.register(
     toolset="file",
     schema=PATCH_FILE_SCHEMA,
     handler=_patch_file,
-    emoji="",
+    emoji="🩹",
 )

@@ -2,10 +2,12 @@
 
 import tempfile
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 from nova.tools.file_ops import _patch_file, _read_file, _write_file
 from nova.tools.search_files import _search_files
 from nova.tools.terminal import _truncate_output, execute_terminal
+from nova.tools.web import _search_bing_rss, _strip_html, _web_search
 
 # ── Terminal Tests ──────────────────────────────────────────────────────────
 
@@ -200,3 +202,123 @@ def test_search_files_no_results():
 
     result = _search_files({"pattern": "notfound", "path": str(tmpdir)})
     assert "No matches" in result or "no matches" in result.lower() or "No results" in result
+
+
+# ── Web Search Tests ────────────────────────────────────────────────────────
+
+_BING_RSS_SAMPLE = """\
+<?xml version="1.0" encoding="utf-8" ?>
+<rss version="2.0">
+  <channel>
+    <title>Bing: python</title>
+    <item>
+      <title>Python.org</title>
+      <link>https://www.python.org</link>
+      <description>The official home of the Python programming language.</description>
+    </item>
+    <item>
+      <title>Python &amp; Docs</title>
+      <link>https://docs.python.org</link>
+      <description>Python <b>3.12</b> documentation.</description>
+    </item>
+  </channel>
+</rss>
+"""
+
+
+def _mock_bing_response(xml: str = _BING_RSS_SAMPLE) -> MagicMock:
+    mock_resp = MagicMock()
+    mock_resp.text = xml
+    mock_resp.raise_for_status = MagicMock()
+    return mock_resp
+
+
+def test_strip_html_removes_tags():
+    assert _strip_html("<b>hello</b> world") == "hello world"
+
+
+def test_strip_html_unescapes_entities():
+    assert _strip_html("Python &amp; Docs") == "Python & Docs"
+
+
+def test_strip_html_empty():
+    assert _strip_html("") == ""
+
+
+def test_search_bing_rss_parses_results():
+    with patch("nova.tools.web.httpx.get", return_value=_mock_bing_response()):
+        results = _search_bing_rss("python", 5)
+
+    assert len(results) == 2
+    assert results[0]["title"] == "Python.org"
+    assert results[0]["url"] == "https://www.python.org"
+    assert "official home" in results[0]["snippet"]
+
+
+def test_search_bing_rss_strips_html_from_snippet():
+    with patch("nova.tools.web.httpx.get", return_value=_mock_bing_response()):
+        results = _search_bing_rss("python", 5)
+
+    # Second result has <b> tags in description — should be stripped
+    assert "<b>" not in results[1]["snippet"]
+    assert "3.12" in results[1]["snippet"]
+
+
+def test_search_bing_rss_unescapes_entities_in_title():
+    with patch("nova.tools.web.httpx.get", return_value=_mock_bing_response()):
+        results = _search_bing_rss("python", 5)
+
+    assert results[1]["title"] == "Python & Docs"
+
+
+def test_search_bing_rss_respects_num_results():
+    with patch("nova.tools.web.httpx.get", return_value=_mock_bing_response()):
+        results = _search_bing_rss("python", 1)
+
+    assert len(results) == 1
+
+
+def test_web_search_formats_output():
+    with patch("nova.tools.web._search_bing_rss", return_value=[
+        {"title": "Python.org", "url": "https://www.python.org", "snippet": "Official site."},
+    ]):
+        result = _web_search({"query": "python"})
+
+    assert "Python.org" in result
+    assert "https://www.python.org" in result
+    assert "Official site." in result
+    assert "1." in result
+
+
+def test_web_search_empty_query():
+    result = _web_search({"query": ""})
+    assert "Error" in result
+
+
+def test_web_search_no_results():
+    with patch("nova.tools.web._search_bing_rss", return_value=[]):
+        result = _web_search({"query": "xyzzy12345"})
+
+    assert "No results" in result
+
+
+def test_web_search_clamps_num_results():
+    """num_results > 10 should be clamped to 10."""
+    captured = {}
+
+    def fake_search(query, num_results):
+        captured["num_results"] = num_results
+        return []
+
+    with patch("nova.tools.web._search_bing_rss", side_effect=fake_search):
+        _web_search({"query": "test", "num_results": 999})
+
+    assert captured["num_results"] == 10
+
+
+def test_web_search_handles_http_error():
+    import httpx as _httpx
+    with patch("nova.tools.web._search_bing_rss", side_effect=_httpx.HTTPError("timeout")):
+        result = _web_search({"query": "test"})
+
+    assert "Error" in result
