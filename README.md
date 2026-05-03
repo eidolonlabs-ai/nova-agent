@@ -8,6 +8,13 @@ A minimalist personal AI agent with explicit token budgets and smart context man
 
 By [Eidolon Labs LLC](https://github.com/eidolonlabs-ai).
 
+
+<img width="1324" height="444" alt="image" src="https://github.com/user-attachments/assets/8e7bfe5d-5b88-4ef4-a587-4a295bcb1aa6" />
+
+
+<img width="1141" height="626" alt="image" src="https://github.com/user-attachments/assets/98df7b6c-84d8-4fb8-9a42-5af226f2ab16" />
+
+
 ## Design Philosophy
 
 Nova Agent combines the best patterns from two mature agent frameworks:
