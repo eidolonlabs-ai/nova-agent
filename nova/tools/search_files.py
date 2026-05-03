@@ -85,8 +85,12 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
 
     matches = []
     total_files = 0
+    done = False
 
     for file_path in search_path.rglob(file_pattern):
+        if done:
+            break
+
         if not file_path.is_file():
             continue
 
@@ -112,10 +116,8 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
                     matches.append((str(file_path), line_num, preview))
 
             if len(matches) >= max_results:
+                done = True
                 break
-
-        if len(matches) >= max_results:
-            break
 
     if not matches:
         return f"No matches found for '{pattern}' (searched {total_files} files)."
