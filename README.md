@@ -246,6 +246,8 @@ config/
     file-editing/
 docs/
   customizing.md    # Comprehensive customization guide
+  creating-tools.md # Developer guide: building custom tools
+  creating-skills.md # Developer guide: building custom skills
 ```
 
 ## Development
@@ -265,6 +267,14 @@ ruff check . && mypy nova/ && pytest
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
+
+## Documentation
+
+| Guide | Description |
+|-------|-------------|
+| [Customizing Nova](docs/customizing.md) | Config, SOUL.md, context files, memory, sessions |
+| [Creating Tools](docs/creating-tools.md) | Build custom tools with schemas, handlers, and tests |
+| [Creating Skills](docs/creating-skills.md) | Write effective SKILL.md files for specialized knowledge |
 
 ## License
 
