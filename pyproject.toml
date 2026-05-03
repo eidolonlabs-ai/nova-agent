@@ -33,6 +33,7 @@ dependencies = [
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
     "ruff>=0.4.0",
 ]
 
@@ -53,6 +54,18 @@ ignore = ["E501"]  # Line length - strings/SQL queries are fine
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "--cov=nova --cov-report=term-missing --cov-report=html:htmlcov --cov-fail-under=60"
+
+[tool.coverage.run]
+source = ["nova"]
+omit = ["nova/__main__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]
 
 [tool.mypy]
 python_version = "3.12"
