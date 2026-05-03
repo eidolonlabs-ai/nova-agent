@@ -86,7 +86,7 @@ class SessionStore:
                 (session_id, now, now, model, system_prompt, title),
             )
             conn.execute(
-                "INSERT INTO session_fts (session_id, title, content) VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO session_fts (session_id, title, content) VALUES (?, ?, ?)",
                 (session_id, title, ""),
             )
 
@@ -105,7 +105,8 @@ class SessionStore:
         tool_calls_json = json.dumps(tool_calls) if tool_calls else None
 
         with sqlite3.connect(self.db_path) as conn:
-            # Get current max idx
+            # Atomic: get max idx and insert in one transaction to avoid TOCTOU race
+            conn.execute("BEGIN IMMEDIATE")
             cursor = conn.execute(
                 "SELECT COALESCE(MAX(idx), -1) FROM messages WHERE session_id = ?",
                 (session_id,),
@@ -121,6 +122,12 @@ class SessionStore:
                 "UPDATE sessions SET updated_at = ?, message_count = message_count + 1 WHERE session_id = ?",
                 (now, session_id),
             )
+            # Keep FTS content in sync so search_sessions actually finds messages
+            if role in ("user", "assistant") and content:
+                conn.execute(
+                    "UPDATE session_fts SET content = content || ' ' || ? WHERE session_id = ?",
+                    (content, session_id),
+                )
 
         return idx
 

@@ -51,8 +51,9 @@ class MemoryStore:
 
     def add(self, content: str, category: str = "general") -> dict:
         """Add a memory entry."""
+        import uuid as _uuid
         entry = {
-            "id": f"mem_{len(self._entries) + 1:04d}",
+            "id": f"mem_{_uuid.uuid4().hex[:8]}",
             "content": content,
             "category": category,
             "created_at": datetime.now().isoformat(),

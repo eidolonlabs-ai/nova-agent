@@ -6,6 +6,7 @@ context compression, and session management.
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -223,7 +224,20 @@ class NovaAgent:
                     response=response,
                 )
             response.raise_for_status()
+            _last_delta_time = time.monotonic()
+            _watchdog_timeout = 30.0  # seconds with no delta before giving up
             for line in response.iter_lines():
+                # Streaming watchdog: bail if no data for 30s
+                if time.monotonic() - _last_delta_time > _watchdog_timeout:
+                    logger.warning("Stream watchdog: no data for %.0fs, aborting", _watchdog_timeout)
+                    break
+
+                # Interrupt check: Ctrl+C was pressed
+                _ic = getattr(self, "_interrupt_check", None)
+                if _ic is not None and _ic():
+                    logger.info("Stream interrupted by user")
+                    break
+
                 if not line.startswith("data: "):
                     continue
                 data_str = line[6:]
@@ -235,6 +249,7 @@ class NovaAgent:
                 except json.JSONDecodeError:
                     continue
 
+                _last_delta_time = time.monotonic()  # reset watchdog on each valid chunk
                 delta = data.get("choices", [{}])[0].get("delta", {})
 
                 # Handle reasoning content (OpenRouter sends this separately)
@@ -331,6 +346,8 @@ class NovaAgent:
         # Main tool-calling loop
         max_iterations = self.config["agent"]["max_iterations"]
         iteration = 0
+        # Optional interrupt hook — set by TUI via tui._interrupt_requested
+        _interrupt_check = getattr(self, "_interrupt_check", None)
 
         while iteration < max_iterations:
             iteration += 1
@@ -389,6 +406,11 @@ class NovaAgent:
             # If no tool calls, we're done
             if not tool_calls:
                 return content or ""
+
+            # Check for interrupt between iterations (Ctrl+C)
+            if _interrupt_check is not None and _interrupt_check():
+                logger.info("Agent interrupted by user")
+                return "[Interrupted]"
 
             # Execute tool calls
             tool_result_max = self.config["budgets"].get("tool_result_max_chars", 8000)
@@ -611,7 +633,10 @@ class NovaAgent:
 
             self._reasoning_callback = reasoning_callback
             self._tool_callback = tool_callback
+            # Wire Ctrl+C interrupt into the agent loop
+            self._interrupt_check = tui._interrupt_requested.is_set
             self.run(user_input, stream=True, stream_callback=stream_callback)
+            self._interrupt_check = None
             display.flush()
 
             ctx = estimate_total_request_tokens(
@@ -621,3 +646,4 @@ class NovaAgent:
             tui.update_context(ctx)
 
         tui.run(on_input)
+        self.close()

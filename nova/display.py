@@ -181,11 +181,14 @@ class NovaTUI:
         self.context_window = context_window
         self.context_tokens = 0
         self.session_start = time.monotonic()
-        self._agent_running = False
+        self._agent_running = threading.Event()   # thread-safe flag
+        self._interrupt_requested = threading.Event()  # Ctrl+C → cancel agent
+        self._last_ctrl_c_time: float = 0.0           # for double Ctrl+C force-exit
         self._spinner_frame = 0
         self._spinner_verb_idx = 0
         self._app: Any | None = None          # prompt_toolkit Application
-        self._should_exit = False
+        self._should_exit = threading.Event()  # thread-safe exit flag
+        self._last_invalidate: float = 0.0    # throttle repaint calls
 
     # ── Status bar fragments (called on every repaint) ────────────────────────
 
@@ -194,10 +197,12 @@ class NovaTUI:
         e = int(elapsed)
         elapsed_str = f"{e // 60}m {e % 60}s" if e >= 60 else f"{e}s"
 
-        if self._agent_running:
+        if self._interrupt_requested.is_set():
+            label = "interrupting…"
+        elif self._agent_running.is_set():
             frame = _SPINNER_FRAMES[self._spinner_frame % len(_SPINNER_FRAMES)]
             verb = THINKING_VERBS[self._spinner_verb_idx % len(THINKING_VERBS)]
-            label = f"{frame} {verb}…"
+            label = f"{frame} {verb}…  ^C to stop"
         else:
             label = "ready"
 
@@ -237,7 +242,12 @@ class NovaTUI:
         ]
         return frags
 
-    def _invalidate(self) -> None:
+    def _invalidate(self, min_interval: float = 0.1) -> None:
+        """Throttled repaint — prevents terminal blinking on slow/SSH connections."""
+        now = time.monotonic()
+        if now - self._last_invalidate < min_interval:
+            return
+        self._last_invalidate = now
         if self._app is not None:
             with suppress(Exception):
                 self._app.invalidate()
@@ -278,6 +288,9 @@ class NovaTUI:
         # ── Input queue (agent thread reads from this) ────────────────────────
         _input_queue: queue.Queue[str] = queue.Queue()
 
+        # Expose interrupt event to agent so it can check mid-iteration
+        self._interrupt_requested.clear()
+
         # ── Input area (TextArea — handles history, completion, prompt) ───────
         history_path = os.path.expanduser("~/.nova/history")
         os.makedirs(os.path.dirname(history_path), exist_ok=True)
@@ -288,7 +301,7 @@ class NovaTUI:
             style="class:input-area",
             multiline=False,
             wrap_lines=True,
-            read_only=Condition(lambda: self._agent_running),
+            read_only=Condition(lambda: self._agent_running.is_set()),
             history=FileHistory(history_path),
             completer=SlashCompleter(),
             complete_while_typing=True,
@@ -300,7 +313,7 @@ class NovaTUI:
         @kb.add("enter")
         def _handle_enter(event):
             text = input_area.text.strip()
-            if text and not self._agent_running:
+            if text and not self._agent_running.is_set():
                 event.app.current_buffer.reset(append_to_history=True)
                 _input_queue.put(text)
 
@@ -312,14 +325,30 @@ class NovaTUI:
 
         @kb.add("c-c")
         def _handle_ctrl_c(event):
-            if not self._agent_running:
-                self._should_exit = True
-                event.app.exit()
+            now = time.monotonic()
+            if self._agent_running.is_set():
+                if now - self._last_ctrl_c_time < 2.0:
+                    # Second Ctrl+C within 2s → force exit
+                    _cprint(f"{_DIM}Force exiting…{_RST}")
+                    self._should_exit.set()
+                    event.app.exit()
+                else:
+                    # First Ctrl+C → signal interrupt
+                    self._last_ctrl_c_time = now
+                    self._interrupt_requested.set()
+                    _cprint(f"{_DIM}Interrupting… (Ctrl+C again to force exit){_RST}")
+            else:
+                if event.app.current_buffer.text:
+                    # Clear input like bash
+                    event.app.current_buffer.reset()
+                else:
+                    self._should_exit.set()
+                    event.app.exit()
 
         @kb.add("c-d")
         def _handle_ctrl_d(event):
-            if not self._agent_running and not input_area.text:
-                self._should_exit = True
+            if not self._agent_running.is_set() and not input_area.text:
+                self._should_exit.set()
                 event.app.exit()
 
         # ── Layout ────────────────────────────────────────────────────────────
@@ -373,8 +402,8 @@ class NovaTUI:
             verb_indices = list(range(len(THINKING_VERBS)))
             random.shuffle(verb_indices)
             vi = 0
-            while not self._should_exit:
-                if self._agent_running:
+            while not self._should_exit.is_set():
+                if self._agent_running.is_set():
                     self._spinner_frame += 1
                     if self._spinner_frame % 10 == 0:
                         vi = (vi + 1) % len(verb_indices)
@@ -389,7 +418,7 @@ class NovaTUI:
 
         # ── Agent / process thread ────────────────────────────────────────────
         def _process_loop() -> None:
-            while not self._should_exit:
+            while not self._should_exit.is_set():
                 try:
                     text = _input_queue.get(timeout=0.1)
                 except Exception:
@@ -406,7 +435,7 @@ class NovaTUI:
                         continue
 
                     if cmd_def.name in ("quit", "exit"):
-                        self._should_exit = True
+                        self._should_exit.set()
                         app.exit()
                         return
                     if cmd_def.name == "help":
@@ -421,12 +450,14 @@ class NovaTUI:
                 # Echo the user message into scrollback so it's preserved
                 _cprint(f"{_CYAN}❯ {text}{_RST}")
 
-                self._agent_running = True
+                self._interrupt_requested.clear()
+                self._agent_running.set()
                 self._invalidate()
                 try:
                     on_input(text)
                 finally:
-                    self._agent_running = False
+                    self._agent_running.clear()
+                    self._interrupt_requested.clear()
                     self._invalidate()
 
         process_thread = threading.Thread(target=_process_loop, daemon=True)
@@ -436,7 +467,7 @@ class NovaTUI:
         with patch_stdout(), suppress(KeyboardInterrupt):
             app.run()
 
-        self._should_exit = True
+        self._should_exit.set()
         _cprint(f"{_DIM}Goodbye!{_RST}")
 
     def set_spinner(self, text: str) -> None:
@@ -445,6 +476,16 @@ class NovaTUI:
 
     def update_context(self, tokens: int) -> None:
         self.context_tokens = tokens
+
+    @property
+    def is_running(self) -> bool:
+        """True while the agent is processing a request."""
+        return self._agent_running.is_set()
+
+    @property
+    def interrupt_requested(self) -> bool:
+        """True if Ctrl+C was pressed while agent was running."""
+        return self._interrupt_requested.is_set()
 
 
 # Keep old names as stubs so existing imports don't break
