@@ -12,9 +12,7 @@ import json
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from nova.tools.delegate_tool import _delegate_task, _run_subagent, _extract_cost_data
+from nova.tools.delegate_tool import _delegate_task, _extract_cost_data
 
 
 def test_delegate_no_agent_context():
@@ -114,7 +112,6 @@ def test_delegate_invalid_context_mode():
 
 def test_delegate_timeout_seconds_clamped():
     """Test that timeout_seconds is clamped to MAX_TIMEOUT_SECONDS."""
-    from nova.tools.delegate_tool import MAX_TIMEOUT_SECONDS
 
     mock_agent = MagicMock()
     mock_agent.depth = 0
