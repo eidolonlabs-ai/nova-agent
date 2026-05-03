@@ -13,6 +13,7 @@
 # ============================================================================
 
 set -e
+set -o pipefail
 
 # Colors
 RED='\033[0;31m'
@@ -30,6 +31,7 @@ REPO_URL_HTTPS="https://github.com/eidolonlabs-ai/nova-agent.git"
 NOVA_HOME="${NOVA_HOME:-$HOME/.nova}"
 INSTALL_DIR=""
 INSTALL_DIR_EXPLICIT=false
+INSTALL_DIR_CREATED_BY_SCRIPT=false
 PYTHON_VERSION="3.12"
 BRANCH="main"
 
@@ -324,12 +326,24 @@ clone_repo() {
         fi
     else
         log_info "Trying SSH clone..."
+        local ssh_err
+        ssh_err=$(mktemp)
         if GIT_SSH_COMMAND="ssh -o BatchMode=yes -o ConnectTimeout=5" \
-           git clone --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>/dev/null; then
+           git clone --branch "$BRANCH" "$REPO_URL_SSH" "$INSTALL_DIR" 2>"$ssh_err"; then
             log_success "Cloned via SSH"
+            rm -f "$ssh_err"
         else
-            rm -rf "$INSTALL_DIR" 2>/dev/null
-            log_info "SSH failed, trying HTTPS..."
+            # Only remove the directory if this script created it
+            if [ "$INSTALL_DIR_CREATED_BY_SCRIPT" = true ]; then
+                rm -rf "$INSTALL_DIR" 2>/dev/null
+            fi
+            local ssh_reason
+            ssh_reason=$(cat "$ssh_err" 2>/dev/null | tail -1)
+            rm -f "$ssh_err"
+            if [ -n "$ssh_reason" ]; then
+                log_info "SSH clone failed: $ssh_reason"
+            fi
+            log_info "Trying HTTPS..."
             if git clone --branch "$BRANCH" "$REPO_URL_HTTPS" "$INSTALL_DIR"; then
                 log_success "Cloned via HTTPS"
             else
@@ -338,6 +352,8 @@ clone_repo() {
             fi
         fi
     fi
+
+    INSTALL_DIR_CREATED_BY_SCRIPT=true
 
     cd "$INSTALL_DIR"
     log_success "Repository ready"
@@ -430,14 +446,9 @@ setup_path() {
                 log_info "Add manually: $PATH_LINE"
             fi
         else
-            for SHELL_CONFIG in "${SHELL_CONFIGS[@]}"; do
-                if ! grep -v '^[[:space:]]*#' "$SHELL_CONFIG" 2>/dev/null | grep -qE 'PATH=.*\.local/bin'; then
-                    echo "" >> "$SHELL_CONFIG"
-                    echo "# Nova Agent — ensure ~/.local/bin is on PATH" >> "$SHELL_CONFIG"
-                    echo "$PATH_LINE" >> "$SHELL_CONFIG"
-                    log_success "Added ~/.local/bin to PATH in $SHELL_CONFIG"
-                fi
-            done
+            log_warn "Non-interactive mode: skipping automatic PATH modification."
+            log_info "After installation, add this to your shell config:"
+            log_info "  $PATH_LINE"
         fi
     else
         log_info "~/.local/bin already on PATH"
