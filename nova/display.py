@@ -257,6 +257,7 @@ class NovaTUI:
         from prompt_toolkit.layout.containers import HSplit, Window
         from prompt_toolkit.layout.controls import FormattedTextControl
         from prompt_toolkit.layout.dimension import Dimension
+        from prompt_toolkit.layout.menus import CompletionsMenu
         from prompt_toolkit.patch_stdout import patch_stdout
         from prompt_toolkit.styles import Style
         from prompt_toolkit.widgets import TextArea
@@ -328,10 +329,14 @@ class NovaTUI:
             style="class:status-bar",
         )
 
+        # Completions menu for autocomplete display
+        completions_menu = CompletionsMenu(max_height=12, scroll_offset=1)
+
         layout = Layout(
             HSplit([
                 input_area,
                 status_bar,
+                completions_menu,
             ]),
             focused_element=input_area,
         )

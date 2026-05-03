@@ -211,6 +211,35 @@ nova reset
 nova update
 ```
 
+## Slash Commands (in `nova chat`)
+
+While chatting, use slash commands to control the session. Press `/` to see the command menu with autocomplete:
+
+| Command | Alias | Description |
+|---------|-------|-------------|
+| `/new` | `/reset` | Start a fresh session |
+| `/history` | | Show conversation history |
+| `/status` | | Show session info (tokens, model, delegation state) |
+| `/sessions` | | List recent sessions |
+| `/resume [id]` | | Resume a previous session |
+| `/model [name]` | | Show or switch model |
+| `/tools` | | List available tools |
+| `/skills [list\|view]` | | List or view skills |
+| `/memory [search\|clear\|list]` | | Search or manage memory |
+| `/undo` | | Remove the last exchange |
+| `/compact` | | Compress context to last 4 messages |
+| `/copy` | | Copy last response to clipboard |
+| `/usage` | | Show token usage for this session |
+| `/help` | | Show all commands |
+| `/quit` | `/exit`, `/q` | Exit Nova |
+
+**How to use**:
+1. Press `/` → Shows menu of all commands
+2. Type to filter (e.g., `/st` → `/status`)
+3. Use arrow keys to scroll
+4. Press Tab or Enter to select
+5. Press Escape to cancel
+
 ## Project Structure
 
 ```
