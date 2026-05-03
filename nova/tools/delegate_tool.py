@@ -193,12 +193,23 @@ def _run_subagent(
             log_prefix, elapsed, tool_msgs,
         )
 
+        usage_data = {}
+        if getattr(subagent, "cost_tracker", None):
+            total_usage = subagent.cost_tracker.total
+            usage_data = {
+                "input_tokens": total_usage.input_tokens,
+                "output_tokens": total_usage.output_tokens,
+                "input_cost": total_usage.input_cost,
+                "output_cost": total_usage.output_cost,
+            }
+
         return {
             "success": True,
             "result": result,
             "label": label,
             "depth": depth,
             "elapsed_seconds": round(elapsed, 1),
+            "usage": usage_data,
             "error": None,
             "timeout": False,
         }
@@ -268,6 +279,10 @@ def _delegate_task(args: dict[str, Any], **kwargs) -> str:
         )
         try:
             result = future.result(timeout=timeout_seconds)
+            # Aggregate costs into parent agent
+            usage = result.pop("usage", {})
+            if usage and getattr(agent, "cost_tracker", None):
+                agent.cost_tracker.add_usage(**usage)
         except FuturesTimeoutError:
             logger.warning("Sub-agent '%s' timed out after %ds", label, timeout_seconds)
             result = {
