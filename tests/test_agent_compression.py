@@ -8,8 +8,6 @@ Tests the two-tier compression system:
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from nova.agent import NovaAgent
 
 
