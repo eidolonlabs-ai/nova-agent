@@ -167,7 +167,7 @@ class NovaAgent:
             pass
 
         if stream:
-            return self._stream_response(payload, stream_callback)
+            return self._stream_response(payload, stream_callback, getattr(self, "_reasoning_callback", None))
 
         response = self.client.post("/chat/completions", json=payload)
         if response.status_code == 400:
@@ -186,6 +186,7 @@ class NovaAgent:
         self,
         payload: dict,
         callback: Callable[[str], None] | None = None,
+        reasoning_callback: Callable[[str], None] | None = None,
     ) -> dict:
         """Stream a response from the API."""
         payload["stream"] = True
@@ -223,6 +224,11 @@ class NovaAgent:
                     continue
 
                 delta = data.get("choices", [{}])[0].get("delta", {})
+
+                # Handle reasoning content (OpenRouter sends this separately)
+                reasoning = delta.get("reasoning")
+                if reasoning and reasoning_callback:
+                    reasoning_callback(reasoning)
 
                 # Handle text content
                 content = delta.get("content")
@@ -376,6 +382,12 @@ class NovaAgent:
             tool_result_max = self.config["budgets"].get("tool_result_max_chars", 8000)
             for tool_call in tool_calls:
                 call_id = tool_call.get("id", "")
+                # Report tool name to UI callback if registered
+                tool_cb = getattr(self, "_tool_callback", None)
+                if tool_cb:
+                    fn_name = tool_call.get("function", {}).get("name", "")
+                    if fn_name:
+                        tool_cb(fn_name)
                 result = self._execute_tool_call(tool_call)
 
                 # Enforce per-result token budget
@@ -404,48 +416,187 @@ class NovaAgent:
         return f"[Max iterations ({max_iterations}) reached]"
 
     def chat_loop(self):
-        """Run an interactive chat loop."""
+        """Run an interactive chat loop with prompt_toolkit TUI."""
         from rich.console import Console
-        from rich.prompt import Prompt
+
+        from nova.display import (
+            NovaTUI,
+            StreamingReasoningBox,
+            print_banner,
+            print_tool_calls,
+        )
 
         console = Console()
-        console.print(
-            "[bold green]Nova Agent[/bold green] — "
-            "Type 'quit' to exit, 'new' for new session"
-        )
-        console.print()
+        print_banner(console, self.config)
 
-        while True:
-            try:
-                user_input = Prompt.ask("\n[bold cyan]You[/bold cyan]")
-            except (EOFError, KeyboardInterrupt):
-                console.print("\n[dim]Goodbye![/dim]")
-                break
+        model = self.config["openrouter"]["model"]
+        context_window = get_model_context_window(model)
+        tui = NovaTUI(model=model, context_window=context_window)
+        self._reasoning_callback = None
 
-            if user_input.lower() in ("quit", "exit", "q"):
-                console.print("[dim]Goodbye![/dim]")
-                break
+        def on_input(user_input: str) -> None:
+            from nova.commands import resolve_command
+            from nova.display import _CYAN, _DIM, _RST, _cprint
 
-            if user_input.lower() == "new":
-                self._create_session()
-                console.print("[dim]New session started[/dim]")
-                continue
+            # Slash command dispatch
+            if user_input.startswith("/"):
+                parts = user_input[1:].split(None, 1)
+                cmd_name = parts[0].lower()
+                cmd_args = parts[1] if len(parts) > 1 else ""
+                cmd_def = resolve_command(cmd_name)
 
-            if not user_input.strip():
-                continue
+                if cmd_def is None:
+                    return
 
-            console.print()
-            console.print("[bold yellow]Nova[/bold yellow]: ", end="")
+                name = cmd_def.name
 
-            # Collect streamed content
-            full_response = ""
+                if name == "new":
+                    self._create_session()
+                    _cprint(f"{_DIM}New session started{_RST}")
+                    return
 
-            def stream_callback(chunk: str):
-                nonlocal full_response
-                full_response += chunk
-                console.print(chunk, end="")
+                if name == "history":
+                    for msg in self.messages:
+                        role = msg.get("role", "")
+                        content = msg.get("content") or ""
+                        if role == "user":
+                            _cprint(f"\n{_CYAN}❯ {content}{_RST}")
+                        elif role == "assistant" and content:
+                            preview = content[:200] + "…" if len(content) > 200 else content
+                            _cprint(f"  {preview}")
+                    return
 
-            console.print()
+                if name == "status":
+                    ctx = estimate_total_request_tokens(
+                        self.messages,
+                        system_prompt=self._cached_system_prompt or "",
+                    )
+                    _cprint(f"{_DIM}Session: {self.session_id}")
+                    _cprint(f"Model:   {self.config['openrouter']['model']}")
+                    _cprint(f"Context: {ctx:,} tokens{_RST}")
+                    return
 
+                if name == "sessions":
+                    sessions = self.session_store.list_sessions(limit=10)
+                    if not sessions:
+                        _cprint(f"{_DIM}No sessions found{_RST}")
+                    for s in sessions:
+                        _cprint(f"{_DIM}{s.get('id', '')}  {s.get('created_at', '')}{_RST}")
+                    return
+
+                if name == "model":
+                    if cmd_args:
+                        self.config["openrouter"]["model"] = cmd_args.strip()
+                        tui.model_short = cmd_args.strip().split("/")[-1]
+                        _cprint(f"{_DIM}Model switched to: {cmd_args.strip()}{_RST}")
+                    else:
+                        _cprint(f"{_DIM}Current model: {self.config['openrouter']['model']}{_RST}")
+                    return
+
+                if name == "tools":
+                    from nova.tools.registry import registry
+                    tools = registry.get_definitions()
+                    _cprint(f"{_DIM}Available tools ({len(tools)}):{_RST}")
+                    for t in tools:
+                        _cprint(f"  {_CYAN}{t['function']['name']}{_RST}{_DIM}  —  {t['function'].get('description', '')[:60]}{_RST}")
+                    return
+
+                if name == "usage":
+                    ctx = estimate_total_request_tokens(
+                        self.messages,
+                        system_prompt=self._cached_system_prompt or "",
+                    )
+                    cw = get_model_context_window(self.config["openrouter"]["model"])
+                    pct = int(ctx / cw * 100) if cw else 0
+                    _cprint(f"{_DIM}Context used: {ctx:,} / {cw:,} tokens ({pct}%){_RST}")
+                    return
+
+                if name == "undo":
+                    # Remove last user+assistant pair
+                    if len(self.messages) >= 2:
+                        self.messages = self.messages[:-2]
+                        _cprint(f"{_DIM}Last exchange removed{_RST}")
+                    else:
+                        _cprint(f"{_DIM}Nothing to undo{_RST}")
+                    return
+
+                if name == "compact":
+                    _cprint(f"{_DIM}Compacting context…{_RST}")
+                    # Keep system prompt + last 4 messages
+                    if len(self.messages) > 4:
+                        self.messages = self.messages[-4:]
+                    _cprint(f"{_DIM}Context compacted to {len(self.messages)} messages{_RST}")
+                    return
+
+                if name == "copy":
+                    # Find last assistant message
+                    for msg in reversed(self.messages):
+                        if msg.get("role") == "assistant" and msg.get("content"):
+                            import subprocess
+                            subprocess.run(
+                                ["pbcopy"],
+                                input=msg["content"].encode(),
+                                check=False,
+                            )
+                            _cprint(f"{_DIM}Copied to clipboard{_RST}")
+                            return
+                    _cprint(f"{_DIM}No response to copy{_RST}")
+                    return
+
+                if name == "memory":
+                    sub = cmd_args.split(None, 1)[0].lower() if cmd_args else "list"
+                    query = cmd_args.split(None, 1)[1] if len(cmd_args.split(None, 1)) > 1 else ""
+                    if not self.memory:
+                        _cprint(f"{_DIM}Memory is disabled{_RST}")
+                        return
+                    if sub == "clear":
+                        self.memory.clear()
+                        _cprint(f"{_DIM}Memory cleared{_RST}")
+                    elif sub == "search" and query:
+                        results = self.memory.search(query)
+                        for r in results:
+                            _cprint(f"  {_DIM}{r}{_RST}")
+                    else:
+                        entries = self.memory.get_all()
+                        if not entries:
+                            _cprint(f"{_DIM}No memories stored{_RST}")
+                        for e in entries:
+                            _cprint(f"  {_DIM}{e}{_RST}")
+                    return
+
+                # Unknown/unhandled slash command — send as message to agent
+                _cprint(f"{_DIM}(sending /{cmd_name} to agent){_RST}")
+
+            # Regular message → agent
+            display = StreamingReasoningBox()
+            display.reset()
+            tool_names: list[str] = []
+
+            def stream_callback(chunk: str, d: StreamingReasoningBox = display) -> None:
+                d.feed(chunk)
+
+            def reasoning_callback(chunk: str, d: StreamingReasoningBox = display) -> None:
+                d.feed_reasoning(chunk)
+
+            # Print tool calls immediately as they execute (before response)
+            _tl = tool_names
+            def tool_callback(name: str, tl: list[str] = _tl, d: StreamingReasoningBox = display) -> None:
+                tl.append(name)
+                # Flush any pending response content first, then show tool block
+                d.flush()
+                d.reset()
+                print_tool_calls(tl[:])
+                tl.clear()
+
+            self._reasoning_callback = reasoning_callback
+            self._tool_callback = tool_callback
             self.run(user_input, stream=True, stream_callback=stream_callback)
-            console.print()
+            display.flush()
+
+            ctx = estimate_total_request_tokens(
+                self.messages,
+                system_prompt=self._cached_system_prompt or "",
+            )
+            tui.update_context(ctx)
+
+        tui.run(on_input)
