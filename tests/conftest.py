@@ -35,7 +35,8 @@ def minimal_config() -> dict:
         "memory": {"enabled": False},
         "session": {"directory": str(tempfile.mkdtemp())},
         "skills": {"enabled": False},
-        "compression": {"enabled": False},
+        "compression": {"enabled": False, "threshold_percent": 0.40},
+        "microcompact": {"enabled": True, "keep_recent": 6},
         "context_files": [],
     }
 
