@@ -114,6 +114,22 @@ def _build_subagent_config(
     return config
 
 
+def _extract_cost_data(subagent: Any | None) -> dict:
+    """Extract cost tracking data from sub-agent if available."""
+    if subagent is None:
+        return {}
+    cost_tracker = getattr(subagent, "cost_tracker", None)
+    if not cost_tracker:
+        return {}
+    total_usage = cost_tracker.total
+    return {
+        "input_tokens": total_usage.input_tokens,
+        "output_tokens": total_usage.output_tokens,
+        "input_cost": total_usage.input_cost,
+        "output_cost": total_usage.output_cost,
+    }
+
+
 def _run_subagent(
     task: str,
     parent_agent: Any,
@@ -132,6 +148,7 @@ def _run_subagent(
 
     logger.info("%s spawning at depth=%d, timeout=%ds", log_prefix, depth, timeout_seconds)
     start_time = time.monotonic()
+    subagent = None  # initialize before try so except block can safely reference it
 
     # Build sub-agent config
     delegation_cfg = parent_agent.config.get("delegation", {})
@@ -193,16 +210,7 @@ def _run_subagent(
             log_prefix, elapsed, tool_msgs,
         )
 
-        usage_data = {}
-        cost_tracker = getattr(subagent, "cost_tracker", None)
-        if cost_tracker:
-            total_usage = cost_tracker.total
-            usage_data = {
-                "input_tokens": total_usage.input_tokens,
-                "output_tokens": total_usage.output_tokens,
-                "input_cost": total_usage.input_cost,
-                "output_cost": total_usage.output_cost,
-            }
+        usage_data = _extract_cost_data(subagent)
 
         return {
             "success": True,
@@ -219,16 +227,7 @@ def _run_subagent(
         elapsed = time.monotonic() - start_time
         logger.error("%s failed after %.1fs: %s", log_prefix, elapsed, e)
 
-        usage_data = {}
-        cost_tracker = getattr(subagent, "cost_tracker", None) if "subagent" in locals() else None
-        if cost_tracker:
-            total_usage = cost_tracker.total
-            usage_data = {
-                "input_tokens": total_usage.input_tokens,
-                "output_tokens": total_usage.output_tokens,
-                "input_cost": total_usage.input_cost,
-                "output_cost": total_usage.output_cost,
-            }
+        usage_data = _extract_cost_data(subagent)
 
         return {
             "success": False,
