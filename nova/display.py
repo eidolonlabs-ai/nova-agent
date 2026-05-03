@@ -3,6 +3,8 @@
 Pure display functions and classes with no NovaAgent dependency.
 """
 
+from typing import Any
+
 import re
 import shutil
 import sys
@@ -163,11 +165,15 @@ THINKING_VERBS = [
 
 
 class NovaTUI:
-    """prompt_toolkit-based TUI with a persistent bottom status bar.
+    """prompt_toolkit Application-based TUI.
 
-    Matches Hermes: status bar is a separate layout region (never flickers),
-    input uses prompt_toolkit's TextArea with ❯ prompt, output goes through
-    patch_stdout so ANSI prints don't interleave with the TUI chrome.
+    Architecture mirrors Hermes-Agent:
+    - A full pt Application owns the screen (status bar + input area as layout widgets).
+    - The agent runs in a daemon thread, communicating via a queue.Queue.
+    - All output goes through patch_stdout → StdoutProxy → injected above the TUI chrome.
+    - A separate spinner thread calls app.invalidate() at 100ms intervals so the
+      status bar animates while the agent is running.
+    - The event loop (main thread) is never blocked, so StdoutProxy flushes immediately.
     """
 
     def __init__(self, model: str, context_window: int = 0):
@@ -175,16 +181,15 @@ class NovaTUI:
         self.context_window = context_window
         self.context_tokens = 0
         self.session_start = time.monotonic()
-        self._spinner_text = ""   # set during processing
         self._agent_running = False
         self._spinner_frame = 0
         self._spinner_verb_idx = 0
-        self._spinner_thread: "threading.Thread | None" = None
-        self._app_ref: "Any | None" = None  # prompt_toolkit Application reference
+        self._app: Any | None = None          # prompt_toolkit Application
+        self._should_exit = False
 
-    def _build_status_bar(self) -> list:
-        """Return prompt_toolkit fragments for the status bar."""
-        from prompt_toolkit.formatted_text import StyleAndTextTuples
+    # ── Status bar fragments (called on every repaint) ────────────────────────
+
+    def _status_bar_fragments(self) -> list:
         elapsed = time.monotonic() - self.session_start
         e = int(elapsed)
         elapsed_str = f"{e // 60}m {e % 60}s" if e >= 60 else f"{e}s"
@@ -196,7 +201,7 @@ class NovaTUI:
         else:
             label = "ready"
 
-        frags: StyleAndTextTuples = [
+        frags = [
             ("class:status-bar", " – "),
             ("class:status-bar-strong", label),
             ("class:status-bar-dim", " │ "),
@@ -212,13 +217,11 @@ class NovaTUI:
             def _fmt(n: int) -> str:
                 return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 
-            if pct >= 90:
-                bar_style = "class:status-bar-critical"
-            elif pct >= 70:
-                bar_style = "class:status-bar-warn"
-            else:
-                bar_style = "class:status-bar-good"
-
+            bar_style = (
+                "class:status-bar-critical" if pct >= 90
+                else "class:status-bar-warn" if pct >= 70
+                else "class:status-bar-good"
+            )
             frags += [
                 ("class:status-bar-dim", " │ "),
                 ("class:status-bar-dim", f"{_fmt(self.context_tokens)}/{_fmt(self.context_window)}"),
@@ -234,71 +237,160 @@ class NovaTUI:
         ]
         return frags
 
+    def _invalidate(self) -> None:
+        if self._app is not None:
+            try:
+                self._app.invalidate()
+            except Exception:
+                pass
+
+    # ── Main run loop ─────────────────────────────────────────────────────────
+
     def run(self, on_input):
-        """Run the TUI loop. Calls on_input(text) for each user message."""
+        """Run the TUI. Calls on_input(text) for each user message."""
+        import os
+        import queue
+
+        from prompt_toolkit import Application
+        from prompt_toolkit.filters import Condition
         from prompt_toolkit.history import FileHistory
         from prompt_toolkit.key_binding import KeyBindings
+        from prompt_toolkit.layout import Layout
+        from prompt_toolkit.layout.containers import HSplit, Window
+        from prompt_toolkit.layout.controls import FormattedTextControl
+        from prompt_toolkit.layout.dimension import Dimension
         from prompt_toolkit.patch_stdout import patch_stdout
-        from prompt_toolkit.shortcuts import PromptSession
         from prompt_toolkit.styles import Style
+        from prompt_toolkit.widgets import TextArea
 
         from nova.commands import SlashCompleter, get_commands_by_category, resolve_command
 
         style = Style.from_dict({
-            "prompt":              "#00D4FF bold",
-            "status-bar":         "bg:#1a1a2e #888888",
-            "status-bar-strong":  "bg:#1a1a2e #00D4FF bold",
-            "status-bar-dim":     "bg:#1a1a2e #555555",
-            "status-bar-good":    "bg:#1a1a2e #00AA00 bold",
-            "status-bar-warn":    "bg:#1a1a2e #FFD700 bold",
-            "status-bar-critical":"bg:#1a1a2e #FF4444 bold",
+            "prompt":               "#00D4FF bold",
+            "input-area":          "#ffffff",
+            "status-bar":          "bg:#1a1a2e #888888",
+            "status-bar-strong":   "bg:#1a1a2e #00D4FF bold",
+            "status-bar-dim":      "bg:#1a1a2e #555555",
+            "status-bar-good":     "bg:#1a1a2e #00AA00 bold",
+            "status-bar-warn":     "bg:#1a1a2e #FFD700 bold",
+            "status-bar-critical": "bg:#1a1a2e #FF4444 bold",
         })
 
-        kb = KeyBindings()
+        # ── Input queue (agent thread reads from this) ────────────────────────
+        _input_queue: queue.Queue[str] = queue.Queue()
 
-        @kb.add("c-c")
-        def _interrupt(event):
-            if not self._agent_running:
-                event.app.exit()
-
-        # History file for persistent recall across sessions
-        import os
+        # ── Input area (TextArea — handles history, completion, prompt) ───────
         history_path = os.path.expanduser("~/.nova/history")
         os.makedirs(os.path.dirname(history_path), exist_ok=True)
 
-        session: PromptSession = PromptSession(
+        input_area = TextArea(
+            height=Dimension(min=1, max=5, preferred=1),
+            prompt=[("class:prompt", "❯ ")],
+            style="class:input-area",
+            multiline=False,
+            wrap_lines=True,
+            read_only=Condition(lambda: self._agent_running),
             history=FileHistory(history_path),
             completer=SlashCompleter(),
             complete_while_typing=True,
+        )
+
+        # ── Key bindings ──────────────────────────────────────────────────────
+        kb = KeyBindings()
+
+        @kb.add("enter")
+        def _handle_enter(event):
+            text = input_area.text.strip()
+            if text and not self._agent_running:
+                event.app.current_buffer.reset(append_to_history=True)
+                _input_queue.put(text)
+
+        @kb.add("escape", "enter")
+        @kb.add("c-j")
+        def _handle_newline(event):
+            """Alt+Enter / Ctrl+J inserts a newline for multi-line input."""
+            event.current_buffer.insert_text("\n")
+
+        @kb.add("c-c")
+        def _handle_ctrl_c(event):
+            if not self._agent_running:
+                self._should_exit = True
+                event.app.exit()
+
+        @kb.add("c-d")
+        def _handle_ctrl_d(event):
+            if not self._agent_running and not input_area.text:
+                self._should_exit = True
+                event.app.exit()
+
+        # ── Layout ────────────────────────────────────────────────────────────
+        status_bar = Window(
+            content=FormattedTextControl(self._status_bar_fragments),
+            height=1,
+            style="class:status-bar",
+        )
+
+        layout = Layout(
+            HSplit([
+                input_area,
+                status_bar,
+            ]),
+            focused_element=input_area,
+        )
+
+        # ── Application ───────────────────────────────────────────────────────
+        app: Application = Application(
+            layout=layout,
             style=style,
             key_bindings=kb,
-            bottom_toolbar=self._build_status_bar,
-            refresh_interval=0.1,
+            full_screen=False,
+            mouse_support=False,
+            refresh_interval=0.2,
         )
+        self._app = app
 
         def _show_help() -> None:
             cats = get_commands_by_category()
             for cat, cmds in cats.items():
                 _cprint(f"\n{_DIM}{cat}{_RST}")
                 for cmd in cmds:
-                    aliases = f"  [{', '.join('/' + a for a in cmd.aliases)}]" if cmd.aliases else ""
+                    aliases = (
+                        f"  [{', '.join('/' + a for a in cmd.aliases)}]"
+                        if cmd.aliases else ""
+                    )
                     hint = f" {cmd.args_hint}" if cmd.args_hint else ""
-                    _cprint(f"  {_CYAN}/{cmd.name}{hint}{_RST}{_DIM}{aliases}  —  {cmd.description}{_RST}")
+                    _cprint(
+                        f"  {_CYAN}/{cmd.name}{hint}{_RST}"
+                        f"{_DIM}{aliases}  —  {cmd.description}{_RST}"
+                    )
 
-        with patch_stdout():
-            # Capture the app reference so the spinner thread can invalidate it
-            self._app_ref = session.app
-            while True:
+        # ── Spinner thread ────────────────────────────────────────────────────
+        def _spinner_loop() -> None:
+            import random
+            verb_indices = list(range(len(THINKING_VERBS)))
+            random.shuffle(verb_indices)
+            vi = 0
+            while not self._should_exit:
+                if self._agent_running:
+                    self._spinner_frame += 1
+                    if self._spinner_frame % 10 == 0:
+                        vi = (vi + 1) % len(verb_indices)
+                        self._spinner_verb_idx = verb_indices[vi]
+                    self._invalidate()
+                    time.sleep(0.1)
+                else:
+                    time.sleep(0.2)
+
+        spinner_thread = threading.Thread(target=_spinner_loop, daemon=True)
+        spinner_thread.start()
+
+        # ── Agent / process thread ────────────────────────────────────────────
+        def _process_loop() -> None:
+            while not self._should_exit:
                 try:
-                    user_input = session.prompt([("class:prompt", "❯ ")])
-                except (EOFError, KeyboardInterrupt):
-                    _cprint(f"\n{_DIM}Goodbye!{_RST}")
-                    break
-
-                if not user_input or not user_input.strip():
+                    text = _input_queue.get(timeout=0.1)
+                except Exception:
                     continue
-
-                text = user_input.strip()
 
                 # Slash command dispatch
                 if text.startswith("/"):
@@ -307,13 +399,13 @@ class NovaTUI:
                     cmd_def = resolve_command(cmd_name)
 
                     if cmd_def is None:
-                        _cprint(f"{_DIM}Unknown command: /{cmd_name}  (type /help for commands){_RST}")
+                        _cprint(f"{_DIM}Unknown command: /{cmd_name}  (type /help){_RST}")
                         continue
 
-                    # Built-in commands handled in TUI
                     if cmd_def.name in ("quit", "exit"):
-                        _cprint(f"{_DIM}Goodbye!{_RST}")
-                        break
+                        self._should_exit = True
+                        app.exit()
+                        return
                     if cmd_def.name == "help":
                         _show_help()
                         continue
@@ -321,65 +413,35 @@ class NovaTUI:
                         import subprocess
                         subprocess.run(["clear"], check=False)
                         continue
+                    # All other slash commands → agent (with user echo)
 
-                    # All other slash commands forwarded to agent via on_input
-                    self._start_spinner()
-                    try:
-                        on_input(text)
-                    finally:
-                        self._stop_spinner()
-                    continue
+                # Echo the user message into scrollback so it's preserved
+                _cprint(f"{_CYAN}❯ {text}{_RST}")
 
-                # Regular message
-                self._start_spinner()
+                self._agent_running = True
+                self._invalidate()
                 try:
                     on_input(text)
                 finally:
-                    self._stop_spinner()
+                    self._agent_running = False
+                    self._invalidate()
+
+        process_thread = threading.Thread(target=_process_loop, daemon=True)
+        process_thread.start()
+
+        # ── Run the application inside patch_stdout ───────────────────────────
+        with patch_stdout():
+            try:
+                app.run()
+            except KeyboardInterrupt:
+                pass
+
+        self._should_exit = True
+        _cprint(f"{_DIM}Goodbye!{_RST}")
 
     def set_spinner(self, text: str) -> None:
-        self._spinner_text = text
-        self._agent_running = bool(text)
-
-    def _start_spinner(self) -> None:
-        """Start a background thread that animates the status bar spinner."""
-        self._agent_running = True
-        self._spinner_frame = 0
-        self._spinner_verb_idx = 0
-
-        def _animate() -> None:
-            import random
-            verb_indices = list(range(len(THINKING_VERBS)))
-            random.shuffle(verb_indices)
-            vi = 0
-            while self._agent_running:
-                self._spinner_frame += 1
-                # Rotate verb every ~10 frames (~1s)
-                if self._spinner_frame % 10 == 0:
-                    vi = (vi + 1) % len(verb_indices)
-                    self._spinner_verb_idx = verb_indices[vi]
-                # Invalidate the prompt_toolkit app so the toolbar redraws
-                if self._app_ref is not None:
-                    try:
-                        self._app_ref.invalidate()
-                    except Exception:
-                        pass
-                time.sleep(0.1)
-
-        self._spinner_thread = threading.Thread(target=_animate, daemon=True)
-        self._spinner_thread.start()
-
-    def _stop_spinner(self) -> None:
-        """Stop the spinner animation thread."""
-        self._agent_running = False
-        if self._spinner_thread is not None:
-            self._spinner_thread.join(timeout=0.5)
-            self._spinner_thread = None
-        if self._app_ref is not None:
-            try:
-                self._app_ref.invalidate()
-            except Exception:
-                pass
+        """Legacy compat — no-op; spinner is driven by _agent_running flag."""
+        pass
 
     def update_context(self, tokens: int) -> None:
         self.context_tokens = tokens
@@ -409,11 +471,13 @@ _CLOSE_TAGS = ("</REASONING_SCRATCHPAD>", "</think>", "</reasoning>", "</THINKIN
 
 
 def _cprint(text: str) -> None:
-    """Print ANSI text through prompt_toolkit when active, else plain stdout.
+    """Print a line of ANSI text to the terminal.
 
-    Raw sys.stdout.write is mangled by prompt_toolkit's patch_stdout StdoutProxy
-    (escape sequences become literal '?[2m' etc). Route through
-    print_formatted_text(ANSI(...)) so colors render correctly inside the TUI.
+    Inside the TUI, sys.stdout is prompt_toolkit's StdoutProxy (set by
+    patch_stdout). Writing through print_formatted_text(ANSI(...)) ensures
+    the text is injected above the TUI chrome without erasing the status bar.
+    The event loop is never blocked (agent runs in a daemon thread), so the
+    StdoutProxy flush queue is processed immediately.
     """
     try:
         from prompt_toolkit import print_formatted_text as _pt_print
@@ -422,20 +486,6 @@ def _cprint(text: str) -> None:
     except Exception:
         try:
             sys.stdout.write(text + "\n")
-            sys.stdout.flush()
-        except (ValueError, OSError):
-            pass
-
-
-def _cprint_inline(text: str) -> None:
-    """Print ANSI text without a trailing newline (for streaming partial lines)."""
-    try:
-        from prompt_toolkit import print_formatted_text as _pt_print
-        from prompt_toolkit.formatted_text import ANSI as _PT_ANSI
-        _pt_print(_PT_ANSI(text), end="")
-    except Exception:
-        try:
-            sys.stdout.write(text)
             sys.stdout.flush()
         except (ValueError, OSError):
             pass
@@ -463,7 +513,6 @@ class StreamingReasoningBox:
         self._prefilt_buf = ""
         self._last_was_newline = True
         self._deferred_content = ""
-        self._response_at_line_start = True  # True when we're at the start of a new response line
 
     # ── reasoning display ────────────────────────────────────────────────────
 
@@ -528,21 +577,12 @@ class StreamingReasoningBox:
             return
         self._close_reasoning()
         self._open_response()
-
-        # Stream character-by-character: print prefix at start of each line,
-        # then flush partial lines immediately so streaming is visible.
-        for ch in text:
-            if ch == "\n":
-                # End of line — newline already in buffer; flush the full line
-                _cprint(f"{_GOLD}│{_RST} {self._response_buf}")
-                self._response_buf = ""
-                self._response_at_line_start = True
-            else:
-                if self._response_at_line_start:
-                    # Print the line prefix then start streaming inline
-                    _cprint_inline(f"{_GOLD}│{_RST} ")
-                    self._response_at_line_start = False
-                _cprint_inline(ch)
+        self._response_buf += text
+        # Flush every complete line immediately via _cprint (which adds \n and
+        # triggers StdoutProxy to inject the text above the TUI chrome).
+        while "\n" in self._response_buf:
+            line, self._response_buf = self._response_buf.split("\n", 1)
+            _cprint(f"{_GOLD}│{_RST} {line}")
 
     # ── tag filtering (same logic as before) ─────────────────────────────────
 
@@ -620,10 +660,10 @@ class StreamingReasoningBox:
         if self._deferred_content:
             self._emit_response(self._deferred_content)
             self._deferred_content = ""
-        # If we're mid-line (partial line was streamed inline), finish with a newline
-        if not self._response_at_line_start:
-            _cprint("")  # newline to end the partial line
-            self._response_at_line_start = True
+        # Flush any remaining partial line
+        if self._response_buf.strip():
+            _cprint(f"{_GOLD}│{_RST} {self._response_buf}")
+            self._response_buf = ""
 
     def reset(self) -> None:
         self._reasoning_tokens = 0
@@ -636,7 +676,6 @@ class StreamingReasoningBox:
         self._prefilt_buf = ""
         self._last_was_newline = True
         self._deferred_content = ""
-        self._response_at_line_start = True
 
 
 def print_tool_calls(tool_names: list[str]) -> None:
