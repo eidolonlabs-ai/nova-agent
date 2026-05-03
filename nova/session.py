@@ -221,6 +221,42 @@ class SessionStore:
                 for row in cursor.fetchall()
             ]
 
+    def delete_session(self, session_id: str) -> bool:
+        """Delete a session and all its messages. Returns True if deleted."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT session_id FROM sessions WHERE session_id = ?", (session_id,)
+            )
+            if not cursor.fetchone():
+                return False
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM session_fts WHERE session_id = ?", (session_id,))
+            conn.execute(
+                "DELETE FROM session_search WHERE session_id = ?", (session_id,)
+            )
+            conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))
+        logger.info("Deleted session %s", session_id)
+        return True
+
+    def prune_sessions(self, older_than_days: int) -> int:
+        """Delete sessions older than N days. Returns count deleted."""
+        from datetime import timedelta
+        cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                "SELECT session_id FROM sessions WHERE updated_at < ?", (cutoff,)
+            )
+            old_ids = [row[0] for row in cursor.fetchall()]
+            for sid in old_ids:
+                conn.execute("DELETE FROM messages WHERE session_id = ?", (sid,))
+                conn.execute("DELETE FROM session_fts WHERE session_id = ?", (sid,))
+                conn.execute(
+                    "DELETE FROM session_search WHERE session_id = ?", (sid,)
+                )
+            conn.execute("DELETE FROM sessions WHERE updated_at < ?", (cutoff,))
+        logger.info("Pruned %d sessions older than %d days", len(old_ids), older_than_days)
+        return len(old_ids)
+
     def search_sessions(self, query: str, limit: int = 10) -> list[dict]:
         """Search sessions using FTS5."""
         # Escape FTS5 special characters for safe querying

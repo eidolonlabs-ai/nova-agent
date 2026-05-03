@@ -12,6 +12,20 @@ logger = logging.getLogger(__name__)
 # Rough chars-per-token estimate for fallback
 _CHARS_PER_TOKEN = 4
 
+# Module-level encoder cache — initialised once, reused for every estimate call
+_encoder = None
+
+
+def _get_encoder():
+    global _encoder
+    if _encoder is None:
+        try:
+            import tiktoken
+            _encoder = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            pass
+    return _encoder
+
 
 def estimate_tokens(text: str) -> int:
     """Estimate token count for a string.
@@ -22,13 +36,13 @@ def estimate_tokens(text: str) -> int:
     if not text:
         return 0
 
-    try:
-        import tiktoken
-
-        enc = tiktoken.get_encoding("cl100k_base")
-        return len(enc.encode(text))
-    except Exception:
-        return len(text) // _CHARS_PER_TOKEN
+    enc = _get_encoder()
+    if enc is not None:
+        try:
+            return len(enc.encode(text))
+        except Exception:
+            pass
+    return len(text) // _CHARS_PER_TOKEN
 
 
 def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
