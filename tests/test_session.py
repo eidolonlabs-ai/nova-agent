@@ -105,8 +105,8 @@ def test_delete_session_not_found():
 
 
 def test_prune_sessions():
-    from datetime import datetime, timedelta
     import sqlite3
+    from datetime import datetime, timedelta
 
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "test.db"
