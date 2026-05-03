@@ -3,17 +3,13 @@
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from nova.context import (
-    _find_git_root,
     _normalize_for_scanning,
     build_context_prompt,
     discover_context_files,
     scan_context_content,
     truncate_with_head_tail,
 )
-
 
 # ─── Normalization ───────────────────────────────────────────────────────────
 

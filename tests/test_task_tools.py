@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from nova.tasks import STATUS_COMPLETED, STATUS_FAILED, STATUS_PENDING, STATUS_RUNNING, TaskRecord
+from nova.tasks import STATUS_COMPLETED, STATUS_RUNNING, TaskRecord
 from nova.tools.task_tools import (
     _task_create,
     _task_list,

@@ -1,17 +1,12 @@
 """Tests for slash command handlers."""
 
-import tempfile
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from nova.command_handlers import (
     _HANDLERS,
     dispatch_command,
     get_registered_commands,
 )
-from nova.memory import MemoryStore
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -45,9 +40,9 @@ def test_dispatch_command_returns_false_for_unknown_command(agent):
 
 
 def test_dispatch_command_handles_handler_exception(agent):
-    with patch.dict(_HANDLERS, {"boom": MagicMock(side_effect=RuntimeError("oops"))}):
-        with patch("nova.display._cprint"):
-            result = dispatch_command("boom", agent, "")
+    with patch.dict(_HANDLERS, {"boom": MagicMock(side_effect=RuntimeError("oops"))}), \
+         patch("nova.display._cprint"):
+        result = dispatch_command("boom", agent, "")
     assert result is True  # handler found, exception caught internally
 
 

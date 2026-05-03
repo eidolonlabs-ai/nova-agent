@@ -1,7 +1,5 @@
 """Tests for slash command registry and completion."""
 
-import pytest
-
 from nova.commands import (
     COMMAND_REGISTRY,
     CommandDef,
@@ -145,7 +143,6 @@ def test_slash_completer_subcommand_clear_and_list():
 
     # /memory should offer all subcommands
     completions = list(completer.get_completions(MockDocument("/memory "), None))
-    completion_texts = [c.text for c in completions]
     assert len(completions) >= 2  # at least 2 subcommands
 
 
