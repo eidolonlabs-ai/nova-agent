@@ -3,13 +3,13 @@
 Pure display functions and classes with no NovaAgent dependency.
 """
 
-from typing import Any
-
 import re
 import shutil
 import sys
 import threading
 import time
+from contextlib import suppress
+from typing import Any
 
 from nova import __version__
 
@@ -239,10 +239,8 @@ class NovaTUI:
 
     def _invalidate(self) -> None:
         if self._app is not None:
-            try:
+            with suppress(Exception):
                 self._app.invalidate()
-            except Exception:
-                pass
 
     # ── Main run loop ─────────────────────────────────────────────────────────
 
@@ -430,11 +428,8 @@ class NovaTUI:
         process_thread.start()
 
         # ── Run the application inside patch_stdout ───────────────────────────
-        with patch_stdout():
-            try:
-                app.run()
-            except KeyboardInterrupt:
-                pass
+        with patch_stdout(), suppress(KeyboardInterrupt):
+            app.run()
 
         self._should_exit = True
         _cprint(f"{_DIM}Goodbye!{_RST}")
