@@ -1,0 +1,136 @@
+# Nova Agent — Full Configuration Reference
+#
+# Every available option with explanations. Copy to config.yaml and customize.
+#
+# Usage:
+#   cp config-full.yaml.example config.yaml
+#   # Edit config.yaml to your preferences
+#   nova chat
+
+# ── OpenRouter API ──────────────────────────────────────────────────────────
+# Nova uses OpenRouter for access to 100+ models.
+# Set your API key via env var (recommended) or directly in config.
+openrouter:
+  api_key: "${OPENROUTER_API_KEY}"  # or set OPENROUTER_API_KEY env var
+  model: "qwen/qwen3.6-flash"       # Default model
+  base_url: "https://openrouter.ai/api/v1"
+
+# ── Agent Settings ──────────────────────────────────────────────────────────
+agent:
+  identity: "You are Nova, a capable personal AI agent. You are direct, efficient, and focused on being genuinely useful. You take action using tools rather than describing what you would do. Admit uncertainty when appropriate. Prioritize completing tasks over explaining them."
+  max_iterations: 50          # Max tool calls per conversation turn
+  temperature: 0.7            # Creativity (0.0 = deterministic, 1.0 = creative)
+  top_p: 1.0                  # Nucleus sampling
+
+# ── Token Budgets ───────────────────────────────────────────────────────────
+# Explicit caps at every layer for predictable token usage.
+budgets:
+  system_prompt_max: 8000           # Max tokens for the entire system prompt
+  skills_max_chars: 15000           # Max chars for the skills index section
+  skills_max_count: 50              # Max number of skills shown in prompt
+  context_file_max_chars: 10000     # Max chars per context file (AGENTS.md, etc.)
+  context_total_max_chars: 50000    # Max total chars across all context files
+  tool_result_max_chars: 8000       # Max chars per tool result returned to the model
+  conversation_turn_limit: 15       # Turns before compression triggers
+
+# ── Context Compression ─────────────────────────────────────────────────────
+compression:
+  enabled: true
+  threshold_percent: 0.40           # Compress at 40% of context window
+  summary_model: "qwen/qwen3.6-flash"  # Cheap model for summarization
+  reserve_tokens: 15000             # Reserve for compaction overhead
+
+# ── Context Files ───────────────────────────────────────────────────────────
+# Files Nova discovers automatically (searched in priority order, cwd → git root).
+context_files:
+  - ".nova.md"
+  - "NOVA.md"
+  - "AGENTS.md"
+  - "SOUL.md"
+  - "CLAUDE.md"
+  - ".cursorrules"
+
+# ── Memory ──────────────────────────────────────────────────────────────────
+# Persistent cross-session facts with LRU eviction.
+memory:
+  enabled: true
+  max_entries: 100                  # Max memories before LRU eviction
+  file: "~/.nova/memory.json"
+
+# ── Skills ──────────────────────────────────────────────────────────────────
+# Domain-specific knowledge documents (SKILL.md files).
+skills:
+  enabled: true
+  directory: "~/.nova/skills"
+
+# ── Session Storage ─────────────────────────────────────────────────────────
+# SQLite with FTS5 full-text search.
+session:
+  enabled: true
+  directory: "~/.nova/sessions"
+
+# ── Logging ─────────────────────────────────────────────────────────────────
+logging:
+  level: "INFO"                     # DEBUG, INFO, WARNING, ERROR
+  file: "~/.nova/nova.log"
+
+# ── Sub-Agent Delegation ────────────────────────────────────────────────────
+# Spawn child agents for isolated or parallelizable tasks.
+delegation:
+  enabled: false                    # Set to true to enable delegate_task tool
+  max_spawn_depth: 2                # Max nesting depth (0=root, 2=root→child→grandchild)
+  default_timeout_seconds: 60       # Default sub-agent timeout
+  subagent_budgets:
+    max_iterations: 30              # Max tool calls per sub-agent turn
+    system_prompt_max: 4000         # Smaller system prompt for sub-agents
+    tool_result_max_chars: 4000     # Smaller tool result budget
+
+# ── Permission System ───────────────────────────────────────────────────────
+# Defense-in-depth tool execution control.
+permissions:
+  mode: "auto"                      # "auto" (allow all) or "ask" (confirm mutating tools)
+  denied_tools: []                  # Tools the agent can never use
+  allowed_tools: []                 # Tools that bypass confirmation (ask mode)
+  denied_commands:                  # Shell command patterns that are always blocked
+    - "rm -rf /"
+    - "rm -rf /*"
+    - ":(){*};:*"                   # Fork bomb
+  path_rules: []                    # Path-level allow/deny rules (fnmatch patterns)
+    # - pattern: "/etc/*"
+    #   allow: false
+
+# ── MCP (Model Context Protocol) ────────────────────────────────────────────
+# Connect to external MCP servers (stdio, HTTP, or SSE transports).
+mcp:
+  servers: {}
+    # Local filesystem server (stdio)
+    # filesystem:
+    #   type: stdio
+    #   command: npx
+    #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+    #
+    # Remote API server (Streamable HTTP)
+    # remote-api:
+    #   type: http
+    #   url: https://api.example.com/mcp
+    #   headers:
+    #     Authorization: "Bearer ${API_TOKEN}"
+    #   timeout: 30.0
+    #
+    # SSE-based server
+    # sse-server:
+    #   type: sse
+    #   url: https://api.example.com/sse
+    #   headers:
+    #     Authorization: "Bearer ${API_TOKEN}"
+
+# ── Cost Tracking ───────────────────────────────────────────────────────────
+# Token counts and dollar cost estimation per session.
+cost_tracking:
+  enabled: true
+
+# ── Microcompact ────────────────────────────────────────────────────────────
+# Cheap context window reduction (Tier 1 compaction, no LLM call).
+microcompact:
+  enabled: true
+  keep_recent: 6                    # Number of recent messages to preserve fully

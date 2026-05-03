@@ -9,7 +9,19 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from nova.hooks import EVENT_POST_TOOL_CALL, EVENT_PRE_TOOL_CALL
+
 logger = logging.getLogger(__name__)
+
+
+# Tools that are inherently read-only (never mutate state)
+_READ_ONLY_TOOLS: frozenset[str] = frozenset({
+    "read_file",
+    "search_files",
+    "web_search",
+    "skills_list",
+    "skill_view",
+})
 
 
 class ToolEntry:
@@ -17,7 +29,7 @@ class ToolEntry:
 
     __slots__ = (
         "name", "toolset", "schema", "handler", "check_fn",
-        "description", "emoji",
+        "description", "emoji", "is_read_only",
     )
 
     def __init__(
@@ -29,6 +41,7 @@ class ToolEntry:
         check_fn: Callable | None = None,
         description: str = "",
         emoji: str = "🔧",
+        is_read_only: bool = False,
     ):
         self.name = name
         self.toolset = toolset
@@ -37,6 +50,7 @@ class ToolEntry:
         self.check_fn = check_fn
         self.description = description
         self.emoji = emoji
+        self.is_read_only = is_read_only
 
 
 class ToolRegistry:
@@ -54,8 +68,12 @@ class ToolRegistry:
         handler: Callable,
         check_fn: Callable | None = None,
         emoji: str = "🔧",
+        is_read_only: bool = False,
     ):
         """Register a tool."""
+        # Auto-detect read-only status if not explicitly set
+        if not is_read_only:
+            is_read_only = name in _READ_ONLY_TOOLS
         self._tools[name] = ToolEntry(
             name=name,
             toolset=toolset,
@@ -64,6 +82,7 @@ class ToolRegistry:
             check_fn=check_fn,
             description=schema.get("description", ""),
             emoji=emoji,
+            is_read_only=is_read_only,
         )
         self._generation += 1
         logger.debug("Registered tool: %s", name)
@@ -100,17 +119,28 @@ class ToolRegistry:
         return "\n".join(lines)
 
     def dispatch(self, name: str, args: dict, **kwargs) -> Any:
-        """Dispatch a tool call by name."""
+        """Dispatch a tool call by name.
+
+        Fires pre_tool_call and post_tool_call hooks if registered.
+        """
         entry = self._tools.get(name)
         if not entry:
             return f"Error: Unknown tool '{name}'"
 
+        # Fire pre_tool_call hook
+        from nova.hooks import hooks as _hooks
+        _hooks.emit(EVENT_PRE_TOOL_CALL, tool_name=name, args=args)
+
         try:
             result = entry.handler(args, **kwargs)
+            # Fire post_tool_call hook
+            _hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=args, result=result)
             return result
         except Exception as e:
             logger.error("Tool %s failed: %s", name, e)
-            return f"Error: Tool '{name}' failed: {e}"
+            error_result = f"Error: Tool '{name}' failed: {e}"
+            _hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=args, result=error_result)
+            return error_result
 
     @property
     def generation(self) -> int:
@@ -140,6 +170,7 @@ def discover_builtin_tools(config: dict | None = None):
         "nova.tools.web",
         "nova.tools.skills_tool",
         "nova.tools.memory_tool",
+        "nova.tools.task_tools",
     ]
 
     for mod_name in tool_modules:
