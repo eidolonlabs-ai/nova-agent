@@ -79,7 +79,7 @@ def strip_reasoning_tags(text: str) -> str:
     Handles closed pairs, unterminated open tags, and orphan close tags.
     """
     cleaned = text
-    for tag in _REASONING_TAGS:
+    for tag in sorted(_REASONING_TAGS, key=len, reverse=True):
         # Closed pair
         cleaned = re.sub(
             rf"<{tag}>.*?</{tag}>\s*",
@@ -110,7 +110,7 @@ def extract_reasoning_blocks(text: str) -> list[dict[str, str | int]]:
     Returns list of dicts with 'tag', 'content', and 'start'/'end' positions.
     """
     blocks: list[dict[str, str | int]] = []
-    for tag in _REASONING_TAGS:
+    for tag in sorted(_REASONING_TAGS, key=len, reverse=True):
         for match in re.finditer(
             rf"<{tag}>(.*?)</{tag}>",
             text,
