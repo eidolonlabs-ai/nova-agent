@@ -122,44 +122,15 @@ This means Nova works with any project that already has AI agent instructions.
 
 ## Skills
 
-Skills are directories containing `SKILL.md` files with YAML frontmatter. They provide specialized knowledge for specific tasks.
+Skills are directories containing `SKILL.md` files with YAML frontmatter. They provide specialized knowledge for specific tasks — coding conventions, deployment workflows, API patterns, and more.
 
-### Location
+Skills live in `~/.nova/skills/`. Nova discovers them automatically at startup.
 
-Skills live in `~/.nova/skills/`. Nova discovers them automatically.
-
-### Creating a Skill
-
-```bash
-mkdir -p ~/.nova/skills/my-skill
-```
-
-Create `~/.nova/skills/my-skill/SKILL.md`:
-
-```markdown
----
-name: my-skill
-category: general
-description: What this skill does in one sentence
----
-
-# My Skill
-
-Detailed instructions, conventions, and workflows go here.
-The agent loads this when the skill is relevant.
-```
-
-### Frontmatter Fields
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Skill identifier (used in `skill_view`) |
-| `category` | No | Grouping for the skills index (default: "general") |
-| `description` | No | One-line summary shown in the skills index |
+**→ Full guide: [Creating Skills](creating-skills.md)**
 
 ### Starter Skills
 
-Nova comes with 3 starter skills. Copy them to your Nova home:
+Nova ships with 3 starter skills. Copy them to your Nova home:
 
 ```bash
 cp -r config/skills/* ~/.nova/skills/
@@ -170,13 +141,6 @@ cp -r config/skills/* ~/.nova/skills/
 | `python-coding` | development | Python conventions, testing, venvs |
 | `git-workflow` | development | Git branching, committing, pushing |
 | `file-editing` | development | Safe file editing patterns |
-
-### How Skills Work
-
-1. Nova shows a compact skills index in the system prompt
-2. When a task matches a skill's domain, the agent loads it with `skill_view(name)`
-3. The full `SKILL.md` content is injected into the conversation
-4. The agent follows the skill's instructions
 
 ## Memory
 
@@ -225,20 +189,19 @@ Nova comes with 10 built-in tools:
 
 ### Adding Custom Tools
 
-Tools are registered in `nova/tools/`. To add a new tool:
+Tools are Python modules in `nova/tools/` that define a JSON schema and a handler function, then self-register via `registry.register()`.
 
-1. Create a new file in `nova/tools/my_tool.py`
-2. Define a schema and handler
-3. Call `registry.register()` at module level
+**→ Full guide: [Creating Tools](creating-tools.md)**
 
-Example:
+Quick example:
 
 ```python
+# nova/tools/my_tool.py
 from nova.tools.registry import registry
 
 MY_TOOL_SCHEMA = {
     "name": "my_tool",
-    "description": "What it does",
+    "description": "What it does and when to use it.",
     "parameters": {
         "type": "object",
         "properties": {
@@ -248,8 +211,10 @@ MY_TOOL_SCHEMA = {
     },
 }
 
-def _my_tool(args, **kwargs):
+
+def _my_tool(args: dict, **kwargs) -> str:
     return f"Result: {args['arg']}"
+
 
 registry.register(
     name="my_tool",
@@ -260,7 +225,7 @@ registry.register(
 )
 ```
 
-The tool is automatically discovered and available in the next session.
+Then add `"nova.tools.my_tool"` to the `tool_modules` list in `nova/tools/registry.py`. The tool is available on the next session start.
 
 ## Session Management
 
