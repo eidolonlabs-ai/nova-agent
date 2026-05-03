@@ -43,6 +43,17 @@ from nova.tools.registry import discover_builtin_tools, registry
 logger = logging.getLogger(__name__)
 
 
+def _log_api_400_error(payload: dict, response_text: str) -> None:
+    """Log API 400 error with safe payload inspection (no secrets)."""
+    safe_payload = {
+        "model": payload.get("model"),
+        "message_count": len(payload.get("messages", [])),
+        "has_tools": "tools" in payload,
+    }
+    logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
+    logger.error("Response: %s", response_text[:1000])
+
+
 class NovaAgent:
     """Main agent class with explicit token budgets and smart context management."""
 
@@ -240,14 +251,7 @@ class NovaAgent:
             def _do_post() -> dict:
                 http_response = self.client.post("/chat/completions", json=payload)
                 if http_response.status_code == 400:
-                    # Sanitize payload before logging — never log API keys or full messages
-                    safe_payload = {
-                        "model": payload.get("model"),
-                        "message_count": len(payload.get("messages", [])),
-                        "has_tools": "tools" in payload,
-                    }
-                    logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
-                    logger.error("Response: %s", http_response.text[:1000])
+                    _log_api_400_error(payload, http_response.text)
                 http_response.raise_for_status()
                 return http_response.json()
 
@@ -283,14 +287,7 @@ class NovaAgent:
         with self.client.stream("POST", "/chat/completions", json=payload) as response:
             if response.status_code == 400:
                 body = response.read().decode()
-                # Sanitize payload before logging
-                safe_payload = {
-                    "model": payload.get("model"),
-                    "message_count": len(payload.get("messages", [])),
-                    "has_tools": "tools" in payload,
-                }
-                logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
-                logger.error("Response: %s", body[:1000])
+                _log_api_400_error(payload, body)
                 raise httpx.HTTPStatusError(
                     f"Bad Request: {body[:500]}",
                     request=response.request,
