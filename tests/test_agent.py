@@ -11,81 +11,42 @@ from unittest.mock import MagicMock
 import httpx
 
 from nova.agent import NovaAgent
-from nova.memory import MemoryStore
-from nova.session import SessionStore
 from nova.tools.registry import discover_builtin_tools
 
 
-def _minimal_config() -> dict:
-    """Return a minimal config for testing."""
-    return {
-        "openrouter": {
-            "base_url": "https://openrouter.ai/api/v1",
-            "api_key": "test-key",
-            "model": "test-model",
-        },
-        "agent": {
-            "max_iterations": 3,
-            "temperature": 0.7,
-            "top_p": 1.0,
-            "identity": "You are a test agent.",
-        },
-        "budgets": {
-            "conversation_turn_limit": 5,
-            "tool_result_max_chars": 8000,
-            "system_prompt_max": 8000,
-        },
-        "memory": {"enabled": False},
-        "session": {"directory": str(tempfile.mkdtemp())},
-        "skills": {"enabled": False},
-        "compression": {"enabled": False},
-        "context_files": [],
-    }
-
-
-def _mock_session_store():
-    """Create a real SessionStore backed by a temp file."""
-    tmpdir = tempfile.mkdtemp()
-    return SessionStore(Path(tmpdir) / "test.db")
-
-
-def _mock_response(status_code: int, json_data: dict) -> MagicMock:
-    """Create a mock httpx.Response."""
+def make_mock_response(status_code: int = 200, json_data: dict | None = None, text: str | None = None) -> MagicMock:
+    """Create a generic mock httpx.Response."""
+    if json_data is None:
+        json_data = {}
     resp = MagicMock(spec=httpx.Response)
     resp.status_code = status_code
     resp.json.return_value = json_data
-    resp.text = json.dumps(json_data)
+    resp.text = text or json.dumps(json_data)
+    resp.headers = {}
     return resp
 
 
-def test_agent_creation_with_injected_deps():
-    """Test that agent accepts injected dependencies."""
-    config = _minimal_config()
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
 
+def test_agent_creation_with_injected_deps(minimal_config, mock_session_store, mock_http_client):
+    """Test that agent accepts injected dependencies."""
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
-    assert agent.session_store is session_store
-    assert agent.client is mock_client
+    assert agent.session_store is mock_session_store
+    assert agent.client is mock_http_client
     assert agent.memory is None  # memory disabled in config
     assert agent.session_id is not None
 
 
-def test_agent_creates_session_on_init():
+def test_agent_creates_session_on_init(minimal_config, mock_session_store, mock_http_client):
     """Test that a new session is created when no session_id is provided."""
-    config = _minimal_config()
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
-
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     assert agent.session_id is not None
@@ -93,42 +54,34 @@ def test_agent_creates_session_on_init():
     assert "test agent" in agent._system_prompt
 
 
-def test_agent_loads_existing_session():
+def test_agent_loads_existing_session(minimal_config, mock_session_store, mock_http_client):
     """Test that an existing session is loaded correctly."""
-    config = _minimal_config()
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
-
     # Create a session first
     agent1 = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
     session_id = agent1.session_id
 
     # Add a message
-    session_store.add_message(session_id, "user", "hello")
+    mock_session_store.add_message(session_id, "user", "hello")
 
     # Load the same session
     agent2 = NovaAgent(
-        config=config,
+        config=minimal_config,
         session_id=session_id,
-        http_client=mock_client,
-        session_store=session_store,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     assert agent2.session_id == session_id
-    messages = session_store.get_messages(session_id)
+    messages = mock_session_store.get_messages(session_id)
     assert len(messages) >= 1
 
 
-def test_agent_run_no_tool_calls():
+def test_agent_run_no_tool_calls(minimal_config, mock_session_store, mock_http_client):
     """Test a simple run with no tool calls from the model."""
-    config = _minimal_config()
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
-
     llm_response = {
         "choices": [{
             "message": {
@@ -137,29 +90,26 @@ def test_agent_run_no_tool_calls():
             }
         }]
     }
-    mock_client.post.return_value = _mock_response(200, llm_response)
+    mock_http_client.post.return_value = make_mock_response(200, llm_response)
 
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     result = agent.run("What is the meaning of life?", stream=False)
 
     assert result == "The answer is 42."
-    mock_client.post.assert_called_once()
+    mock_http_client.post.assert_called_once()
     # Verify the payload includes the user message
-    call_args = mock_client.post.call_args
+    call_args = mock_http_client.post.call_args
     payload = call_args[1]["json"]
     assert any("meaning of life" in str(m.get("content", "")) for m in payload["messages"])
 
 
-def test_agent_run_with_tool_call():
+def test_agent_run_with_tool_call(minimal_config, mock_session_store, mock_http_client):
     """Test a run where the model calls a tool."""
-    config = _minimal_config()
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
     discover_builtin_tools()
 
     # First response: tool call, second response: final answer
@@ -187,29 +137,26 @@ def test_agent_run_with_tool_call():
             }
         }]
     }
-    mock_client.post.side_effect = [
-        _mock_response(200, tool_call_response),
-        _mock_response(200, final_response),
+    mock_http_client.post.side_effect = [
+        make_mock_response(200, tool_call_response),
+        make_mock_response(200, final_response),
     ]
 
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     result = agent.run("Run echo hello", stream=False)
 
     assert result == "The command output was: hello"
-    assert mock_client.post.call_count == 2
+    assert mock_http_client.post.call_count == 2
 
 
-def test_agent_history_truncation():
+def test_agent_history_truncation(minimal_config, mock_session_store, mock_http_client):
     """Test that conversation history is trimmed when it exceeds the turn limit."""
-    config = _minimal_config()
-    config["budgets"]["conversation_turn_limit"] = 2  # Very small limit for testing
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
+    minimal_config["budgets"]["conversation_turn_limit"] = 2  # Very small limit for testing
 
     llm_response = {
         "choices": [{
@@ -219,12 +166,12 @@ def test_agent_history_truncation():
             }
         }]
     }
-    mock_client.post.return_value = _mock_response(200, llm_response)
+    mock_http_client.post.return_value = make_mock_response(200, llm_response)
 
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     # Fill up history beyond the limit (turn_limit=2 means max 8 messages)
@@ -241,16 +188,12 @@ def test_agent_history_truncation():
     assert len(agent.messages) <= 12  # 8 (trimmed) + 2 (new user+assistant)
 
 
-def test_agent_execute_tool_call_invalid_json():
+def test_agent_execute_tool_call_invalid_json(minimal_config, mock_session_store, mock_http_client):
     """Test that invalid JSON in tool call arguments is handled gracefully."""
-    config = _minimal_config()
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
-
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     tool_call = {
@@ -266,16 +209,12 @@ def test_agent_execute_tool_call_invalid_json():
     assert "Invalid JSON" in result
 
 
-def test_agent_execute_tool_call_unknown_tool():
+def test_agent_execute_tool_call_unknown_tool(minimal_config, mock_session_store, mock_http_client):
     """Test that unknown tool names return an error."""
-    config = _minimal_config()
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
-
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     tool_call = {
@@ -290,23 +229,18 @@ def test_agent_execute_tool_call_unknown_tool():
     assert "Error" in result
 
 
-def test_agent_build_system_prompt_with_memory():
+def test_agent_build_system_prompt_with_memory(minimal_config, mock_session_store, mock_http_client, mock_memory_store):
     """Test that system prompt includes memory content when memory is enabled."""
-    config = _minimal_config()
-    config["memory"]["enabled"] = True
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
+    minimal_config["memory"]["enabled"] = True
 
-    # Create a real memory store in a temp dir
-    tmpdir = tempfile.mkdtemp()
-    memory = MemoryStore(Path(tmpdir) / "memory.json", max_entries=10)
-    memory.add("User prefers dark mode")
+    # Add a memory entry
+    mock_memory_store.add("User prefers dark mode")
 
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
-        memory_store=memory,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
+        memory_store=mock_memory_store,
     )
 
     assert agent.memory is not None
@@ -314,41 +248,32 @@ def test_agent_build_system_prompt_with_memory():
     assert "dark mode" in agent._system_prompt
 
 
-def test_agent_refresh_system_prompt():
+def test_agent_refresh_system_prompt(minimal_config, mock_session_store, mock_http_client, mock_memory_store):
     """Test that _refresh_system_prompt updates the prompt and session."""
-    config = _minimal_config()
-    config["memory"]["enabled"] = True
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
-
-    tmpdir = tempfile.mkdtemp()
-    memory = MemoryStore(Path(tmpdir) / "memory.json", max_entries=10)
+    minimal_config["memory"]["enabled"] = True
 
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
-        memory_store=memory,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
+        memory_store=mock_memory_store,
     )
 
     initial_prompt = agent._system_prompt
 
     # Add a memory and refresh
-    memory.add("New fact: user lives in NYC")
+    mock_memory_store.add("New fact: user lives in NYC")
     agent._refresh_system_prompt()
 
     assert agent._system_prompt != initial_prompt or "NYC" in agent._system_prompt
     # Verify session was updated
-    info = session_store.get_session_info(agent.session_id)
+    info = mock_session_store.get_session_info(agent.session_id)
     assert "NYC" in info.get("system_prompt", "")
 
 
-def test_agent_max_iterations_limit():
+def test_agent_max_iterations_limit(minimal_config, mock_session_store, mock_http_client):
     """Test that the agent stops after max_iterations."""
-    config = _minimal_config()
-    config["agent"]["max_iterations"] = 2
-    session_store = _mock_session_store()
-    mock_client = MagicMock(spec=httpx.Client)
+    minimal_config["agent"]["max_iterations"] = 2
     discover_builtin_tools()
 
     # Always return a tool call — should stop after 2 iterations
@@ -368,95 +293,74 @@ def test_agent_max_iterations_limit():
             }
         }]
     }
-    mock_client.post.return_value = _mock_response(200, tool_call_response)
+    mock_http_client.post.return_value = make_mock_response(200, tool_call_response)
 
     agent = NovaAgent(
-        config=config,
-        http_client=mock_client,
-        session_store=session_store,
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     agent.run("test", stream=False)
 
     # Should have called the API exactly max_iterations times
-    assert mock_client.post.call_count == 2
+    assert mock_http_client.post.call_count == 2
 
 
-# ---------------------------------------------------------------------------
-# Delegation / sub-agent depth tests
-# ---------------------------------------------------------------------------
-
-def _delegation_config() -> dict:
-    """Minimal config with delegation enabled."""
-    config = _minimal_config()
-    config["delegation"] = {
-        "enabled": True,
-        "max_spawn_depth": 2,
-        "default_timeout_seconds": 60,
-        "subagent_budgets": {"max_iterations": 30},
-    }
-    return config
-
-
-def test_agent_depth_defaults_to_zero():
+def test_agent_depth_defaults_to_zero(delegation_config, mock_http_client, mock_session_store):
     """Root agents should have depth=0."""
-    config = _delegation_config()
     agent = NovaAgent(
-        config=config,
-        http_client=MagicMock(spec=httpx.Client),
-        session_store=_mock_session_store(),
+        config=delegation_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
     assert agent.depth == 0
 
 
-def test_agent_depth_from_subagent_config():
+def test_agent_depth_from_subagent_config(delegation_config, mock_http_client, mock_session_store):
     """Sub-agent config sets depth correctly."""
-    config = _delegation_config()
-    config["_subagent_depth"] = 1
+    delegation_config["_subagent_depth"] = 1
     agent = NovaAgent(
-        config=config,
-        http_client=MagicMock(spec=httpx.Client),
-        session_store=_mock_session_store(),
+        config=delegation_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
     assert agent.depth == 1
 
 
-def test_agent_is_leaf_at_max_depth():
+def test_agent_is_leaf_at_max_depth(delegation_config, mock_http_client, mock_session_store):
     """Agent at max_spawn_depth is a leaf."""
-    config = _delegation_config()
-    config["_subagent_depth"] = 2  # == max_spawn_depth
+    delegation_config["_subagent_depth"] = 2  # == max_spawn_depth
     agent = NovaAgent(
-        config=config,
-        http_client=MagicMock(spec=httpx.Client),
-        session_store=_mock_session_store(),
+        config=delegation_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
     assert agent.is_leaf_agent is True
 
 
-def test_agent_is_not_leaf_below_max_depth():
+def test_agent_is_not_leaf_below_max_depth(delegation_config, mock_http_client, mock_session_store):
     """Agent below max_spawn_depth is an orchestrator."""
-    config = _delegation_config()
-    config["_subagent_depth"] = 1  # < max_spawn_depth=2
+    delegation_config["_subagent_depth"] = 1  # < max_spawn_depth=2
     agent = NovaAgent(
-        config=config,
-        http_client=MagicMock(spec=httpx.Client),
-        session_store=_mock_session_store(),
+        config=delegation_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
     assert agent.is_leaf_agent is False
 
 
-def test_agent_prompt_mode_respected_for_subagent():
+def test_agent_prompt_mode_respected_for_subagent(delegation_config, mock_http_client, mock_session_store):
     """Sub-agent config with _prompt_mode='minimal' should produce a minimal prompt."""
-    config = _delegation_config()
-    config["_subagent_depth"] = 1
-    config["_prompt_mode"] = "minimal"
-    config["skills"]["enabled"] = True
-    config["skills"]["directory"] = str(Path(tempfile.mkdtemp()))
+    delegation_config["_subagent_depth"] = 1
+    delegation_config["_prompt_mode"] = "minimal"
+    delegation_config["skills"]["enabled"] = True
+    delegation_config["skills"]["directory"] = str(Path(tempfile.mkdtemp()))
 
     agent = NovaAgent(
-        config=config,
-        http_client=MagicMock(spec=httpx.Client),
-        session_store=_mock_session_store(),
+        config=delegation_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
     )
 
     # Sub-agent should have a minimal prompt (no skills index)
