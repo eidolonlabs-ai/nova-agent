@@ -217,15 +217,28 @@ def _run_subagent(
     except Exception as e:
         elapsed = time.monotonic() - start_time
         logger.error("%s failed after %.1fs: %s", log_prefix, elapsed, e)
+
+        usage_data = {}
+        if "subagent" in locals() and getattr(subagent, "cost_tracker", None):
+            total_usage = subagent.cost_tracker.total
+            usage_data = {
+                "input_tokens": total_usage.input_tokens,
+                "output_tokens": total_usage.output_tokens,
+                "input_cost": total_usage.input_cost,
+                "output_cost": total_usage.output_cost,
+            }
+
         return {
             "success": False,
             "result": None,
             "label": label,
             "depth": depth,
             "elapsed_seconds": round(elapsed, 1),
+            "usage": usage_data,
             "error": str(e),
             "timeout": False,
         }
+
 
 
 def _delegate_task(args: dict[str, Any], **kwargs) -> str:
