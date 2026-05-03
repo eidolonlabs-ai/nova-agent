@@ -122,9 +122,10 @@ def build_skills_prompt(
 
     lines = ["<skills>"]
     lines.append(
-        "Before replying, scan available skills. If any skill is even partially "
-        "relevant, load it with skill_view(name) and follow its instructions. "
-        "Skills contain specialized knowledge that outperforms general approaches."
+        "Before replying, check if any skill is directly relevant to the task. "
+        "If so, load it with skill_view(name) and follow its instructions. "
+        "Skills contain project-specific conventions and patterns that take precedence over general approaches. "
+        "Only load a skill when it clearly applies \u2014 do not load skills speculatively."
     )
 
     for category in sorted(by_category.keys()):

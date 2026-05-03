@@ -21,10 +21,28 @@ DEFAULT_IDENTITY = (
     "Admit uncertainty when appropriate. Prioritize action over explanation."
 )
 
-# Tool-use enforcement (concise version — no overlap with identity)
+# Tool-use enforcement
 TOOL_USE_GUIDANCE = (
-    "Use tools to take action — don't describe what you would do. "
-    "Every response should either contain tool calls or deliver a final result."
+    "## Tool-use Rules\n"
+    "- Use tools to take action — never describe what you *would* do without doing it.\n"
+    "- When you say you will run a command, read a file, or search the web, make the "
+    "tool call immediately in the same response.\n"
+    "- Never end a turn with a promise of future action — execute it now.\n"
+    "- Keep working until the task is actually complete and verified.\n"
+    "- Every response must either (a) make tool calls that make progress, or "
+    "(b) deliver a final result. Responses that only describe intentions are not acceptable."
+)
+
+# Model-specific enforcement for models known to describe instead of act
+_TOOL_ENFORCEMENT_MODELS = ("gpt", "codex", "gemini", "gemma", "grok", "o1", "o3", "o4")
+
+EXECUTION_DISCIPLINE = (
+    "## Execution Discipline\n"
+    "- Do not stop early when another tool call would improve the result.\n"
+    "- If a tool returns empty or partial results, retry with a different query.\n"
+    "- Before finalizing: verify correctness, check that all requirements are met.\n"
+    "- If required context is missing, use a lookup tool — do not guess or hallucinate.\n"
+    "- For math, hashes, dates, file contents, or system state: always use a tool, never compute from memory."
 )
 
 # Delegation guidance (orchestrator agents only)
@@ -86,7 +104,12 @@ def build_system_prompt(
         parts.append(f"## Available Tools\n{tool_summary}")
         parts.append(TOOL_USE_GUIDANCE)
 
-    # 2b. Delegation guidance — orchestrators get how-to, leaves get a reminder
+    # 2b. Model-specific execution discipline for models prone to describing vs acting
+    model = config.get("openrouter", {}).get("model", "").lower()
+    if any(m in model for m in _TOOL_ENFORCEMENT_MODELS):
+        parts.append(EXECUTION_DISCIPLINE)
+
+    # 2c. Delegation guidance — orchestrators get how-to, leaves get a reminder
     depth = config.get("_subagent_depth", 0)
     max_spawn_depth = config.get("delegation", {}).get("max_spawn_depth", 2)
     delegation_enabled = config.get("delegation", {}).get("enabled", False)
@@ -96,13 +119,13 @@ def build_system_prompt(
         else:
             parts.append(LEAF_AGENT_GUIDANCE)
 
-    # 3. Memory guidance (only if memory is enabled)
-    if config.get("memory", {}).get("enabled"):
-        parts.append(MEMORY_GUIDANCE)
-
-    # 4. Memory content (prefetched facts)
+    # 3. Memory content + guidance (adjacent so model sees guidance right before facts)
     if memory_content:
+        if config.get("memory", {}).get("enabled"):
+            parts.append(MEMORY_GUIDANCE)
         parts.append(memory_content)
+    elif config.get("memory", {}).get("enabled"):
+        parts.append(MEMORY_GUIDANCE)
 
     # 5. Skills index (full mode only)
     if mode == "full" and config.get("skills", {}).get("enabled"):
@@ -127,25 +150,34 @@ def build_system_prompt(
         if context_prompt:
             parts.append(context_prompt)
 
-    # 7. Current date/time
-    from datetime import datetime
-    parts.append(f"Current date: {datetime.now().strftime('%A, %B %d, %Y')}")
+    # 7. Current date (ISO format — unambiguous and token-efficient)
+    from datetime import date
+    parts.append(f"Today: {date.today().isoformat()}")
 
     # 8. Model info
-    model = config.get("openrouter", {}).get("model", "unknown")
-    parts.append(f"Model: {model}")
+    current_model = config.get("openrouter", {}).get("model", "unknown")
+    parts.append(f"Model: {current_model}")
 
     result = "\n\n".join(p.strip() for p in parts if p.strip())
 
-    # Enforce total budget
+    # Enforce total budget: drop optional layers (skills, context) before truncating
     max_tokens = budgets.get("system_prompt_max", 8000)
     current_tokens = estimate_tokens(result)
     if current_tokens > max_tokens:
         logger.warning(
-            "System prompt exceeds budget: %d > %d tokens — truncating",
+            "System prompt exceeds budget: %d > %d tokens — rebuilding without context files",
             current_tokens, max_tokens,
         )
-        # Truncate from the end (context files are last)
+        # Rebuild without context files first
+        core_parts = [p for p in parts if not p.startswith("# Project Context")]
+        result = "\n\n".join(p.strip() for p in core_parts if p.strip())
+        current_tokens = estimate_tokens(result)
+
+    if current_tokens > max_tokens:
+        logger.warning(
+            "System prompt still exceeds budget after dropping context: %d > %d tokens — truncating",
+            current_tokens, max_tokens,
+        )
         chars_to_keep = int(len(result) * max_tokens / current_tokens)
         result = result[:chars_to_keep] + "\n\n[...system prompt truncated to fit budget...]"
 

@@ -15,7 +15,12 @@ DEFAULT_CONFIG = {
         "base_url": "https://openrouter.ai/api/v1",
     },
     "agent": {
-        "identity": "You are Nova, a helpful personal assistant.",
+        "identity": (
+            "You are Nova, a capable personal AI agent. "
+            "You are direct, efficient, and focused on being genuinely useful. "
+            "You take action using tools rather than describing what you would do. "
+            "Admit uncertainty when appropriate. Prioritize completing tasks over explaining them."
+        ),
         "max_iterations": 50,
         "temperature": 0.7,
         "top_p": 1.0,

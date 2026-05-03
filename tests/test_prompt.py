@@ -58,7 +58,7 @@ def test_prompt_mode_full():
 
     assert "test agent" in result
     assert "Available Tools" in result
-    assert "Current date:" in result
+    assert "Today:" in result
     assert "Model: test-model" in result
 
 
@@ -139,7 +139,7 @@ def test_prompt_includes_date_and_model():
     discover_builtin_tools()
 
     result = build_system_prompt(config, mode="minimal")
-    assert "Current date:" in result
+    assert "Today:" in result
     assert "Model: test-model" in result
 
 
