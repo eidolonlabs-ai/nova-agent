@@ -59,3 +59,16 @@ session:
 logging:
   level: "INFO"
   file: "~/.nova/nova.log"
+
+# Sub-agent delegation
+# Allows the agent to spawn child agents for isolated or parallelizable tasks.
+delegation:
+  enabled: false                  # Set to true to enable delegate_task tool
+  max_spawn_depth: 2              # Max nesting depth (0=root only, 2=root→child→grandchild)
+  default_timeout_seconds: 60     # Default sub-agent timeout
+
+  # Budget overrides for sub-agents (smaller than parent defaults)
+  subagent_budgets:
+    max_iterations: 30            # Max tool calls per sub-agent turn
+    system_prompt_max: 4000       # Smaller system prompt for sub-agents
+    tool_result_max_chars: 4000   # Smaller tool result budget

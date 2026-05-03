@@ -53,6 +53,16 @@ DEFAULT_CONFIG = {
         "level": "INFO",
         "file": "~/.nova/nova.log",
     },
+    "delegation": {
+        "enabled": False,
+        "max_spawn_depth": 2,
+        "default_timeout_seconds": 60,
+        "subagent_budgets": {
+            "max_iterations": 30,
+            "system_prompt_max": 4000,
+            "tool_result_max_chars": 4000,
+        },
+    },
 }
 
 

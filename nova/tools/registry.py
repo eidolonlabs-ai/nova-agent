@@ -125,8 +125,12 @@ class ToolRegistry:
 registry = ToolRegistry()
 
 
-def discover_builtin_tools():
-    """Import built-in tool modules to trigger registration."""
+def discover_builtin_tools(config: dict | None = None):
+    """Import built-in tool modules to trigger registration.
+
+    Args:
+        config: Agent config dict, used to gate optional tools like delegate_task.
+    """
     import importlib
 
     tool_modules = [
@@ -143,3 +147,13 @@ def discover_builtin_tools():
             importlib.import_module(mod_name)
         except Exception as e:
             logger.warning("Could not import tool module %s: %s", mod_name, e)
+
+    # Delegation tool is gated on config flag and agent depth
+    try:
+        from nova.tools.delegate_tool import register_delegate_tool
+        depth = (config or {}).get("_subagent_depth", 0)
+        max_depth = (config or {}).get("delegation", {}).get("max_spawn_depth", 2)
+        if depth < max_depth:
+            register_delegate_tool(config)
+    except Exception as e:
+        logger.warning("Could not register delegate_task tool: %s", e)

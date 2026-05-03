@@ -79,8 +79,13 @@ class NovaAgent:
                 timeout=120.0,
             )
 
-        # Discover tools
-        discover_builtin_tools()
+        # Sub-agent depth tracking
+        self.depth: int = self.config.get("_subagent_depth", 0)
+        max_spawn_depth = self.config.get("delegation", {}).get("max_spawn_depth", 2)
+        self.is_leaf_agent: bool = self.depth >= max_spawn_depth
+
+        # Discover tools (pass config so delegation tool can be gated)
+        discover_builtin_tools(self.config)
 
         # Create or load session
         if self.session_id:
@@ -120,15 +125,22 @@ class NovaAgent:
             logger.warning("Session %s not found, creating new", self.session_id)
             self._create_session()
 
-    def _build_system_prompt(self, mode: str = "full"):
-        """Build the system prompt with budget enforcement."""
+    def _build_system_prompt(self, mode: str | None = None):
+        """Build the system prompt with budget enforcement.
+
+        The mode is resolved in priority order:
+        1. Explicit ``mode`` argument (used by tests / refresh calls)
+        2. ``config["_prompt_mode"]`` — set by sub-agent config builder
+        3. ``"full"`` — default for root agents
+        """
+        resolved_mode = mode or self.config.get("_prompt_mode", "full")
         memory_content = None
         if self.memory:
             memory_content = self.memory.format_for_prompt()
 
         self._system_prompt = build_system_prompt(
             config=self.config,
-            mode=mode,
+            mode=resolved_mode,
             memory_content=memory_content,
         )
         self._cached_system_prompt = self._system_prompt
@@ -473,7 +485,16 @@ class NovaAgent:
                     )
                     _cprint(f"{_DIM}Session: {self.session_id}")
                     _cprint(f"Model:   {self.config['openrouter']['model']}")
-                    _cprint(f"Context: {ctx:,} tokens{_RST}")
+                    _cprint(f"Context: {ctx:,} tokens")
+                    # Delegation state
+                    delegation_cfg = self.config.get("delegation", {})
+                    if delegation_cfg.get("enabled"):
+                        max_depth = delegation_cfg.get("max_spawn_depth", 2)
+                        role = "leaf" if self.is_leaf_agent else "orchestrator"
+                        _cprint(f"Delegation: enabled  depth={self.depth}/{max_depth}  role={role}")
+                    else:
+                        _cprint("Delegation: disabled")
+                    _cprint(f"Messages: {len(self.messages)}{_RST}")
                     return
 
                 if name == "sessions":

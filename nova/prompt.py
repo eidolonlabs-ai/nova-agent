@@ -27,6 +27,26 @@ TOOL_USE_GUIDANCE = (
     "Every response should either contain tool calls or deliver a final result."
 )
 
+# Delegation guidance (orchestrator agents only)
+DELEGATION_GUIDANCE = (
+    "## Task Delegation\n"
+    "Use delegate_task to hand off isolated or parallelizable work to a focused sub-agent.\n"
+    "Good candidates: tasks that are independent, can run in parallel, or need a clean context.\n"
+    "Bad candidates: tasks that require back-and-forth with the user or depend on prior tool results.\n"
+    "Tips:\n"
+    "- Write a clear, self-contained task description — the sub-agent has no other context by default.\n"
+    "- Use context_mode='fork' only when the sub-agent needs the full conversation history.\n"
+    "- Use model= to pick a cheaper model for simple sub-tasks.\n"
+    "- Aggregate all sub-agent results into your final response."
+)
+
+# Leaf-agent guidance (sub-agents at max depth)
+LEAF_AGENT_GUIDANCE = (
+    "## Focused Sub-Agent Mode\n"
+    "You are a focused sub-agent. Complete the assigned task directly using available tools. "
+    "Do not attempt to delegate — handle everything yourself."
+)
+
 # Memory guidance (minimal)
 MEMORY_GUIDANCE = (
     "Save durable facts using the memory tool: user preferences, environment details, tool quirks. "
@@ -65,6 +85,16 @@ def build_system_prompt(
     if tool_summary:
         parts.append(f"## Available Tools\n{tool_summary}")
         parts.append(TOOL_USE_GUIDANCE)
+
+    # 2b. Delegation guidance — orchestrators get how-to, leaves get a reminder
+    depth = config.get("_subagent_depth", 0)
+    max_spawn_depth = config.get("delegation", {}).get("max_spawn_depth", 2)
+    delegation_enabled = config.get("delegation", {}).get("enabled", False)
+    if delegation_enabled:
+        if depth < max_spawn_depth:
+            parts.append(DELEGATION_GUIDANCE)
+        else:
+            parts.append(LEAF_AGENT_GUIDANCE)
 
     # 3. Memory guidance (only if memory is enabled)
     if config.get("memory", {}).get("enabled"):

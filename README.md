@@ -50,6 +50,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `skill_view` | Load a skill's full instructions |
 | `skill_manage` | Create, update, or delete skills |
 | `memory` | Add, search, delete, or clear persistent memories |
+| `delegate_task` | Spawn a sub-agent to handle an isolated task (opt-in) |
 
 ## Installation
 
@@ -152,6 +153,45 @@ cp -r config/skills/* ~/.nova/skills/
 
 See [docs/customizing.md](docs/customizing.md) for the full customization guide.
 
+## Sub-Agent Delegation
+
+Nova supports spawning sub-agents to handle isolated or parallelizable tasks. Sub-agents run in a worker thread with their own context, budget, and timeout.
+
+**Enable in `config.yaml`:**
+
+```yaml
+delegation:
+  enabled: true
+  max_spawn_depth: 2        # root → child → grandchild (leaf)
+  default_timeout_seconds: 60
+  subagent_budgets:
+    max_iterations: 30
+```
+
+**How it works:**
+
+1. The root agent (orchestrator) calls `delegate_task(task="...")` as a tool
+2. A child `NovaAgent` is spawned in a worker thread with a fresh conversation
+3. The child runs with a minimal system prompt (no skills index, no context files) focused on the task
+4. Results are returned as JSON and aggregated into the parent's response
+
+**Parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `task` | required | Self-contained task description |
+| `label` | auto | Short label for logging |
+| `model` | parent's | Override model (e.g. cheaper model for simple tasks) |
+| `timeout_seconds` | 60 | Hard timeout (max 300s) |
+| `context_mode` | `isolated` | `isolated` (fresh) or `fork` (inherit parent transcript) |
+
+**Depth & roles:**
+
+- **Orchestrator** (depth < `max_spawn_depth`): can call `delegate_task`
+- **Leaf** (depth ≥ `max_spawn_depth`): cannot delegate further
+
+Check delegation state with `/status` in the chat UI.
+
 ## Usage
 
 ```bash
@@ -196,6 +236,7 @@ nova/
     web.py          # DuckDuckGo HTML web search
     skills_tool.py  # skills_list, skill_view, skill_manage
     memory_tool.py  # memory tool (add/search/delete/clear)
+    delegate_tool.py # delegate_task sub-agent spawning (opt-in)
 config/
   SOUL.md.example   # Agent personality template
   .nova.md.example  # Project instructions template
@@ -217,7 +258,7 @@ pip install mypy
 # Run all checks
 ruff check .          # Lint
 mypy nova/            # Type check
-pytest                # Tests (101 passing)
+pytest                # Tests (138 passing)
 
 # Full CI check
 ruff check . && mypy nova/ && pytest
