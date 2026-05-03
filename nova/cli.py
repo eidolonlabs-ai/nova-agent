@@ -27,12 +27,17 @@ def cmd_ask(args):
 
 
 def cmd_sessions(args):
-    """List recent sessions."""
+    """List recent sessions, or prune old ones."""
     config = load_config()
     from nova.session import SessionStore
 
     session_dir = Path(config["session"]["directory"]).expanduser()
     store = SessionStore(session_dir / "sessions.db")
+
+    if args.prune is not None:
+        count = store.prune_sessions(older_than_days=args.prune)
+        print(f"Pruned {count} session(s) older than {args.prune} day(s).")
+        return
 
     sessions = store.list_sessions(limit=args.limit)
     if not sessions:
@@ -48,11 +53,23 @@ def cmd_sessions(args):
 
 
 def cmd_reset(args):
-    """Reset (clear) the current session."""
-    if args.session_id:
-        print(f"Session deletion not yet implemented for {args.session_id}")
+    """Delete a session by ID."""
+    from nova.session import SessionStore
+
+    config = load_config()
+    session_dir = Path(config["session"]["directory"]).expanduser()
+    store = SessionStore(session_dir / "sessions.db")
+
+    if not args.session_id:
+        print("Specify a session to delete: nova reset --session <id>")
+        print("Use 'nova sessions' to list session IDs.")
+        return
+
+    deleted = store.delete_session(args.session_id)
+    if deleted:
+        print(f"Deleted session {args.session_id}")
     else:
-        print("Use 'nova sessions' to see sessions, then 'nova reset --session <id>'")
+        print(f"Session not found: {args.session_id}")
 
 
 def cmd_setup(args):
@@ -219,6 +236,10 @@ def main():
     # sessions
     sessions_parser = subparsers.add_parser("sessions", help="List recent sessions")
     sessions_parser.add_argument("--limit", type=int, default=20, help="Max sessions to show")
+    sessions_parser.add_argument(
+        "--prune", type=int, metavar="DAYS",
+        help="Delete sessions older than DAYS days (e.g. --prune 30)",
+    )
     sessions_parser.set_defaults(func=cmd_sessions)
 
     # reset

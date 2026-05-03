@@ -131,6 +131,19 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
+_KNOWN_TOP_LEVEL_KEYS: frozenset[str] = frozenset(DEFAULT_CONFIG.keys())
+# Internal keys set at runtime (not from user config files)
+_RUNTIME_KEYS: frozenset[str] = frozenset({"_subagent_depth", "_prompt_mode"})
+
+
+def _warn_unknown_keys(user_config: dict[str, Any], source: str) -> None:
+    """Warn about unrecognised top-level keys in a user-supplied config."""
+    logger = logging.getLogger(__name__)
+    unknown = set(user_config.keys()) - _KNOWN_TOP_LEVEL_KEYS - _RUNTIME_KEYS
+    for key in sorted(unknown):
+        logger.warning("Unknown config key '%s' in %s (typo?)", key, source)
+
+
 def load_config(config_path: Path | None = None) -> dict[str, Any]:
     """Load configuration from YAML files, falling back to defaults.
 
@@ -156,6 +169,7 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
             )
         with open(global_config_path, encoding="utf-8") as f:
             global_config: dict[str, Any] = yaml.safe_load(f) or {}
+        _warn_unknown_keys(global_config, str(global_config_path))
         config = _deep_merge(config, global_config)
 
     # Layer 3: Local config (config.yaml in current directory)
@@ -165,6 +179,7 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
     if config_path.exists():
         with open(config_path, encoding="utf-8") as f:
             user_config: dict[str, Any] = yaml.safe_load(f) or {}
+        _warn_unknown_keys(user_config, str(config_path))
         config = _deep_merge(config, user_config)
 
     # Resolve environment variable placeholders
