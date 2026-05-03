@@ -141,3 +141,63 @@ def test_prompt_includes_date_and_model():
     result = build_system_prompt(config, mode="minimal")
     assert "Current date:" in result
     assert "Model: test-model" in result
+
+
+# ---------------------------------------------------------------------------
+# Delegation prompt tests
+# ---------------------------------------------------------------------------
+
+def _delegation_config(depth: int = 0, max_spawn_depth: int = 2) -> dict:
+    """Config with delegation enabled."""
+    config = _minimal_config()
+    config["delegation"] = {
+        "enabled": True,
+        "max_spawn_depth": max_spawn_depth,
+    }
+    config["_subagent_depth"] = depth
+    return config
+
+
+def test_delegation_guidance_in_orchestrator_prompt():
+    """Orchestrator agents (depth < max) should get delegation guidance."""
+    config = _delegation_config(depth=0, max_spawn_depth=2)
+    discover_builtin_tools(config)
+
+    result = build_system_prompt(config, mode="minimal")
+    assert "Task Delegation" in result
+    assert "delegate_task" in result
+
+
+def test_delegation_guidance_absent_when_disabled():
+    """Delegation guidance should not appear when delegation is disabled."""
+    config = _minimal_config()
+    config["delegation"] = {"enabled": False, "max_spawn_depth": 2}
+    discover_builtin_tools(config)
+
+    result = build_system_prompt(config, mode="minimal")
+    assert "Task Delegation" not in result
+    assert "Focused Sub-Agent" not in result
+
+
+def test_leaf_agent_guidance_in_leaf_prompt():
+    """Leaf agents (depth >= max) should get leaf guidance, not orchestrator guidance."""
+    config = _delegation_config(depth=2, max_spawn_depth=2)
+    discover_builtin_tools(config)
+
+    result = build_system_prompt(config, mode="minimal")
+    assert "Focused Sub-Agent" in result
+    assert "Task Delegation" not in result
+
+
+def test_subagent_uses_minimal_prompt_mode():
+    """Sub-agents with _prompt_mode='minimal' should not get skills or context files."""
+    config = _delegation_config(depth=1)
+    config["_prompt_mode"] = "minimal"
+    config["skills"]["enabled"] = True
+    config["context_files"] = [".nova.md"]
+    discover_builtin_tools(config)
+
+    # build_system_prompt should respect _prompt_mode from config when no explicit mode given
+    result = build_system_prompt(config, mode="minimal")
+    assert "<skills>" not in result
+    assert "<context_files>" not in result

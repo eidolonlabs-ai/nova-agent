@@ -380,3 +380,85 @@ def test_agent_max_iterations_limit():
 
     # Should have called the API exactly max_iterations times
     assert mock_client.post.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# Delegation / sub-agent depth tests
+# ---------------------------------------------------------------------------
+
+def _delegation_config() -> dict:
+    """Minimal config with delegation enabled."""
+    config = _minimal_config()
+    config["delegation"] = {
+        "enabled": True,
+        "max_spawn_depth": 2,
+        "default_timeout_seconds": 60,
+        "subagent_budgets": {"max_iterations": 30},
+    }
+    return config
+
+
+def test_agent_depth_defaults_to_zero():
+    """Root agents should have depth=0."""
+    config = _delegation_config()
+    agent = NovaAgent(
+        config=config,
+        http_client=MagicMock(spec=httpx.Client),
+        session_store=_mock_session_store(),
+    )
+    assert agent.depth == 0
+
+
+def test_agent_depth_from_subagent_config():
+    """Sub-agent config sets depth correctly."""
+    config = _delegation_config()
+    config["_subagent_depth"] = 1
+    agent = NovaAgent(
+        config=config,
+        http_client=MagicMock(spec=httpx.Client),
+        session_store=_mock_session_store(),
+    )
+    assert agent.depth == 1
+
+
+def test_agent_is_leaf_at_max_depth():
+    """Agent at max_spawn_depth is a leaf."""
+    config = _delegation_config()
+    config["_subagent_depth"] = 2  # == max_spawn_depth
+    agent = NovaAgent(
+        config=config,
+        http_client=MagicMock(spec=httpx.Client),
+        session_store=_mock_session_store(),
+    )
+    assert agent.is_leaf_agent is True
+
+
+def test_agent_is_not_leaf_below_max_depth():
+    """Agent below max_spawn_depth is an orchestrator."""
+    config = _delegation_config()
+    config["_subagent_depth"] = 1  # < max_spawn_depth=2
+    agent = NovaAgent(
+        config=config,
+        http_client=MagicMock(spec=httpx.Client),
+        session_store=_mock_session_store(),
+    )
+    assert agent.is_leaf_agent is False
+
+
+def test_agent_prompt_mode_respected_for_subagent():
+    """Sub-agent config with _prompt_mode='minimal' should produce a minimal prompt."""
+    config = _delegation_config()
+    config["_subagent_depth"] = 1
+    config["_prompt_mode"] = "minimal"
+    config["skills"]["enabled"] = True
+    config["skills"]["directory"] = str(Path(tempfile.mkdtemp()))
+
+    agent = NovaAgent(
+        config=config,
+        http_client=MagicMock(spec=httpx.Client),
+        session_store=_mock_session_store(),
+    )
+
+    # Sub-agent should have a minimal prompt (no skills index)
+    assert agent._system_prompt is not None
+    assert "<skills>" not in (agent._system_prompt or "")
