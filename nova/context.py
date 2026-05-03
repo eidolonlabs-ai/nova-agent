@@ -119,7 +119,12 @@ def truncate_with_head_tail(content: str, max_chars: int) -> str:
 def _find_git_root(start: Path) -> Path | None:
     """Walk up from start to find the git root."""
     current = start.resolve()
+    seen = {current}
     for parent in [current, *current.parents]:
+        if parent in seen:
+            # Reached filesystem root — stop to avoid infinite loop
+            break
+        seen.add(parent)
         if (parent / ".git").exists():
             return parent
     return None

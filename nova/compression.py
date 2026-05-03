@@ -100,8 +100,9 @@ def compress_conversation(
         summary = data.get("choices", [{}])[0].get("message", {}).get("content", "")
 
         if not summary:
-            logger.warning("Compression returned empty summary")
-            return None
+            logger.warning("Compression returned empty summary — falling back to microcompact")
+            from nova.microcompact import microcompact_messages
+            return microcompact_messages(messages)
 
         # Build new message list: system prompt + summary + recent
         system_msg = next((m for m in messages if m.get("role") == "system"), None)

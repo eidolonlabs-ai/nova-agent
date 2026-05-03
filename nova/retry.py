@@ -18,6 +18,8 @@ class ErrorType:
     RETRYABLE = "retryable"       # Transient — should retry
     NON_RETRYABLE = "non_retryable"  # Permanent — should not retry
     CONTEXT_OVERFLOW = "overflow"    # Context too long — needs compression
+    API_TIMEOUT = "api_timeout"      # API-level timeout — retry once only
+    CONNECTION_TIMEOUT = "connection_timeout"  # Connection issue — retry with backoff
 
 
 # HTTP status codes that are retryable
@@ -31,12 +33,21 @@ _RETRYABLE_PATTERNS = [
     "internal error",
     "bad gateway",
     "service unavailable",
-    "gateway timeout",
     "upstream error",
-    "connection reset",
+]
+
+# Connection-level errors (transient network issues — retry aggressively)
+_CONNECTION_ERROR_PATTERNS = [
+    "connection timeout",
     "connection refused",
+    "connection reset",
+]
+
+# API-level timeouts (may be permanent — retry only once)
+_API_TIMEOUT_PATTERNS = [
     "timeout",
     "temporary failure",
+    "gateway timeout",
 ]
 
 # Error patterns that indicate context overflow
@@ -59,7 +70,8 @@ def classify_error(status_code: int | None = None, message: str = "") -> str:
         message: Error message text.
 
     Returns:
-        One of ErrorType.RETRYABLE, ErrorType.NON_RETRYABLE, ErrorType.CONTEXT_OVERFLOW.
+        One of ErrorType.RETRYABLE, ErrorType.NON_RETRYABLE, ErrorType.CONTEXT_OVERFLOW,
+        ErrorType.API_TIMEOUT, or ErrorType.CONNECTION_TIMEOUT.
     """
     text = (message or "").lower()
 
@@ -72,7 +84,17 @@ def classify_error(status_code: int | None = None, message: str = "") -> str:
     if status_code in _RETRYABLE_STATUS:
         return ErrorType.RETRYABLE
 
-    # Check retryable error patterns
+    # Check connection-level errors first (transient network issues)
+    for pattern in _CONNECTION_ERROR_PATTERNS:
+        if pattern in text:
+            return ErrorType.CONNECTION_TIMEOUT
+
+    # Check API-level timeouts (may be permanent — retry only once)
+    for pattern in _API_TIMEOUT_PATTERNS:
+        if pattern in text:
+            return ErrorType.API_TIMEOUT
+
+    # Check general retryable error patterns
     for pattern in _RETRYABLE_PATTERNS:
         if pattern in text:
             return ErrorType.RETRYABLE
@@ -149,6 +171,15 @@ def retry_with_backoff(
                 delay = min(base_delay * (backoff_multiplier ** attempt), max_delay)
                 if jitter:
                     delay *= (0.5 + random.random() * 0.5)  # 50%-150% of delay
+
+                # API-level timeouts: limit to a single retry to avoid
+                # spinning on permanently broken endpoints
+                if error_type == ErrorType.API_TIMEOUT and attempt >= 1:
+                    logger.error(
+                        "API timeout persisted after 1 retry (%s): %s",
+                        error_type, error_msg[:200],
+                    )
+                    raise
 
                 logger.warning(
                     "API call failed (attempt %d/%d, %s): %s — retrying in %.1fs",
