@@ -89,7 +89,7 @@ def _list_files(args: dict[str, Any], **kwargs) -> str:
     logger.info("Listing files: pattern=%s, root=%s, limit=%d", pattern, root, limit)
 
     try:
-        matches = []
+        matches: list[str] = []
         for path in sorted(root_path.glob(pattern)):
             if path.is_file() and not _should_exclude(path):
                 if absolute:
