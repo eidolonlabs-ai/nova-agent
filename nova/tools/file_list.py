@@ -17,7 +17,8 @@ LIST_FILES_SCHEMA = {
     "name": "list_files",
     "description": (
         "List files matching a glob pattern. "
-        "Supports *, ?, [abc], ** (recursive), and gitignore filtering. "
+        "Supports *, ?, [abc], ** (recursive). "
+        "Automatically excludes .git, __pycache__, node_modules, .venv. "
         "Returns paths relative to the search root."
     ),
     "parameters": {
@@ -65,11 +66,7 @@ def _should_exclude(path: Path) -> bool:
 
     # Check file patterns
     name = path.name
-    for pattern in excluded_files:
-        if fnmatch.fnmatch(name, pattern):
-            return True
-
-    return False
+    return any(fnmatch.fnmatch(name, pattern) for pattern in excluded_files)
 
 
 def _list_files(args: dict[str, Any], **kwargs) -> str:

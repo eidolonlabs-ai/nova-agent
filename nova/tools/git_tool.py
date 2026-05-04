@@ -5,8 +5,8 @@ Integrates with permission system to prevent destructive operations.
 """
 
 import logging
-import re
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from nova.tools.registry import registry
@@ -120,7 +120,6 @@ GIT_SHOW_SCHEMA = {
 }
 
 _MAX_OUTPUT_CHARS = 8000
-_DANGEROUS_PATTERNS = ["reset --hard", "push --force", "clean -fd", "rebase -i"]
 
 
 def _truncate_output(output: str, max_chars: int = _MAX_OUTPUT_CHARS) -> str:
@@ -136,16 +135,8 @@ def _truncate_output(output: str, max_chars: int = _MAX_OUTPUT_CHARS) -> str:
     )
 
 
-def _is_dangerous_command(cmd: str) -> bool:
-    """Check if a git command is dangerous (mutation/destructive)."""
-    cmd_lower = cmd.lower()
-    return any(pattern in cmd_lower for pattern in _DANGEROUS_PATTERNS)
-
-
 def _run_git_command(repo: str, *args: str) -> tuple[int, str, str]:
     """Run a git command and return (returncode, stdout, stderr)."""
-    from pathlib import Path
-
     repo_path = Path(repo).expanduser()
     if not repo_path.exists() or not repo_path.is_dir():
         raise ValueError(f"Repository not found: {repo}")
@@ -162,8 +153,8 @@ def _run_git_command(repo: str, *args: str) -> tuple[int, str, str]:
             timeout=30.0,
         )
         return result.returncode, result.stdout, result.stderr
-    except subprocess.TimeoutExpired:
-        raise TimeoutError("Git command timed out after 30s")
+    except subprocess.TimeoutExpired as e:
+        raise TimeoutError("Git command timed out after 30s") from e
 
 
 def _git_status(args: dict[str, Any], **kwargs) -> str:
