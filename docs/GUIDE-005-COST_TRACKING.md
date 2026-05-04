@@ -97,6 +97,7 @@ response = {
 
 usage = extract_usage_from_response(response)
 # {"input_tokens": 1000, "output_tokens": 500, "output_cost": 0.000075}
+```
 
 ---
 

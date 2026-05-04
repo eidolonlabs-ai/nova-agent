@@ -1,5 +1,10 @@
 # Security Policy
 
+**Status:** ✅ Active  
+**Last Updated:** May 2026
+
+---
+
 ## Supported Versions
 
 | Version | Supported |
@@ -77,3 +82,13 @@ The `terminal` tool executes shell commands with the user's privileges. Be aware
 3. **Review tool outputs** before executing destructive commands
 4. **Keep Nova Agent updated** to receive security patches
 5. **Restrict `~/.nova/` directory permissions** if storing sensitive data
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [README](README.md) | Project overview |
+| [CONTRIBUTING](CONTRIBUTING.md) | Development and PR guidelines |
+| [Permissions](docs/GUIDE-008-PERMISSIONS.md) | Tool permission system reference |

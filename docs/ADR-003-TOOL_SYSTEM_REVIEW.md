@@ -1,8 +1,10 @@
 # Nova Agent Tool System — Code Review & Design Analysis
 
-**Date:** May 3, 2026  
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** ADR (Architecture Decision Record)  
 **Scope:** Comparison with Claude Code, Hermes, OpenClaw, LangGraph, AutoGen, and OpenAI Swarm  
-**Verdict:** **Robust foundation with strategic advantages in token budgeting, delegation, and permissions. Strong core, narrow tool breadth.**
+**Verdict:** Robust foundation with strategic advantages in token budgeting, delegation, and permissions. Strong core, narrow tool breadth.
 
 ---
 
@@ -503,6 +505,17 @@ Nova Agent is **not** trying to be a general-purpose agent framework. It's optim
 
 ## References
 
-- **Nova Agent Source:** `/nova/tools/` (1.8K LOC)
+- **Nova Agent Source:** `nova/tools/` (now 16 tools)
 - **Comparison Frameworks:** Claude Code (Anthropic), LangGraph (LangChain), AutoGen (Microsoft), Swarm (OpenAI), Hermes (Nous Research)
 - **Key Paper:** "Dive into Claude Code: Design Space Analysis" (https://arxiv.org/html/2604.14228v1)
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Creating Tools](GUIDE-001-CREATING_TOOLS.md) | Tool development guide |
+| [Permissions](GUIDE-008-PERMISSIONS.md) | Permission system reference |
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Full tools and configuration reference |
+| [Documentation Index](DOCUMENTATION_INDEX.md) | Full inventory of all docs |

@@ -132,7 +132,7 @@ Use conventional commit format:
 
 ## Adding Skills
 
-Skills are markdown files with YAML frontmatter. See [docs/GUIDE-003-CUSTOMIZING.md](docs/GUIDE-003-CUSTOMIZING.md) for the format.
+Skills are markdown files with YAML frontmatter. See [docs/GUIDE-002-CREATING_SKILLS.md](docs/GUIDE-002-CREATING_SKILLS.md) for the format.
 
 ## License
 

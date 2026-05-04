@@ -1,5 +1,8 @@
 # Nova Agent — Project Report
 
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** REPORT (Project Status)  
 **Date:** 2026-05-02
 
 ---
@@ -197,3 +200,13 @@ New modules account for ~26% of total codebase.
 ---
 
 *Report generated: 2026-05-02*
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [README](../README.md) | Current project overview and feature status |
+| [Documentation Index](DOCUMENTATION_INDEX.md) | Full inventory of all docs |
+| [CONTRIBUTING](../CONTRIBUTING.md) | Development setup and code quality standards |

@@ -1,4 +1,12 @@
-# Nova Agent: Sub-Agent Design Proposal
+# ADR-002: Sub-Agent Design
+
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** ADR (Architecture Decision Record)
+
+> Design specification for Nova's sub-agent architecture. This design has been implemented in `nova/tools/delegate_tool.py`.
+
+---
 
 ## Executive Summary
 
@@ -679,3 +687,13 @@ This design brings sub-agent support to Nova Agent while maintaining its minimal
 - **Inspired by** Hermes-Agent and OpenClaw, but tailored to Nova
 
 The implementation is straightforward, testable, and can be rolled out incrementally.
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [ADR-001: Sub-Agent Comparison](ADR-001-SUBAGENT_COMPARISON.md) | Comparison with Hermes-Agent and OpenClaw patterns |
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Delegation configuration reference |
+| [Creating Tools](GUIDE-001-CREATING_TOOLS.md) | Tool development guide (delegate_task is a tool) |

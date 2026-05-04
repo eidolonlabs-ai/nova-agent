@@ -370,17 +370,19 @@ Or ask Nova: *"Delete the my-skill skill."*
 
 ## Starter Skills
 
-Nova ships with 3 starter skills. Copy them to your Nova home:
+Nova ships with 5 starter skills. Copy them to your Nova home:
 
 ```bash
 cp -r config/skills/* ~/.nova/skills/
 ```
 
-| Skill | Category | What it covers |
-|-------|----------|----------------|
-| `python-coding` | development | Type hints, PEP 8, pytest, ruff, mypy, venvs |
-| `git-workflow` | development | Branching, committing, pushing, PRs |
-| `file-editing` | development | Safe file editing patterns, verification steps |
+| Skill | Category | Status | What it covers |
+|-------|----------|--------|----------------|
+| `python-coding` | development | ✅ Active | Type hints, PEP 8, pytest, ruff, mypy, venvs |
+| `git-workflow` | development | ✅ Active | Branching, committing, pushing, PRs |
+| `file-editing` | development | ✅ Active | Safe file editing patterns, verification steps |
+| `code-review` | development | ✅ Active | Code review conventions and checklists |
+| `documentation-template-builder` | development | ✅ Active | Generate docs in ai-companions style |
 
 ---
 

@@ -1,4 +1,12 @@
-# Sub-Agent Implementation Comparison
+# ADR-001: Sub-Agent Implementation Comparison
+
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** ADR (Architecture Decision Record)
+
+> Comparison of sub-agent implementations in Hermes-Agent, OpenClaw, and the Nova Agent design that was adopted.
+
+---
 
 ## Overview
 
@@ -584,3 +592,13 @@ Nova's sub-agent design strikes a balance between **Hermes-Agent's simplicity** 
 | **Minimalism** | ~500 lines, no new dependencies, clear boundaries |
 
 This design can be implemented incrementally and tested thoroughly before shipping.
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [ADR-002: Sub-Agent Design](ADR-002-SUBAGENT_DESIGN.md) | Detailed design spec and implementation plan |
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Delegation configuration reference |
+| [Documentation Index](DOCUMENTATION_INDEX.md) | Full inventory of all docs |

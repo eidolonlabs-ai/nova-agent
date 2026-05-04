@@ -145,6 +145,8 @@ Examples:
 
 ## Documentation Standards
 
+> **Before writing any doc, load the skill:** `skill_view("documentation-template-builder")` — it has templates and rich examples for every doc type.
+
 All documentation for this project follows **ai-companions style**. These rules apply whenever you create or edit any `.md` file in this repo.
 
 **File placement:** Every doc lives in `docs/`. Never create `.md` files at the repo root (except README.md, CONTRIBUTING.md, SECURITY.md, CLAUDE.md).
@@ -177,8 +179,6 @@ Use the next available number in sequence. Check `docs/DOCUMENTATION_INDEX.md` f
 **Every doc must include:**
 - A Related Documentation section at the bottom with a cross-reference table
 - Status symbols in any feature or capability tables
-
-**When generating documentation:** Load the `documentation-template-builder` skill — it contains full templates and rich examples for all doc types. Use `skill_view("documentation-template-builder")` before writing any new doc.
 
 ## Working in Worktrees
 
