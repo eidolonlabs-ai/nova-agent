@@ -1,72 +1,152 @@
 ---
 name: git-workflow
 category: development
-description: Git workflow conventions — branching, committing, pushing, and common operations
+description: Git and GitHub workflow — conventional commits, branching, PRs, and gh CLI usage
 ---
 
 # Git Workflow Skill
 
-## Commit Message Conventions
+## Commit Message Convention
 
-- Use imperative mood: `Add search_files tool`, not `Added` or `Adding`
-- Keep the subject line under 72 characters
-- Group related changes into one logical commit — don't mix unrelated fixes
-- Reference issue numbers when relevant: `Fix timeout bug (#42)`
+Nova Agent uses **conventional commits**:
+
+```
+<type>: <subject>
+
+<body (optional)>
+```
+
+Types: `feat` (new feature), `fix` (bug fix), `docs` (docs only), `test` (tests only), `refactor` (no behavior change), `chore` (maintenance)
+
+Rules:
+- Subject line: imperative mood, under 72 chars, no trailing period
+- Body: optional, use when the *why* isn't obvious from the subject
+- Never mix types — a commit that adds a feature AND fixes a bug should be two commits
+
+Examples:
+```
+feat: add semantic symbol search tool
+fix: handle empty context files gracefully
+test: expand CLI coverage to 82%
+refactor: extract token budget logic into tokens.py
+docs: update test counts to reflect 557 tests
+```
+
+## Pre-Commit Checklist
+
+Always run the full CI check before committing:
+
+```bash
+ruff check . && mypy nova/ && pytest
+```
+
+If any step fails, fix it before committing. Never commit broken code.
 
 ## Workflow
 
-1. Check status before starting: `git status`
+1. `git status` — understand current state
 2. Make changes
-3. Run tests: `pytest` (or project-specific check)
-4. Stage intentionally: `git add <specific files>` not `git add .`
-5. Review staged diff: `git diff --staged`
-6. Commit with a clear message
-7. Push
+3. `ruff check . && mypy nova/ && pytest` — full CI check must pass
+4. `git diff --staged` — review exactly what you're committing
+5. `git add <specific files>` — stage intentionally, never `git add .`
+6. `git commit -m "type: subject"` — follow conventional commits
+7. `git push` (or `git push -u origin HEAD` for new branches)
 
-## Common Commands
+## Branching
 
 ```bash
-# Status and diff
-git status
-git diff                    # unstaged changes
-git diff --staged           # staged changes
-git log --oneline -10       # recent commits
+git checkout -b feat/short-description   # new feature
+git checkout -b fix/short-description    # bug fix
+git switch main                          # return to main
+git pull --rebase                        # sync with remote
+git branch -d feat/short-description     # clean up merged branch
+```
 
-# Staging and committing
-git add path/to/file        # stage specific file
-git add -p                  # interactive staging (review hunks)
-git commit -m "Add feature X"
-git commit --amend          # fix last commit message (before push)
+## GitHub CLI — PRs
 
-# Branching
-git checkout -b feature/name
-git switch main             # switch to main
-git branch -d feature/name  # delete merged branch
+```bash
+# Create a PR
+gh pr create --title "feat: add X" --body "$(cat <<'EOF'
+## Summary
+- What changed and why
 
-# Syncing
-git pull --rebase           # pull and rebase local commits on top
-git fetch origin            # fetch without merging
-git push
-git push -u origin HEAD     # push new branch and set upstream
+## Test plan
+- [ ] All 557 tests pass
+- [ ] ruff and mypy clean
+EOF
+)"
 
-# Undoing
-git restore <file>          # discard unstaged changes to a file
-git restore --staged <file> # unstage a file
-git revert HEAD             # create a revert commit (safe for shared branches)
-git stash                   # stash uncommitted changes
-git stash pop               # restore stashed changes
+# List open PRs
+gh pr list
 
-# Inspection
-git show HEAD               # show last commit
-git blame path/to/file      # who changed each line
-git log --follow path/to/file  # history of a file
+# View a PR
+gh pr view 42
+
+# Check PR status/CI
+gh pr checks 42
+
+# Merge a PR
+gh pr merge 42 --squash
+
+# Close without merging
+gh pr close 42
+```
+
+## GitHub CLI — Reviews
+
+```bash
+# View PR diff
+gh pr diff 42
+
+# Approve
+gh pr review 42 --approve
+
+# Request changes
+gh pr review 42 --request-changes --body "See inline comments"
+
+# Leave a comment (no vote)
+gh pr review 42 --comment --body "LGTM with nits"
+
+# Add inline comment (requires API)
+gh api repos/{owner}/{repo}/pulls/42/comments \
+  --method POST \
+  --field body="Comment text" \
+  --field path="nova/agent.py" \
+  --field line=42
+```
+
+## GitHub CLI — Issues
+
+```bash
+gh issue list
+gh issue view 12
+gh issue create --title "Bug: X fails when Y" --body "..."
+gh issue close 12
+gh issue comment 12 --body "Fixed in #43"
+```
+
+## Common Git Commands
+
+```bash
+git log --oneline -10          # recent commits
+git show HEAD                  # show last commit
+git diff                       # unstaged changes
+git diff --staged              # staged changes
+git blame nova/agent.py        # who changed each line
+git log --follow nova/agent.py # file history
+
+# Safe undo
+git restore <file>             # discard unstaged changes
+git restore --staged <file>    # unstage
+git revert HEAD                # revert last commit (safe on shared branches)
+git stash / git stash pop      # temporarily shelve changes
 ```
 
 ## Pitfalls
 
-- Never `git add .` blindly — always review what you're staging
-- Don't commit secrets, API keys, or `.env` files
-- Don't use `git push --force` on shared branches — use `--force-with-lease` if you must
-- Don't commit broken code — run tests first
+- Never `git add .` — always stage specific files
+- Never `git push --force` on shared branches — use `--force-with-lease` if you must
+- Don't commit without running the full CI check first
+- Don't commit secrets, `.env`, or API keys
 - Don't mix whitespace-only changes with logic changes in the same commit
-- Always check for uncommitted changes before switching branches (`git status`)
+- Don't amend commits that have already been pushed
