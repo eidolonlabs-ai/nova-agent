@@ -163,9 +163,9 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
         if file_stat.st_mode & (stat.S_IRGRP | stat.S_IROTH):
             logger = logging.getLogger(__name__)
             logger.warning(
-                "Config file %s is world-readable. "
-                "Consider: chmod 600 %s",
-                global_config_path, global_config_path,
+                "Config file %s is world-readable. Consider: chmod 600 %s",
+                global_config_path,
+                global_config_path,
             )
         with open(global_config_path, encoding="utf-8") as f:
             global_config: dict[str, Any] = yaml.safe_load(f) or {}

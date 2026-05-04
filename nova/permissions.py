@@ -23,7 +23,7 @@ class PermissionMode(StrEnum):
     """Permission modes controlling tool execution behavior."""
 
     AUTO = "auto"  # Allow all tools without confirmation
-    ASK = "ask"    # Ask before mutating tools (default)
+    ASK = "ask"  # Ask before mutating tools (default)
 
 
 @dataclass
@@ -67,14 +67,16 @@ _DEFAULT_DENIED_COMMANDS: tuple[str, ...] = (
 )
 
 # Tools that mutate state (need confirmation in ask mode)
-_MUTATING_TOOLS: frozenset[str] = frozenset({
-    "write_file",
-    "patch_file",
-    "terminal",
-    "skill_manage",
-    "memory",
-    "delegate_task",
-})
+_MUTATING_TOOLS: frozenset[str] = frozenset(
+    {
+        "write_file",
+        "patch_file",
+        "terminal",
+        "skill_manage",
+        "memory",
+        "delegate_task",
+    }
+)
 
 
 @dataclass
@@ -85,7 +87,9 @@ class PermissionSettings:
     denied_tools: set[str] = field(default_factory=set)
     allowed_tools: set[str] = field(default_factory=set)
     denied_commands: list[str] = field(default_factory=lambda: list(_DEFAULT_DENIED_COMMANDS))
-    path_rules: list[dict[str, Any]] = field(default_factory=list)  # [{"pattern": "...", "allow": bool}]
+    path_rules: list[dict[str, Any]] = field(
+        default_factory=list
+    )  # [{"pattern": "...", "allow": bool}]
 
 
 class PermissionChecker:

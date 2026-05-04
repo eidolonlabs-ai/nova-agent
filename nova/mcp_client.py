@@ -513,10 +513,13 @@ class McpClient:
             return f"Error: MCP server '{server_name}' is not connected."
 
         try:
-            response = transport.send_request("tools/call", {
-                "name": tool_name,
-                "arguments": arguments,
-            })
+            response = transport.send_request(
+                "tools/call",
+                {
+                    "name": tool_name,
+                    "arguments": arguments,
+                },
+            )
             return self._extract_tool_result(response)
         except Exception as e:
             logger.error("MCP tool call failed (%s/%s): %s", server_name, tool_name, e)
@@ -565,27 +568,34 @@ class McpClient:
             # Discover tools
             tools_response = transport.send_request("tools/list")
             for tool in tools_response.get("result", {}).get("tools", []):
-                self._tools.append(McpToolInfo(
-                    server_name=name,
-                    name=tool["name"],
-                    description=tool.get("description", ""),
-                    input_schema=tool.get("inputSchema", {}),
-                ))
+                self._tools.append(
+                    McpToolInfo(
+                        server_name=name,
+                        name=tool["name"],
+                        description=tool.get("description", ""),
+                        input_schema=tool.get("inputSchema", {}),
+                    )
+                )
 
             # Discover resources
             resources_response = transport.send_request("resources/list")
             for resource in resources_response.get("result", {}).get("resources", []):
-                self._resources.append(McpResourceInfo(
-                    server_name=name,
-                    name=resource.get("name", resource.get("uri", "")),
-                    uri=resource.get("uri", ""),
-                    description=resource.get("description", ""),
-                ))
+                self._resources.append(
+                    McpResourceInfo(
+                        server_name=name,
+                        name=resource.get("name", resource.get("uri", "")),
+                        uri=resource.get("uri", ""),
+                        description=resource.get("description", ""),
+                    )
+                )
 
             self._connected.add(name)
             logger.info(
                 "Connected to MCP server '%s' (%s): %d tools, %d resources",
-                name, config.type, len(self._tools), len(self._resources),
+                name,
+                config.type,
+                len(self._tools),
+                len(self._resources),
             )
             return True
 
@@ -603,14 +613,8 @@ class McpClient:
 
     def _rebuild_tool_list(self) -> None:
         """Rebuild the tool list from connected servers."""
-        self._tools = [
-            t for t in self._tools
-            if t.server_name in self._connected
-        ]
-        self._resources = [
-            r for r in self._resources
-            if r.server_name in self._connected
-        ]
+        self._tools = [t for t in self._tools if t.server_name in self._connected]
+        self._resources = [r for r in self._resources if r.server_name in self._connected]
 
     @staticmethod
     def _extract_tool_result(response: dict) -> str:
@@ -668,34 +672,43 @@ def build_mcp_client(config: dict) -> McpClient:
             if not command:
                 logger.warning("MCP server '%s' has no command — skipping", name)
                 continue
-            client.add_server_named(name, McpStdioConfig(
-                command=command,
-                args=server_cfg.get("args", []),
-                env=server_cfg.get("env", {}),
-            ))
+            client.add_server_named(
+                name,
+                McpStdioConfig(
+                    command=command,
+                    args=server_cfg.get("args", []),
+                    env=server_cfg.get("env", {}),
+                ),
+            )
 
         elif server_type == "http":
             url = server_cfg.get("url", "")
             if not url:
                 logger.warning("MCP server '%s' has no url — skipping", name)
                 continue
-            client.add_server_named(name, McpHttpConfig(
-                url=url,
-                headers=server_cfg.get("headers", {}),
-                timeout=server_cfg.get("timeout", 30.0),
-            ))
+            client.add_server_named(
+                name,
+                McpHttpConfig(
+                    url=url,
+                    headers=server_cfg.get("headers", {}),
+                    timeout=server_cfg.get("timeout", 30.0),
+                ),
+            )
 
         elif server_type == "sse":
             url = server_cfg.get("url", "")
             if not url:
                 logger.warning("MCP server '%s' has no url — skipping", name)
                 continue
-            client.add_server_named(name, McpSseConfig(
-                url=url,
-                post_url=server_cfg.get("post_url", ""),
-                headers=server_cfg.get("headers", {}),
-                timeout=server_cfg.get("timeout", 30.0),
-            ))
+            client.add_server_named(
+                name,
+                McpSseConfig(
+                    url=url,
+                    post_url=server_cfg.get("post_url", ""),
+                    headers=server_cfg.get("headers", {}),
+                    timeout=server_cfg.get("timeout", 30.0),
+                ),
+            )
 
         else:
             logger.warning("Unknown MCP server type '%s' for server '%s'", server_type, name)

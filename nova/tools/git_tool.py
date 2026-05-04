@@ -178,9 +178,7 @@ def _git_log(args: dict[str, Any], **kwargs) -> str:
     limit = min(int(args.get("limit", 20)), 100)
 
     try:
-        returncode, stdout, stderr = _run_git_command(
-            repo, "log", "--oneline", f"-{limit}"
-        )
+        returncode, stdout, stderr = _run_git_command(repo, "log", "--oneline", f"-{limit}")
         if returncode != 0:
             return f"Error: {stderr.strip()}"
         if not stdout.strip():

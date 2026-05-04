@@ -122,7 +122,9 @@ def _skill_manage(args: dict[str, Any], **kwargs) -> str:
         content = args.get("content", "")
 
         skill_dir.mkdir(parents=True, exist_ok=True)
-        frontmatter = f"---\nname: {name}\ncategory: {category}\ndescription: {description}\n---\n\n"
+        frontmatter = (
+            f"---\nname: {name}\ncategory: {category}\ndescription: {description}\n---\n\n"
+        )
         skill_file.write_text(frontmatter + content, encoding="utf-8")
         return f"Created skill '{name}' at {skill_file}."
 
@@ -149,6 +151,7 @@ def _skill_manage(args: dict[str, Any], **kwargs) -> str:
         # Atomic write — same pattern as write_file
         import os as _os
         import tempfile as _tempfile
+
         fd, tmp_path = _tempfile.mkstemp(dir=skill_dir, suffix=".tmp")
         try:
             with _os.fdopen(fd, "w", encoding="utf-8") as f:

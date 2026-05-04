@@ -15,10 +15,10 @@ logger = logging.getLogger(__name__)
 
 # Error classifications
 class ErrorType:
-    RETRYABLE = "retryable"       # Transient — should retry
+    RETRYABLE = "retryable"  # Transient — should retry
     NON_RETRYABLE = "non_retryable"  # Permanent — should not retry
-    CONTEXT_OVERFLOW = "overflow"    # Context too long — needs compression
-    API_TIMEOUT = "api_timeout"      # API-level timeout — retry once only
+    CONTEXT_OVERFLOW = "overflow"  # Context too long — needs compression
+    API_TIMEOUT = "api_timeout"  # API-level timeout — retry once only
     CONNECTION_TIMEOUT = "connection_timeout"  # Connection issue — retry with backoff
 
 
@@ -168,28 +168,35 @@ def retry_with_backoff(
                 raise
 
             if attempt < max_retries:
-                delay = min(base_delay * (backoff_multiplier ** attempt), max_delay)
+                delay = min(base_delay * (backoff_multiplier**attempt), max_delay)
                 if jitter:
-                    delay *= (0.5 + random.random() * 0.5)  # 50%-150% of delay
+                    delay *= 0.5 + random.random() * 0.5  # 50%-150% of delay
 
                 # API-level timeouts: limit to a single retry to avoid
                 # spinning on permanently broken endpoints
                 if error_type == ErrorType.API_TIMEOUT and attempt >= 1:
                     logger.error(
                         "API timeout persisted after 1 retry (%s): %s",
-                        error_type, error_msg[:200],
+                        error_type,
+                        error_msg[:200],
                     )
                     raise
 
                 logger.warning(
                     "API call failed (attempt %d/%d, %s): %s — retrying in %.1fs",
-                    attempt + 1, max_retries, error_type, error_msg[:200], delay,
+                    attempt + 1,
+                    max_retries,
+                    error_type,
+                    error_msg[:200],
+                    delay,
                 )
                 time.sleep(delay)
             else:
                 logger.error(
                     "API call failed after %d retries (%s): %s",
-                    max_retries, error_type, error_msg[:200],
+                    max_retries,
+                    error_type,
+                    error_msg[:200],
                 )
 
     raise last_exception  # type: ignore[misc]
@@ -221,6 +228,7 @@ def retry_api_call(
     Returns:
         httpx.Response object.
     """
+
     def _do_request() -> Any:
         response = getattr(http_client, method.lower())(url, **kwargs)
         response.raise_for_status()

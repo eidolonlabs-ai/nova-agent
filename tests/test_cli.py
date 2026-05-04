@@ -103,8 +103,10 @@ class TestCmdChat:
         mock_agent = MagicMock()
         args = MagicMock(session=None)
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.cli.NovaAgent", return_value=mock_agent) as mock_agent_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.cli.NovaAgent", return_value=mock_agent) as mock_agent_cls,
+        ):
             mock_config.return_value = {"test": "config"}
             cmd_chat(args)
 
@@ -119,8 +121,10 @@ class TestCmdChat:
         mock_agent = MagicMock()
         args = MagicMock(session="session-123")
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.cli.NovaAgent", return_value=mock_agent):
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.cli.NovaAgent", return_value=mock_agent),
+        ):
             mock_config.return_value = {"test": "config"}
             cmd_chat(args)
 
@@ -132,8 +136,11 @@ class TestCmdChat:
         mock_agent.chat_loop.side_effect = KeyboardInterrupt()
         args = MagicMock(session=None)
 
-        with patch("nova.cli.load_config"), \
-             patch("nova.cli.NovaAgent", return_value=mock_agent), pytest.raises(KeyboardInterrupt):
+        with (
+            patch("nova.cli.load_config"),
+            patch("nova.cli.NovaAgent", return_value=mock_agent),
+            pytest.raises(KeyboardInterrupt),
+        ):
             cmd_chat(args)
 
 
@@ -146,8 +153,10 @@ class TestCmdAsk:
         mock_agent.run.return_value = "Answer to the question"
         args = MagicMock(question="What is 2+2?")
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.cli.NovaAgent", return_value=mock_agent):
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.cli.NovaAgent", return_value=mock_agent),
+        ):
             mock_config.return_value = {"test": "config"}
             cmd_ask(args)
 
@@ -162,8 +171,7 @@ class TestCmdAsk:
         question = "What is the meaning of life, the universe, and everything?"
         args = MagicMock(question=question)
 
-        with patch("nova.cli.load_config"), \
-             patch("nova.cli.NovaAgent", return_value=mock_agent):
+        with patch("nova.cli.load_config"), patch("nova.cli.NovaAgent", return_value=mock_agent):
             cmd_ask(args)
 
         mock_agent.run.assert_called_once_with(question, stream=False)
@@ -174,8 +182,11 @@ class TestCmdAsk:
         mock_agent.run.side_effect = RuntimeError("Agent failed")
         args = MagicMock(question="What?")
 
-        with patch("nova.cli.load_config"), \
-             patch("nova.cli.NovaAgent", return_value=mock_agent), pytest.raises(RuntimeError):
+        with (
+            patch("nova.cli.load_config"),
+            patch("nova.cli.NovaAgent", return_value=mock_agent),
+            pytest.raises(RuntimeError),
+        ):
             cmd_ask(args)
 
 
@@ -186,8 +197,10 @@ class TestCmdSessions:
         """Test listing sessions when none exist."""
         args = MagicMock(prune=None, limit=20)
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.session.SessionStore") as mock_store_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.session.SessionStore") as mock_store_cls,
+        ):
             mock_config.return_value = {"session": {"directory": "/tmp"}}
             mock_store = MagicMock()
             mock_store.list_sessions.return_value = []
@@ -216,8 +229,10 @@ class TestCmdSessions:
             },
         ]
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.session.SessionStore") as mock_store_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.session.SessionStore") as mock_store_cls,
+        ):
             mock_config.return_value = {"session": {"directory": "/tmp"}}
             mock_store = MagicMock()
             mock_store.list_sessions.return_value = sessions
@@ -236,8 +251,10 @@ class TestCmdSessions:
         """Test that list_sessions is called with correct limit."""
         args = MagicMock(prune=None, limit=42)
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.session.SessionStore") as mock_store_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.session.SessionStore") as mock_store_cls,
+        ):
             mock_config.return_value = {"session": {"directory": "/tmp"}}
             mock_store = MagicMock()
             mock_store.list_sessions.return_value = []
@@ -251,8 +268,10 @@ class TestCmdSessions:
         """Test pruning sessions older than N days."""
         args = MagicMock(prune=30, limit=20)
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.session.SessionStore") as mock_store_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.session.SessionStore") as mock_store_cls,
+        ):
             mock_config.return_value = {"session": {"directory": "/tmp"}}
             mock_store = MagicMock()
             mock_store.prune_sessions.return_value = 5
@@ -268,8 +287,10 @@ class TestCmdSessions:
         """Test pruning when no sessions are older than threshold."""
         args = MagicMock(prune=1, limit=20)
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.session.SessionStore") as mock_store_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.session.SessionStore") as mock_store_cls,
+        ):
             mock_config.return_value = {"session": {"directory": "/tmp"}}
             mock_store = MagicMock()
             mock_store.prune_sessions.return_value = 0
@@ -288,8 +309,10 @@ class TestCmdReset:
         """Test reset without session_id prints instructions."""
         args = MagicMock(session_id=None)
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.session.SessionStore") as mock_store_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.session.SessionStore") as mock_store_cls,
+        ):
             mock_config.return_value = {"session": {"directory": "/tmp"}}
             mock_store_cls.return_value = MagicMock()
 
@@ -303,8 +326,10 @@ class TestCmdReset:
         """Test that reset deletes the specified session."""
         args = MagicMock(session_id="sess-123")
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.session.SessionStore") as mock_store_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.session.SessionStore") as mock_store_cls,
+        ):
             mock_config.return_value = {"session": {"directory": "/tmp"}}
             mock_store = MagicMock()
             mock_store.delete_session.return_value = True
@@ -320,8 +345,10 @@ class TestCmdReset:
         """Test reset when session doesn't exist."""
         args = MagicMock(session_id="nonexistent")
 
-        with patch("nova.cli.load_config") as mock_config, \
-             patch("nova.session.SessionStore") as mock_store_cls:
+        with (
+            patch("nova.cli.load_config") as mock_config,
+            patch("nova.session.SessionStore") as mock_store_cls,
+        ):
             mock_config.return_value = {"session": {"directory": "/tmp"}}
             mock_store = MagicMock()
             mock_store.delete_session.return_value = False
@@ -341,9 +368,11 @@ class TestCmdSetup:
         args = MagicMock()
         tmpdir = tempfile.mkdtemp()
 
-        with patch("nova.cli.ensure_nova_home") as mock_ensure, \
-             patch.dict("os.environ", {"OPENROUTER_API_KEY": "env-api-key"}), \
-             patch("builtins.input", return_value="1"):  # select default model
+        with (
+            patch("nova.cli.ensure_nova_home") as mock_ensure,
+            patch.dict("os.environ", {"OPENROUTER_API_KEY": "env-api-key"}),
+            patch("builtins.input", return_value="1"),
+        ):  # select default model
             mock_ensure.return_value = Path(tmpdir)
             cmd_setup(args)
 
@@ -359,6 +388,7 @@ class TestCmdSetup:
 
         # Write existing config
         import yaml
+
         existing = {
             "openrouter": {
                 "api_key": "existing-key",
@@ -368,9 +398,11 @@ class TestCmdSetup:
         with open(config_path, "w") as f:
             yaml.dump(existing, f)
 
-        with patch("nova.cli.ensure_nova_home") as mock_ensure, \
-             patch.dict("os.environ", {}, clear=True), \
-             patch("builtins.input", side_effect=["N"]):  # don't change model
+        with (
+            patch("nova.cli.ensure_nova_home") as mock_ensure,
+            patch.dict("os.environ", {}, clear=True),
+            patch("builtins.input", side_effect=["N"]),
+        ):  # don't change model
             mock_ensure.return_value = Path(tmpdir)
             cmd_setup(args)
 
@@ -382,9 +414,11 @@ class TestCmdSetup:
         args = MagicMock()
         tmpdir = tempfile.mkdtemp()
 
-        with patch("nova.cli.ensure_nova_home") as mock_ensure, \
-             patch.dict("os.environ", {}, clear=True), \
-             patch("builtins.input", return_value=""):  # no API key
+        with (
+            patch("nova.cli.ensure_nova_home") as mock_ensure,
+            patch.dict("os.environ", {}, clear=True),
+            patch("builtins.input", return_value=""),
+        ):  # no API key
             mock_ensure.return_value = Path(tmpdir)
             with pytest.raises(SystemExit) as exc_info:
                 cmd_setup(args)
@@ -395,9 +429,11 @@ class TestCmdSetup:
         args = MagicMock()
         tmpdir = tempfile.mkdtemp()
 
-        with patch("nova.cli.ensure_nova_home") as mock_ensure, \
-             patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}), \
-             patch("builtins.input", side_effect=["5", "custom/model"]):
+        with (
+            patch("nova.cli.ensure_nova_home") as mock_ensure,
+            patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}),
+            patch("builtins.input", side_effect=["5", "custom/model"]),
+        ):
             mock_ensure.return_value = Path(tmpdir)
             cmd_setup(args)
 
@@ -409,9 +445,11 @@ class TestCmdSetup:
         args = MagicMock()
         tmpdir = tempfile.mkdtemp()
 
-        with patch("nova.cli.ensure_nova_home") as mock_ensure, \
-             patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}), \
-             patch("builtins.input", return_value="2"):  # choice 2: opus
+        with (
+            patch("nova.cli.ensure_nova_home") as mock_ensure,
+            patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}),
+            patch("builtins.input", return_value="2"),
+        ):  # choice 2: opus
             mock_ensure.return_value = Path(tmpdir)
             cmd_setup(args)
 

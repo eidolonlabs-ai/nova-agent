@@ -57,8 +57,17 @@ _MAX_RESULTS = 50
 _MAX_PREVIEW_CHARS = 120
 # Directories to skip by default
 _SKIP_DIRS = {
-    ".git", ".venv", "venv", "env", "node_modules", "__pycache__",
-    ".ruff_cache", ".pytest_cache", "dist", "build", ".mypy_cache",
+    ".git",
+    ".venv",
+    "venv",
+    "env",
+    "node_modules",
+    "__pycache__",
+    ".ruff_cache",
+    ".pytest_cache",
+    "dist",
+    "build",
+    ".mypy_cache",
 }
 
 

@@ -11,23 +11,29 @@ from unittest.mock import MagicMock, patch
 from nova.agent import NovaAgent
 
 
-def test_compression_tier1_triggered_at_threshold(minimal_config, mock_session_store, mock_http_client):
+def test_compression_tier1_triggered_at_threshold(
+    minimal_config, mock_session_store, mock_http_client
+):
     """Test that microcompact tier 1 is triggered when message tokens exceed threshold."""
     # Ensure compression config is set
     minimal_config["compression"]["enabled"] = True
-    minimal_config["compression"]["threshold_percent"] = 0.01  # 1% = very low threshold to trigger easily
+    minimal_config["compression"]["threshold_percent"] = (
+        0.01  # 1% = very low threshold to trigger easily
+    )
     minimal_config["microcompact"]["enabled"] = True
     minimal_config["microcompact"]["keep_recent"] = 6
     minimal_config["agent"]["max_iterations"] = 1
 
     # Build mock responses: first LLM call returns content (no tool calls)
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "Done",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = MagicMock(
         status_code=200,
@@ -53,7 +59,9 @@ def test_compression_tier1_triggered_at_threshold(minimal_config, mock_session_s
         mock_compact.assert_called()
 
 
-def test_compression_tier1_skipped_under_threshold(minimal_config, mock_session_store, mock_http_client):
+def test_compression_tier1_skipped_under_threshold(
+    minimal_config, mock_session_store, mock_http_client
+):
     """Test that microcompact is skipped when message tokens are below threshold."""
     minimal_config["compression"]["enabled"] = True
     minimal_config["compression"]["threshold_percent"] = 0.99  # 99% threshold = very high
@@ -61,12 +69,14 @@ def test_compression_tier1_skipped_under_threshold(minimal_config, mock_session_
     minimal_config["agent"]["max_iterations"] = 1
 
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "Done",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = MagicMock(
         status_code=200,
@@ -98,12 +108,14 @@ def test_compression_tier2_llm_compression(minimal_config, mock_session_store, m
     minimal_config["agent"]["max_iterations"] = 1
 
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "Done",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = MagicMock(
         status_code=200,
@@ -122,8 +134,10 @@ def test_compression_tier2_llm_compression(minimal_config, mock_session_store, m
         agent.messages.append({"role": "user", "content": f"message {i} " * 50})
         agent.messages.append({"role": "assistant", "content": f"response {i} " * 50})
 
-    with patch("nova.agent.microcompact_messages") as mock_compact, \
-         patch("nova.agent.compress_conversation") as mock_compress:
+    with (
+        patch("nova.agent.microcompact_messages") as mock_compact,
+        patch("nova.agent.compress_conversation") as mock_compress,
+    ):
         # Tier 1 compaction doesn't reduce enough
         mock_compact.return_value = agent.messages[-10:]
         # Tier 2 compression succeeds
@@ -141,12 +155,14 @@ def test_compression_disabled_in_config(minimal_config, mock_session_store, mock
     minimal_config["agent"]["max_iterations"] = 1
 
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "Done",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = MagicMock(
         status_code=200,
@@ -164,15 +180,19 @@ def test_compression_disabled_in_config(minimal_config, mock_session_store, mock
     for i in range(20):
         agent.messages.append({"role": "user", "content": f"message {i} " * 50})
 
-    with patch("nova.agent.microcompact_messages") as mock_compact, \
-         patch("nova.agent.compress_conversation") as mock_compress:
+    with (
+        patch("nova.agent.microcompact_messages") as mock_compact,
+        patch("nova.agent.compress_conversation") as mock_compress,
+    ):
         agent.run("test", stream=False)
         # Neither compression tier should be called
         mock_compact.assert_not_called()
         mock_compress.assert_not_called()
 
 
-def test_compression_microcompact_savings_logged(minimal_config, mock_session_store, mock_http_client):
+def test_compression_microcompact_savings_logged(
+    minimal_config, mock_session_store, mock_http_client
+):
     """Test that microcompact tier 1 logs token savings."""
     minimal_config["compression"]["enabled"] = True
     minimal_config["compression"]["threshold_percent"] = 0.01
@@ -180,12 +200,14 @@ def test_compression_microcompact_savings_logged(minimal_config, mock_session_st
     minimal_config["agent"]["max_iterations"] = 1
 
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "Done",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = MagicMock(
         status_code=200,
@@ -204,9 +226,11 @@ def test_compression_microcompact_savings_logged(minimal_config, mock_session_st
         agent.messages.append({"role": "user", "content": f"msg {i} " * 50})
         agent.messages.append({"role": "assistant", "content": f"rsp {i} " * 50})
 
-    with patch("nova.agent.microcompact_messages") as mock_compact, \
-         patch("nova.agent.estimate_messages_tokens") as mock_estimate, \
-         patch("nova.agent.logger") as mock_logger:
+    with (
+        patch("nova.agent.microcompact_messages") as mock_compact,
+        patch("nova.agent.estimate_messages_tokens") as mock_estimate,
+        patch("nova.agent.logger") as mock_logger,
+    ):
         # Simulate compression saving tokens
         mock_compact.return_value = agent.messages[-6:]
         mock_estimate.side_effect = [5000, 3000]  # Before: 5000, after: 3000
@@ -218,7 +242,9 @@ def test_compression_microcompact_savings_logged(minimal_config, mock_session_st
         assert any("saved" in str(call).lower() for call in call_args)
 
 
-def test_compression_tier2_warning_when_exceeds_threshold(minimal_config, mock_session_store, mock_http_client):
+def test_compression_tier2_warning_when_exceeds_threshold(
+    minimal_config, mock_session_store, mock_http_client
+):
     """Test warning logged when compression tier 2 cannot reduce below threshold."""
     minimal_config["compression"]["enabled"] = True
     minimal_config["compression"]["threshold_percent"] = 0.01
@@ -226,12 +252,14 @@ def test_compression_tier2_warning_when_exceeds_threshold(minimal_config, mock_s
     minimal_config["agent"]["max_iterations"] = 1
 
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "Done",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = MagicMock(
         status_code=200,
@@ -249,9 +277,11 @@ def test_compression_tier2_warning_when_exceeds_threshold(minimal_config, mock_s
     for i in range(25):
         agent.messages.append({"role": "user", "content": f"msg {i} " * 50})
 
-    with patch("nova.agent.microcompact_messages") as mock_compact, \
-         patch("nova.agent.compress_conversation") as mock_compress, \
-         patch("nova.agent.logger") as mock_logger:
+    with (
+        patch("nova.agent.microcompact_messages") as mock_compact,
+        patch("nova.agent.compress_conversation") as mock_compress,
+        patch("nova.agent.logger") as mock_logger,
+    ):
         # Tier 1: no savings
         mock_compact.return_value = agent.messages
         # Tier 2: returns None (cannot compress)
@@ -262,7 +292,9 @@ def test_compression_tier2_warning_when_exceeds_threshold(minimal_config, mock_s
         mock_logger.warning.assert_called()
 
 
-def test_compression_preserves_recent_messages(minimal_config, mock_session_store, mock_http_client):
+def test_compression_preserves_recent_messages(
+    minimal_config, mock_session_store, mock_http_client
+):
     """Test that compression preserves recent messages (keep_recent parameter)."""
     minimal_config["compression"]["enabled"] = True
     minimal_config["compression"]["threshold_percent"] = 0.01
@@ -271,12 +303,14 @@ def test_compression_preserves_recent_messages(minimal_config, mock_session_stor
     minimal_config["agent"]["max_iterations"] = 1
 
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "Done",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = MagicMock(
         status_code=200,
@@ -304,7 +338,9 @@ def test_compression_preserves_recent_messages(minimal_config, mock_session_stor
         assert call_kwargs.get("keep_recent") == 5
 
 
-def test_compression_state_persisted_to_session(minimal_config, mock_session_store, mock_http_client):
+def test_compression_state_persisted_to_session(
+    minimal_config, mock_session_store, mock_http_client
+):
     """Test that compression works without breaking agent execution."""
     minimal_config["compression"]["enabled"] = True
     minimal_config["compression"]["threshold_percent"] = 0.01
@@ -312,12 +348,14 @@ def test_compression_state_persisted_to_session(minimal_config, mock_session_sto
     minimal_config["agent"]["max_iterations"] = 1
 
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "Done",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = MagicMock(
         status_code=200,

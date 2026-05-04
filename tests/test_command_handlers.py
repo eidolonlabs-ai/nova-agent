@@ -15,15 +15,32 @@ DISPLAY_MOD = "nova.command_handlers"
 
 def _patch_display():
     """Suppress all terminal output in command handlers."""
-    return patch(f"{DISPLAY_MOD}._cprint" if hasattr(__import__("nova.command_handlers", fromlist=[""]), "_cprint") else "nova.display._cprint")
+    return patch(
+        f"{DISPLAY_MOD}._cprint"
+        if hasattr(__import__("nova.command_handlers", fromlist=[""]), "_cprint")
+        else "nova.display._cprint"
+    )
 
 
 # ─── Registry ────────────────────────────────────────────────────────────────
 
 
 def test_all_expected_commands_are_registered():
-    expected = {"new", "reset", "history", "status", "st", "sessions", "model",
-                "tools", "usage", "undo", "compact", "copy", "memory"}
+    expected = {
+        "new",
+        "reset",
+        "history",
+        "status",
+        "st",
+        "sessions",
+        "model",
+        "tools",
+        "usage",
+        "undo",
+        "compact",
+        "copy",
+        "memory",
+    }
     for cmd in expected:
         assert cmd in _HANDLERS, f"Command '{cmd}' missing from registry"
 
@@ -40,8 +57,10 @@ def test_dispatch_command_returns_false_for_unknown_command(agent):
 
 
 def test_dispatch_command_handles_handler_exception(agent):
-    with patch.dict(_HANDLERS, {"boom": MagicMock(side_effect=RuntimeError("oops"))}), \
-         patch("nova.display._cprint"):
+    with (
+        patch.dict(_HANDLERS, {"boom": MagicMock(side_effect=RuntimeError("oops"))}),
+        patch("nova.display._cprint"),
+    ):
         result = dispatch_command("boom", agent, "")
     assert result is True  # handler found, exception caught internally
 
@@ -158,9 +177,11 @@ def test_cmd_sessions_no_sessions(agent):
 
 
 def test_cmd_sessions_lists_sessions(agent):
-    agent.session_store.list_sessions = MagicMock(return_value=[
-        {"id": "abc-123", "created_at": "2026-01-01"},
-    ])
+    agent.session_store.list_sessions = MagicMock(
+        return_value=[
+            {"id": "abc-123", "created_at": "2026-01-01"},
+        ]
+    )
     printed = []
     with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
         dispatch_command("sessions", agent, "")
@@ -201,6 +222,7 @@ def test_cmd_tools_lists_available_tools(agent):
 
 def test_cmd_tools_prints_tool_names(agent):
     from nova.tools.registry import discover_builtin_tools
+
     discover_builtin_tools()
     printed = []
     with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
@@ -299,8 +321,10 @@ def test_cmd_copy_copies_last_assistant_message(agent):
 def test_cmd_copy_no_assistant_message(agent):
     agent.messages = [{"role": "user", "content": "hello"}]
     printed = []
-    with patch("subprocess.run") as mock_run, \
-         patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
+    with (
+        patch("subprocess.run") as mock_run,
+        patch("nova.display._cprint", side_effect=lambda s: printed.append(s)),
+    ):
         dispatch_command("copy", agent, "")
     mock_run.assert_not_called()
     assert any("No response" in s for s in printed)

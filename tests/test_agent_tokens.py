@@ -131,7 +131,11 @@ def test_truncate_to_token_budget_tail_included(minimal_config, mock_session_sto
 
 def test_truncate_to_token_budget_preserves_head(minimal_config, mock_session_store):
     """Test that head content is preserved during truncation."""
-    text = "START: Important beginning\n" + "\n".join([f"Line {i}" for i in range(100)]) + "\nEND: Important end"
+    text = (
+        "START: Important beginning\n"
+        + "\n".join([f"Line {i}" for i in range(100)])
+        + "\nEND: Important end"
+    )
 
     max_tokens = 100
     result = NovaAgent._truncate_to_token_budget(text, max_tokens)
@@ -159,9 +163,9 @@ def test_estimate_messages_tokens_with_tool_calls(minimal_config, mock_session_s
                 "function": {
                     "name": "terminal",
                     "arguments": '{"command": "ls -la"}',
-                }
+                },
             }
-        ]
+        ],
     }
 
     tokens = agent._estimate_messages_tokens_cached([msg])

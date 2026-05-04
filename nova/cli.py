@@ -237,7 +237,9 @@ def main():
     sessions_parser = subparsers.add_parser("sessions", help="List recent sessions")
     sessions_parser.add_argument("--limit", type=int, default=20, help="Max sessions to show")
     sessions_parser.add_argument(
-        "--prune", type=int, metavar="DAYS",
+        "--prune",
+        type=int,
+        metavar="DAYS",
         help="Delete sessions older than DAYS days (e.g. --prune 30)",
     )
     sessions_parser.set_defaults(func=cmd_sessions)

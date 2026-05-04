@@ -64,8 +64,12 @@ def test_prepare_preserves_user_messages():
 def test_should_compress_below_threshold():
     messages = [{"role": "user", "content": "hello"}]
     should, tokens = should_compress(
-        messages, system_prompt="test", tools=[],
-        context_window=128000, threshold_percent=0.40, reserve_tokens=15000,
+        messages,
+        system_prompt="test",
+        tools=[],
+        context_window=128000,
+        threshold_percent=0.40,
+        reserve_tokens=15000,
     )
     assert should is False
 
@@ -81,8 +85,12 @@ def test_should_compress_above_threshold():
         {"role": "tool", "content": large_content},
     ]
     should, tokens = should_compress(
-        messages, system_prompt="test", tools=[],
-        context_window=128000, threshold_percent=0.40, reserve_tokens=15000,
+        messages,
+        system_prompt="test",
+        tools=[],
+        context_window=128000,
+        threshold_percent=0.40,
+        reserve_tokens=15000,
     )
     # With 300K chars, should exceed ~36K token threshold
     assert should is True
@@ -100,7 +108,11 @@ def test_compress_too_few_messages():
     ]
     mock_client = MagicMock()
     result = compress_conversation(
-        messages, mock_client, "test-model", "https://api.test", "key",
+        messages,
+        mock_client,
+        "test-model",
+        "https://api.test",
+        "key",
         preserve_recent=6,
     )
     assert result is None
@@ -136,7 +148,11 @@ def test_compress_returns_none_on_api_error(mock_client_cls):
     mock_client.post.side_effect = Exception("API error")
 
     result = compress_conversation(
-        messages, mock_client, "test-model", "https://api.test", "key",
+        messages,
+        mock_client,
+        "test-model",
+        "https://api.test",
+        "key",
         preserve_recent=6,
     )
     assert result is None
@@ -176,7 +192,11 @@ def test_compress_system_prompt_included():
     mock_client.post.return_value = mock_response
 
     result = compress_conversation(
-        messages, mock_client, "test-model", "https://api.test", "key",
+        messages,
+        mock_client,
+        "test-model",
+        "https://api.test",
+        "key",
         preserve_recent=6,
     )
 

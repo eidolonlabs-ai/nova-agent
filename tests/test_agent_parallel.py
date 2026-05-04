@@ -130,7 +130,7 @@ def test_execute_tool_calls_invalid_json(minimal_config, mock_session_store):
             "id": "call_bad",
             "function": {
                 "name": "terminal",
-                "arguments": '{invalid json}',  # Invalid
+                "arguments": "{invalid json}",  # Invalid
             },
         },
     ]

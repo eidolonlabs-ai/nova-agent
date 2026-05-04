@@ -17,22 +17,30 @@ logger = logging.getLogger(__name__)
 # Tools that are inherently read-only (never mutate state)
 # delegate_task is included here to allow the parent agent to spawn multiple
 # sub-agents in parallel.
-_READ_ONLY_TOOLS: frozenset[str] = frozenset({
-    "read_file",
-    "search_files",
-    "web_search",
-    "skills_list",
-    "skill_view",
-    "delegate_task",
-})
+_READ_ONLY_TOOLS: frozenset[str] = frozenset(
+    {
+        "read_file",
+        "search_files",
+        "web_search",
+        "skills_list",
+        "skill_view",
+        "delegate_task",
+    }
+)
 
 
 class ToolEntry:
     """Metadata for a single registered tool."""
 
     __slots__ = (
-        "name", "toolset", "schema", "handler", "check_fn",
-        "description", "emoji", "is_read_only",
+        "name",
+        "toolset",
+        "schema",
+        "handler",
+        "check_fn",
+        "description",
+        "emoji",
+        "is_read_only",
     )
 
     def __init__(
@@ -103,10 +111,12 @@ class ToolRegistry:
         for name, entry in self._tools.items():
             if tool_names is None or name in tool_names:
                 # Skip check_fn for now (simplified)
-                tools.append({
-                    "type": "function",
-                    "function": entry.schema,
-                })
+                tools.append(
+                    {
+                        "type": "function",
+                        "function": entry.schema,
+                    }
+                )
         return tools
 
     def get_tool_summary_list(self, tool_names: set | None = None) -> str:
@@ -132,6 +142,7 @@ class ToolRegistry:
 
         # Fire pre_tool_call hook
         from nova.hooks import hooks as _hooks
+
         _hooks.emit(EVENT_PRE_TOOL_CALL, tool_name=name, args=args)
 
         try:
@@ -188,6 +199,7 @@ def discover_builtin_tools(config: dict | None = None):
     # Delegation tool is gated on config flag and agent depth
     try:
         from nova.tools.delegate_tool import register_delegate_tool
+
         depth = (config or {}).get("_subagent_depth", 0)
         max_depth = (config or {}).get("delegation", {}).get("max_spawn_depth", 2)
         if depth < max_depth:

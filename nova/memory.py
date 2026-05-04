@@ -38,9 +38,7 @@ class MemoryStore:
         self.file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Atomic write: write to temp file, then rename
-        fd, tmp_path = tempfile.mkstemp(
-            dir=self.file_path.parent, suffix=".tmp"
-        )
+        fd, tmp_path = tempfile.mkstemp(dir=self.file_path.parent, suffix=".tmp")
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self._entries, f, indent=2, ensure_ascii=False)
@@ -52,6 +50,7 @@ class MemoryStore:
     def add(self, content: str, category: str = "general") -> dict:
         """Add a memory entry."""
         import uuid as _uuid
+
         entry = {
             "id": f"mem_{_uuid.uuid4().hex[:8]}",
             "content": content,

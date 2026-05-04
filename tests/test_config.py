@@ -57,18 +57,18 @@ def test_local_config_overrides_global():
         nova_home = Path(tmp) / ".nova"
         nova_home.mkdir()
         global_config = nova_home / "config.yaml"
-        global_config.write_text(
-            "agent:\n  max_iterations: 99\n  temperature: 0.5\n"
-        )
+        global_config.write_text("agent:\n  max_iterations: 99\n  temperature: 0.5\n")
 
         local_config = Path(tmp) / "config.yaml"
         local_config.write_text("agent:\n  max_iterations: 42\n")
 
-        with patch("nova.config.get_nova_home", return_value=nova_home), \
-             patch("pathlib.Path.cwd", return_value=Path(tmp)):
+        with (
+            patch("nova.config.get_nova_home", return_value=nova_home),
+            patch("pathlib.Path.cwd", return_value=Path(tmp)),
+        ):
             config = load_config()
             assert config["agent"]["max_iterations"] == 42  # local wins
-            assert config["agent"]["temperature"] == 0.5    # from global
+            assert config["agent"]["temperature"] == 0.5  # from global
 
 
 def test_no_config_uses_defaults():
@@ -77,7 +77,9 @@ def test_no_config_uses_defaults():
         nova_home = Path(tmp) / ".nova"
         nova_home.mkdir()
 
-        with patch("nova.config.get_nova_home", return_value=nova_home), \
-             patch("pathlib.Path.cwd", return_value=Path(tmp)):
+        with (
+            patch("nova.config.get_nova_home", return_value=nova_home),
+            patch("pathlib.Path.cwd", return_value=Path(tmp)),
+        ):
             config = load_config()
             assert config["agent"]["max_iterations"] == 50

@@ -37,10 +37,12 @@ def test_task_create_success(mock_task_manager):
     mock_task_manager.create_shell_task.return_value = "b12345"
 
     with patch("nova.tools.task_tools.get_task_manager", return_value=mock_task_manager):
-        result = _task_create({
-            "command": "echo hello",
-            "description": "test task",
-        })
+        result = _task_create(
+            {
+                "command": "echo hello",
+                "description": "test task",
+            }
+        )
 
     data = json.loads(result)
     assert data["success"] is True
@@ -53,9 +55,11 @@ def test_task_create_long_command_preview(mock_task_manager):
     mock_task_manager.create_shell_task.return_value = "bxyz"
 
     with patch("nova.tools.task_tools.get_task_manager", return_value=mock_task_manager):
-        result = _task_create({
-            "command": long_cmd,
-        })
+        result = _task_create(
+            {
+                "command": long_cmd,
+            }
+        )
 
     data = json.loads(result)
     assert len(data["description"]) == 80  # Truncated to 80 chars

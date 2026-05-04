@@ -41,8 +41,22 @@ def test_microcompact_short_message_list():
 def test_microcompact_strips_old_tool_results():
     messages = [
         {"role": "user", "content": "run ls"},
-        {"role": "assistant", "content": "", "tool_calls": [{"id": "1", "type": "function", "function": {"name": "terminal", "arguments": '{"command": "ls"}'}}]},
-        {"role": "tool", "content": "exit code: 0\nfile1.txt\nfile2.txt\n" + "x" * 1000, "tool_call_id": "1"},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "1",
+                    "type": "function",
+                    "function": {"name": "terminal", "arguments": '{"command": "ls"}'},
+                }
+            ],
+        },
+        {
+            "role": "tool",
+            "content": "exit code: 0\nfile1.txt\nfile2.txt\n" + "x" * 1000,
+            "tool_call_id": "1",
+        },
         {"role": "user", "content": "now run pwd"},
         {"role": "assistant", "content": "ok"},
         {"role": "tool", "content": "/home/user", "tool_call_id": "2"},
@@ -60,9 +74,17 @@ def test_microcompact_strips_old_tool_results():
 
 def test_microcompact_preserves_assistant_structure():
     messages = [
-        {"role": "assistant", "content": "", "tool_calls": [
-            {"id": "1", "type": "function", "function": {"name": "terminal", "arguments": '{"command": "ls"}'}},
-        ]},
+        {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "1",
+                    "type": "function",
+                    "function": {"name": "terminal", "arguments": '{"command": "ls"}'},
+                },
+            ],
+        },
         {"role": "tool", "content": "lots of output" * 100, "tool_call_id": "1"},
         {"role": "user", "content": "done"},
     ]

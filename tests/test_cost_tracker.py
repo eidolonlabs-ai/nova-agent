@@ -34,7 +34,9 @@ def test_add_usage_tokens_only():
 
 def test_add_usage_with_costs():
     tracker = CostTracker(model="qwen/qwen3.6-flash")
-    tracker.add_usage(input_tokens=1000, output_tokens=500, input_cost=0.00003, output_cost=0.000045)
+    tracker.add_usage(
+        input_tokens=1000, output_tokens=500, input_cost=0.00003, output_cost=0.000045
+    )
     assert tracker.total.input_cost == 0.00003
     assert tracker.total.output_cost == 0.000045
 
@@ -49,8 +51,12 @@ def test_add_usage_cumulative():
 
 def test_add_usage_cumulative_costs():
     tracker = CostTracker(model="qwen/qwen3.6-flash")
-    tracker.add_usage(input_tokens=1000, output_tokens=500, input_cost=0.00003, output_cost=0.000045)
-    tracker.add_usage(input_tokens=2000, output_tokens=1000, input_cost=0.00006, output_cost=0.00009)
+    tracker.add_usage(
+        input_tokens=1000, output_tokens=500, input_cost=0.00003, output_cost=0.000045
+    )
+    tracker.add_usage(
+        input_tokens=2000, output_tokens=1000, input_cost=0.00006, output_cost=0.00009
+    )
     assert abs(tracker.total.input_cost - 0.00009) < 1e-10
     assert abs(tracker.total.output_cost - 0.000135) < 1e-10
 
@@ -83,7 +89,9 @@ def test_reset_tracker():
 
 def test_format_summary():
     tracker = CostTracker(model="qwen/qwen3.6-flash")
-    tracker.add_usage(input_tokens=1000, output_tokens=500, input_cost=0.00003, output_cost=0.000045)
+    tracker.add_usage(
+        input_tokens=1000, output_tokens=500, input_cost=0.00003, output_cost=0.000045
+    )
     summary = tracker.format_summary()
     assert "1,500" in summary
     assert "1,000" in summary

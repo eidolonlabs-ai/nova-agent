@@ -26,7 +26,7 @@ HTTP_GET_SCHEMA = {
             },
             "headers": {
                 "type": "object",
-                "description": "Optional custom headers (e.g., {\"Authorization\": \"Bearer token\"}).",
+                "description": 'Optional custom headers (e.g., {"Authorization": "Bearer token"}).',
             },
             "timeout": {
                 "type": "integer",
@@ -50,7 +50,7 @@ HTTP_POST_SCHEMA = {
             },
             "body": {
                 "type": "string",
-                "description": "JSON body as a string (e.g., '{\"key\": \"value\"}'). If empty, sends empty body.",
+                "description": 'JSON body as a string (e.g., \'{"key": "value"}\'). If empty, sends empty body.',
             },
             "headers": {
                 "type": "object",
@@ -142,11 +142,7 @@ def _truncate_response(text: str, max_chars: int = _MAX_RESPONSE_CHARS) -> str:
         return text
     head = int(max_chars * 0.7)
     tail = int(max_chars * 0.2)
-    return (
-        f"{text[:head]}\n\n"
-        f"[...{len(text) - head - tail:,} chars truncated...]\n\n"
-        f"{text[-tail:]}"
-    )
+    return f"{text[:head]}\n\n[...{len(text) - head - tail:,} chars truncated...]\n\n{text[-tail:]}"
 
 
 def _make_request(

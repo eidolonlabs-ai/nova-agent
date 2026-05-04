@@ -102,6 +102,7 @@ def compress_conversation(
         if not summary:
             logger.warning("Compression returned empty summary — falling back to microcompact")
             from nova.microcompact import microcompact_messages
+
             return microcompact_messages(messages)
 
         # Build new message list: system prompt + summary + recent
@@ -111,10 +112,12 @@ def compress_conversation(
             new_messages.append(system_msg)
 
         # Inject summary as a tool-like message
-        new_messages.append({
-            "role": "system",
-            "content": f"[Previous conversation summary]\n{summary}",
-        })
+        new_messages.append(
+            {
+                "role": "system",
+                "content": f"[Previous conversation summary]\n{summary}",
+            }
+        )
 
         new_messages.extend(recent)
 
@@ -125,7 +128,11 @@ def compress_conversation(
         logger.info(
             "Context compression: %d tokens → %d tokens (saved %d, "
             "summarized %d messages, preserved %d)",
-            original_tokens, new_tokens, savings, len(older), len(recent),
+            original_tokens,
+            new_tokens,
+            savings,
+            len(older),
+            len(recent),
         )
 
         return new_messages
@@ -162,14 +169,16 @@ def _prepare_for_summary(
             # Keep tool call names but strip arguments
             truncated_calls = []
             for tc in msg.get("tool_calls", []):
-                truncated_calls.append({
-                    "id": tc.get("id", ""),
-                    "type": tc.get("type", "function"),
-                    "function": {
-                        "name": tc.get("function", {}).get("name", ""),
-                        "arguments": "{}",
-                    },
-                })
+                truncated_calls.append(
+                    {
+                        "id": tc.get("id", ""),
+                        "type": tc.get("type", "function"),
+                        "function": {
+                            "name": tc.get("function", {}).get("name", ""),
+                            "arguments": "{}",
+                        },
+                    }
+                )
             new_msg["tool_calls"] = truncated_calls
 
         result.append(new_msg)

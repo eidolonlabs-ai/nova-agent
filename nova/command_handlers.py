@@ -28,7 +28,9 @@ CommandHandler = Callable[["NovaAgent", str], None]
 _HANDLERS: dict[str, CommandHandler] = {}
 
 
-def command_handler(name: str, aliases: tuple[str, ...] = ()) -> Callable[[CommandHandler], CommandHandler]:
+def command_handler(
+    name: str, aliases: tuple[str, ...] = ()
+) -> Callable[[CommandHandler], CommandHandler]:
     """Decorator to register a slash command handler.
 
     Args:
@@ -40,12 +42,14 @@ def command_handler(name: str, aliases: tuple[str, ...] = ()) -> Callable[[Comma
         def cmd_status(agent: NovaAgent, args: str) -> None:
             ...
     """
+
     def decorator(func: CommandHandler) -> CommandHandler:
         _HANDLERS[name] = func
         for alias in aliases:
             _HANDLERS[alias] = func
         logger.debug("Registered command handler: %s (aliases: %s)", name, aliases)
         return func
+
     return decorator
 
 
@@ -69,6 +73,7 @@ def dispatch_command(name: str, agent: NovaAgent, args: str) -> bool:
     except Exception as e:
         logger.error("Command '%s' failed: %s", name, e)
         from nova.display import _DIM, _RST, _cprint
+
         _cprint(f"{_DIM}Command error: {e}{_RST}")
         return True
 
@@ -77,6 +82,7 @@ def get_registered_commands() -> set[str]:
     """Return the set of canonical command names (excludes aliases)."""
     # Import here to avoid circular dependency
     from nova.commands import COMMAND_REGISTRY
+
     return {cmd.name for cmd in COMMAND_REGISTRY}
 
 
@@ -86,6 +92,7 @@ def get_registered_commands() -> set[str]:
 @command_handler("new", aliases=("reset",))
 def cmd_new(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
+
     agent._create_session()
     _cprint(f"{_DIM}New session started{_RST}")
 
@@ -93,6 +100,7 @@ def cmd_new(agent: NovaAgent, args: str) -> None:
 @command_handler("history")
 def cmd_history(agent: NovaAgent, args: str) -> None:
     from nova.display import _CYAN, _RST, _cprint
+
     for msg in agent.messages:
         role = msg.get("role", "")
         content = msg.get("content") or ""
@@ -129,6 +137,7 @@ def cmd_status(agent: NovaAgent, args: str) -> None:
 @command_handler("sessions")
 def cmd_sessions(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
+
     sessions = agent.session_store.list_sessions(limit=10)
     if not sessions:
         _cprint(f"{_DIM}No sessions found{_RST}")
@@ -139,6 +148,7 @@ def cmd_sessions(agent: NovaAgent, args: str) -> None:
 @command_handler("model")
 def cmd_model(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
+
     if args:
         agent.config["openrouter"]["model"] = args.strip()
         _cprint(f"{_DIM}Model switched to: {args.strip()}{_RST}")
@@ -150,10 +160,13 @@ def cmd_model(agent: NovaAgent, args: str) -> None:
 def cmd_tools(agent: NovaAgent, args: str) -> None:
     from nova.display import _CYAN, _DIM, _RST, _cprint
     from nova.tools.registry import registry
+
     tools = registry.get_definitions()
     _cprint(f"{_DIM}Available tools ({len(tools)}):{_RST}")
     for t in tools:
-        _cprint(f"  {_CYAN}{t['function']['name']}{_RST}{_DIM}  —  {t['function'].get('description', '')[:60]}{_RST}")
+        _cprint(
+            f"  {_CYAN}{t['function']['name']}{_RST}{_DIM}  —  {t['function'].get('description', '')[:60]}{_RST}"
+        )
 
 
 @command_handler("usage")
@@ -176,6 +189,7 @@ def cmd_usage(agent: NovaAgent, args: str) -> None:
 @command_handler("undo")
 def cmd_undo(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
+
     # Remove last user+assistant pair
     if len(agent.messages) >= 2:
         agent.messages = agent.messages[:-2]
@@ -187,6 +201,7 @@ def cmd_undo(agent: NovaAgent, args: str) -> None:
 @command_handler("compact")
 def cmd_compact(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
+
     _cprint(f"{_DIM}Compacting context…{_RST}")
     # Keep system prompt + last 4 messages
     if len(agent.messages) > 4:
@@ -199,6 +214,7 @@ def cmd_copy(agent: NovaAgent, args: str) -> None:
     import subprocess
 
     from nova.display import _DIM, _RST, _cprint
+
     # Find last assistant message
     for msg in reversed(agent.messages):
         if msg.get("role") == "assistant" and msg.get("content"):
@@ -215,6 +231,7 @@ def cmd_copy(agent: NovaAgent, args: str) -> None:
 @command_handler("memory")
 def cmd_memory(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
+
     sub = args.split(None, 1)[0].lower() if args else "list"
     query = args.split(None, 1)[1] if len(args.split(None, 1)) > 1 else ""
     if not agent.memory:

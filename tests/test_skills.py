@@ -136,9 +136,19 @@ This is the skill body with detailed instructions.
 def test_discover_skills_multiple_sorted():
     """Test that skills are sorted by category then name."""
     tmpdir = Path(tempfile.mkdtemp())
-    _create_skill_dir(tmpdir, "beta", "---\nname: beta\ncategory: z-category\ndescription: Beta skill\n---\nBody")
-    _create_skill_dir(tmpdir, "alpha", "---\nname: alpha\ncategory: a-category\ndescription: Alpha skill\n---\nBody")
-    _create_skill_dir(tmpdir, "gamma", "---\nname: gamma\ncategory: a-category\ndescription: Gamma skill\n---\nBody")
+    _create_skill_dir(
+        tmpdir, "beta", "---\nname: beta\ncategory: z-category\ndescription: Beta skill\n---\nBody"
+    )
+    _create_skill_dir(
+        tmpdir,
+        "alpha",
+        "---\nname: alpha\ncategory: a-category\ndescription: Alpha skill\n---\nBody",
+    )
+    _create_skill_dir(
+        tmpdir,
+        "gamma",
+        "---\nname: gamma\ncategory: a-category\ndescription: Gamma skill\n---\nBody",
+    )
 
     skills = discover_skills(tmpdir)
     assert len(skills) == 3
@@ -191,7 +201,11 @@ def test_build_skills_prompt_basic():
     """Test building a basic skills prompt."""
     skills = [
         {"name": "python-coding", "category": "coding", "description": "Python best practices"},
-        {"name": "git-workflow", "category": "workflow", "description": "Git commands and workflows"},
+        {
+            "name": "git-workflow",
+            "category": "workflow",
+            "description": "Git commands and workflows",
+        },
     ]
 
     result = build_skills_prompt(skills)
@@ -199,8 +213,8 @@ def test_build_skills_prompt_basic():
     assert "</skills>" in result
     assert "python-coding" in result
     assert "git-workflow" in result
-    assert "<category name=\"coding\">" in result
-    assert "<category name=\"workflow\">" in result
+    assert '<category name="coding">' in result
+    assert '<category name="workflow">' in result
 
 
 def test_build_skills_prompt_groups_by_category():
@@ -213,7 +227,7 @@ def test_build_skills_prompt_groups_by_category():
 
     result = build_skills_prompt(skills)
     # cat1 should appear once with two skills
-    assert result.count("<category name=\"cat1\">") == 1
+    assert result.count('<category name="cat1">') == 1
     assert result.count("skill-a") == 1
     assert result.count("skill-b") == 1
     assert result.count("skill-c") == 1

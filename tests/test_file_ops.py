@@ -317,11 +317,9 @@ class TestPatchFile:
             path = Path(tmp) / "test.txt"
             path.write_text("Hello world")
 
-            result = _patch_file({
-                "path": str(path),
-                "old_string": "world",
-                "new_string": "universe"
-            })
+            result = _patch_file(
+                {"path": str(path), "old_string": "world", "new_string": "universe"}
+            )
             assert "Successfully patched" in result
             assert path.read_text() == "Hello universe"
 
@@ -332,11 +330,9 @@ class TestPatchFile:
             content = "line1\nline2\nline3"
             path.write_text(content)
 
-            result = _patch_file({
-                "path": str(path),
-                "old_string": "line2",
-                "new_string": "REPLACED"
-            })
+            result = _patch_file(
+                {"path": str(path), "old_string": "line2", "new_string": "REPLACED"}
+            )
             assert "Successfully patched" in result
             assert "REPLACED" in path.read_text()
 
@@ -346,11 +342,7 @@ class TestPatchFile:
             path = Path(tmp) / "test.txt"
             path.write_text("foo foo foo")
 
-            result = _patch_file({
-                "path": str(path),
-                "old_string": "foo",
-                "new_string": "bar"
-            })
+            result = _patch_file({"path": str(path), "old_string": "foo", "new_string": "bar"})
             assert "Successfully patched" in result
             assert path.read_text() == "bar foo foo"
 
@@ -360,39 +352,29 @@ class TestPatchFile:
             path = Path(tmp) / "test.txt"
             path.write_text("original content")
 
-            result = _patch_file({
-                "path": str(path),
-                "old_string": "not there",
-                "new_string": "replacement"
-            })
+            result = _patch_file(
+                {"path": str(path), "old_string": "not there", "new_string": "replacement"}
+            )
             assert "not found" in result.lower()
 
     def test_patch_file_not_found(self):
         """Error when file doesn't exist."""
-        result = _patch_file({
-            "path": "/nonexistent/file.txt",
-            "old_string": "old",
-            "new_string": "new"
-        })
+        result = _patch_file(
+            {"path": "/nonexistent/file.txt", "old_string": "old", "new_string": "new"}
+        )
         assert "not found" in result.lower()
 
     def test_patch_no_path(self):
         """Empty path is treated as current directory."""
-        result = _patch_file({
-            "path": "",
-            "old_string": "old",
-            "new_string": "new"
-        })
+        result = _patch_file({"path": "", "old_string": "old", "new_string": "new"})
         # Empty path becomes "." which causes an error
         assert "error" in result.lower()
 
     def test_patch_blocked_path(self):
         """Refuse to patch blocked paths."""
-        result = _patch_file({
-            "path": "/sys/kernel/config/file.txt",
-            "old_string": "old",
-            "new_string": "new"
-        })
+        result = _patch_file(
+            {"path": "/sys/kernel/config/file.txt", "old_string": "old", "new_string": "new"}
+        )
         assert "denied" in result.lower() or "protected" in result.lower()
 
     def test_patch_old_string_too_large(self):
@@ -402,11 +384,9 @@ class TestPatchFile:
             path.write_text("test")
 
             large_search = "x" * 150000
-            result = _patch_file({
-                "path": str(path),
-                "old_string": large_search,
-                "new_string": "new"
-            })
+            result = _patch_file(
+                {"path": str(path), "old_string": large_search, "new_string": "new"}
+            )
             assert "too large" in result.lower()
 
     def test_patch_new_string_too_large(self):
@@ -416,11 +396,9 @@ class TestPatchFile:
             path.write_text("old content")
 
             large_replacement = "x" * 150000
-            result = _patch_file({
-                "path": str(path),
-                "old_string": "old",
-                "new_string": large_replacement
-            })
+            result = _patch_file(
+                {"path": str(path), "old_string": "old", "new_string": large_replacement}
+            )
             assert "too large" in result.lower()
 
     def test_patch_preserves_rest_of_file(self):
@@ -430,11 +408,7 @@ class TestPatchFile:
             content = "START\nmiddle content\nEND"
             path.write_text(content)
 
-            _patch_file({
-                "path": str(path),
-                "old_string": "middle",
-                "new_string": "PATCHED"
-            })
+            _patch_file({"path": str(path), "old_string": "middle", "new_string": "PATCHED"})
             result = path.read_text()
             assert "START" in result
             assert "PATCHED" in result
@@ -446,11 +420,7 @@ class TestPatchFile:
             path = Path(tmp) / "test.txt"
             path.write_text("Hello © world")
 
-            _patch_file({
-                "path": str(path),
-                "old_string": "©",
-                "new_string": "®"
-            })
+            _patch_file({"path": str(path), "old_string": "©", "new_string": "®"})
             assert "®" in path.read_text()
 
     def test_patch_whitespace_significant(self):
@@ -459,9 +429,11 @@ class TestPatchFile:
             path = Path(tmp) / "test.txt"
             path.write_text("hello  world")  # two spaces
 
-            result = _patch_file({
-                "path": str(path),
-                "old_string": "hello world",  # one space
-                "new_string": "hi universe"
-            })
+            result = _patch_file(
+                {
+                    "path": str(path),
+                    "old_string": "hello world",  # one space
+                    "new_string": "hi universe",
+                }
+            )
             assert "not found" in result.lower()

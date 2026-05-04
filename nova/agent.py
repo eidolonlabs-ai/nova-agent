@@ -170,7 +170,8 @@ class NovaAgent:
             # Load recent messages only — respect conversation turn limit
             turn_limit = self.config["budgets"].get("conversation_turn_limit", 15)
             self.messages = self.session_store.get_messages(
-                self.session_id, limit=turn_limit * 4,  # ~4 msgs per turn (user+assistant+tool pairs)
+                self.session_id,
+                limit=turn_limit * 4,  # ~4 msgs per turn (user+assistant+tool pairs)
             )
             self._system_prompt = info.get("system_prompt")
             self._cached_system_prompt = self._system_prompt
@@ -203,7 +204,8 @@ class NovaAgent:
         self._build_system_prompt(mode=mode)
         if self.session_id:
             self.session_store.update_system_prompt(
-                self.session_id, self._system_prompt or "",
+                self.session_id,
+                self._system_prompt or "",
             )
 
     def _call_llm(
@@ -242,12 +244,15 @@ class NovaAgent:
         if stream:
             response_data: dict = retry_with_backoff(
                 self._stream_response,
-                payload, stream_callback, getattr(self, "_reasoning_callback", None),
+                payload,
+                stream_callback,
+                getattr(self, "_reasoning_callback", None),
                 max_retries=max_retries,
                 base_delay=base_delay,
                 max_delay=max_delay,
             )
         else:
+
             def _do_post() -> dict:
                 http_response = self.client.post("/chat/completions", json=payload)
                 if http_response.status_code == 400:
@@ -299,7 +304,9 @@ class NovaAgent:
             for line in response.iter_lines():
                 # Streaming watchdog: bail if no data for 30s
                 if time.monotonic() - _last_delta_time > _watchdog_timeout:
-                    logger.warning("Stream watchdog: no data for %.0fs, aborting", _watchdog_timeout)
+                    logger.warning(
+                        "Stream watchdog: no data for %.0fs, aborting", _watchdog_timeout
+                    )
                     break
 
                 # Interrupt check: Ctrl+C was pressed
@@ -339,26 +346,30 @@ class NovaAgent:
                     for tc in delta["tool_calls"]:
                         index = tc.get("index", 0)
                         if index >= len(tool_calls):
-                            tool_calls.append({
-                                "id": tc.get("id", ""),
-                                "type": "function",
-                                "function": {"name": "", "arguments": ""},
-                            })
+                            tool_calls.append(
+                                {
+                                    "id": tc.get("id", ""),
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            )
                         if tc.get("function", {}).get("name"):
                             tool_calls[index]["function"]["name"] = tc["function"]["name"]
                         if tc.get("function", {}).get("arguments"):
-                            tool_calls[index]["function"]["arguments"] += tc[
-                                "function"
-                            ]["arguments"]
+                            tool_calls[index]["function"]["arguments"] += tc["function"][
+                                "arguments"
+                            ]
 
         return {
-            "choices": [{
-                "message": {
-                    "role": "assistant",
-                    "content": full_content if full_content else None,
-                    "tool_calls": tool_calls if tool_calls else None,
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": full_content if full_content else None,
+                        "tool_calls": tool_calls if tool_calls else None,
+                    }
                 }
-            }]
+            ]
         }
 
     @staticmethod
@@ -366,9 +377,18 @@ class NovaAgent:
         """Check if an error is transient (retryable) vs permanent."""
         error_lower = error_msg.lower()
         transient_keywords = {
-            "timeout", "timed out", "connection", "reset", "refused",
-            "temporarily unavailable", "too many requests", "rate limit",
-            "502", "503", "504", "connection error",
+            "timeout",
+            "timed out",
+            "connection",
+            "reset",
+            "refused",
+            "temporarily unavailable",
+            "too many requests",
+            "rate limit",
+            "502",
+            "503",
+            "504",
+            "connection error",
         }
         return any(kw in error_lower for kw in transient_keywords)
 
@@ -418,7 +438,11 @@ class NovaAgent:
         for attempt in range(max_retries + 1):
             # Pass config, memory, and agent reference to tool handlers via kwargs
             result = registry.dispatch(
-                name, arguments, config=self.config, memory=self.memory, agent=self,
+                name,
+                arguments,
+                config=self.config,
+                memory=self.memory,
+                agent=self,
             )
 
             # Fire post_tool_call hook
@@ -432,10 +456,14 @@ class NovaAgent:
                 and attempt < max_retries
             )
             if is_transient:
-                wait_time = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
+                wait_time = 2**attempt  # exponential backoff: 1s, 2s, 4s
                 logger.warning(
                     "Tool %s failed with transient error (attempt %d/%d), retrying in %ds: %s",
-                    name, attempt + 1, max_retries + 1, wait_time, result[:100],
+                    name,
+                    attempt + 1,
+                    max_retries + 1,
+                    wait_time,
+                    result[:100],
                 )
                 time.sleep(wait_time)
                 continue
@@ -446,7 +474,8 @@ class NovaAgent:
         return result
 
     def _execute_tool_calls_parallel(
-        self, tool_calls: list[dict],
+        self,
+        tool_calls: list[dict],
     ) -> list[str]:
         """Execute tool calls, parallelizing independent ones.
 
@@ -570,13 +599,13 @@ class NovaAgent:
 
         head = text[:head_chars]
         tail = text[-tail_chars:]
-        truncated_tokens = total_tokens - int(max_chars * 0.70 / chars_per_token) - int(tail_chars / chars_per_token)
-
-        return (
-            f"{head}\n\n"
-            f"[...{truncated_tokens:,} tokens truncated...]\n\n"
-            f"{tail}"
+        truncated_tokens = (
+            total_tokens
+            - int(max_chars * 0.70 / chars_per_token)
+            - int(tail_chars / chars_per_token)
         )
+
+        return f"{head}\n\n[...{truncated_tokens:,} tokens truncated...]\n\n{tail}"
 
     def run(
         self,
@@ -605,7 +634,9 @@ class NovaAgent:
             logger.info(
                 "Trimming %d oldest messages from conversation history "
                 "(keeping last %d messages / ~%d turns)",
-                trim_count, max_messages, turn_limit,
+                trim_count,
+                max_messages,
+                turn_limit,
             )
             self.messages = self.messages[-max_messages:]
             api_messages = [{"role": "system", "content": self._cached_system_prompt or ""}]
@@ -619,7 +650,9 @@ class NovaAgent:
         iteration = 0
         # Optional interrupt hook — set by TUI via tui._interrupt_requested
         _interrupt_check: Callable[[], bool] | None = getattr(
-            self, "_interrupt_check", None,
+            self,
+            "_interrupt_check",
+            None,
         )
 
         while iteration < max_iterations:
@@ -649,7 +682,9 @@ class NovaAgent:
                     if savings > 0:
                         logger.info(
                             "Microcompact saved %d tokens (%d → %d)",
-                            savings, total_tokens, compacted_tokens,
+                            savings,
+                            total_tokens,
+                            compacted_tokens,
                         )
                         api_messages = compacted
                         total_tokens = compacted_tokens
@@ -657,7 +692,8 @@ class NovaAgent:
                 # Tier 2: LLM-based context compression
                 if total_tokens >= threshold:
                     summary_model = compression_cfg.get(
-                        "summary_model", self.config["openrouter"]["model"],
+                        "summary_model",
+                        self.config["openrouter"]["model"],
                     )
                     preserve_recent = microcompact_cfg.get("keep_recent", 6)
                     tokens_before_t2 = total_tokens
@@ -679,7 +715,9 @@ class NovaAgent:
                         t2_savings = tokens_before_t2 - total_tokens
                         logger.info(
                             "LLM compression: %d → %d tokens (saved %d, %.0f%%)",
-                            tokens_before_t2, total_tokens, t2_savings,
+                            tokens_before_t2,
+                            total_tokens,
+                            t2_savings,
                             100 * t2_savings / tokens_before_t2 if tokens_before_t2 else 0,
                         )
                     else:
@@ -687,8 +725,10 @@ class NovaAgent:
                             "Context approaching compression threshold: %d >= %d tokens "
                             "(model: %s, window: %d). "
                             "Consider starting a new session.",
-                            total_tokens, threshold,
-                            self.config["openrouter"]["model"], context_window,
+                            total_tokens,
+                            threshold,
+                            self.config["openrouter"]["model"],
+                            context_window,
                         )
 
             # Call LLM
@@ -810,7 +850,10 @@ class NovaAgent:
 
             # Print tool calls immediately as they execute (before response)
             _tl = tool_names
-            def tool_callback(name: str, tl: list[str] = _tl, d: StreamingReasoningBox = display) -> None:
+
+            def tool_callback(
+                name: str, tl: list[str] = _tl, d: StreamingReasoningBox = display
+            ) -> None:
                 tl.append(name)
                 # Flush any pending response content first, then show tool block
                 d.flush()

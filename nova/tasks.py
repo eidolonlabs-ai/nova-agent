@@ -64,6 +64,7 @@ class BackgroundTaskManager:
     def __init__(self, tasks_dir: Path | None = None) -> None:
         if tasks_dir is None:
             from nova.config import get_nova_home
+
             tasks_dir = get_nova_home() / "tasks"
         self.tasks_dir = tasks_dir
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
@@ -290,7 +291,8 @@ class BackgroundTaskManager:
 
             logger.info(
                 "Background task %s finished (exit=%d) after %.1fs",
-                task_id, return_code,
+                task_id,
+                return_code,
                 (task.ended_at - (task.started_at or task.created_at)),
             )
             self._notify_completion(task)

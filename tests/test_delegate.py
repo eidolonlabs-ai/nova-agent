@@ -27,6 +27,7 @@ from nova.tools.registry import ToolRegistry, discover_builtin_tools
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _minimal_config(delegation_enabled: bool = False, depth: int = 0) -> dict:
     """Return a minimal config for testing."""
     return {
@@ -82,6 +83,7 @@ def _make_agent(config: dict | None = None) -> NovaAgent:
 # _is_delegation_enabled
 # ---------------------------------------------------------------------------
 
+
 def test_delegation_enabled_flag_true():
     config = _minimal_config(delegation_enabled=True)
     assert _is_delegation_enabled(config) is True
@@ -104,6 +106,7 @@ def test_delegation_enabled_missing_key():
 # _build_subagent_config
 # ---------------------------------------------------------------------------
 
+
 def test_build_subagent_config_sets_depth():
     parent_config = _minimal_config(delegation_enabled=True, depth=0)
     child_config = _build_subagent_config(parent_config, depth=1, model=None, max_iterations=30)
@@ -113,7 +116,10 @@ def test_build_subagent_config_sets_depth():
 def test_build_subagent_config_model_override():
     parent_config = _minimal_config(delegation_enabled=True)
     child_config = _build_subagent_config(
-        parent_config, depth=1, model="openai/gpt-4o-mini", max_iterations=30,
+        parent_config,
+        depth=1,
+        model="openai/gpt-4o-mini",
+        max_iterations=30,
     )
     assert child_config["openrouter"]["model"] == "openai/gpt-4o-mini"
 
@@ -156,6 +162,7 @@ def test_build_subagent_config_sets_minimal_prompt_mode():
 # NovaAgent depth tracking
 # ---------------------------------------------------------------------------
 
+
 def test_agent_default_depth_is_zero():
     agent = _make_agent()
     assert agent.depth == 0
@@ -188,6 +195,7 @@ def test_agent_is_not_leaf_at_depth_one():
 # ---------------------------------------------------------------------------
 # register_delegate_tool
 # ---------------------------------------------------------------------------
+
 
 def test_register_delegate_tool_when_enabled():
     local_registry = ToolRegistry()
@@ -227,6 +235,7 @@ def test_register_delegate_tool_skipped_for_leaf():
 # ---------------------------------------------------------------------------
 # _delegate_task handler — validation
 # ---------------------------------------------------------------------------
+
 
 def test_delegate_task_requires_task_arg():
     agent = _make_agent()
@@ -304,6 +313,7 @@ def test_delegate_task_invalid_context_mode_defaults_to_isolated():
 # ---------------------------------------------------------------------------
 # _delegate_task handler — success path (mocked sub-agent)
 # ---------------------------------------------------------------------------
+
 
 def test_delegate_task_returns_success_result():
     agent = _make_agent()
@@ -392,13 +402,16 @@ def test_delegate_task_uses_fork_context_mode():
 # discover_builtin_tools integration
 # ---------------------------------------------------------------------------
 
+
 def test_discover_builtin_tools_registers_delegate_when_enabled():
     """discover_builtin_tools should register delegate_task when enabled."""
     local_registry = ToolRegistry()
     config = _minimal_config(delegation_enabled=True, depth=0)
 
-    with patch("nova.tools.registry.registry", local_registry), \
-         patch("nova.tools.delegate_tool.registry", local_registry):
+    with (
+        patch("nova.tools.registry.registry", local_registry),
+        patch("nova.tools.delegate_tool.registry", local_registry),
+    ):
         discover_builtin_tools(config)
 
     assert "delegate_task" in local_registry.all_tool_names
@@ -409,8 +422,10 @@ def test_discover_builtin_tools_skips_delegate_when_disabled():
     local_registry = ToolRegistry()
     config = _minimal_config(delegation_enabled=False)
 
-    with patch("nova.tools.registry.registry", local_registry), \
-         patch("nova.tools.delegate_tool.registry", local_registry):
+    with (
+        patch("nova.tools.registry.registry", local_registry),
+        patch("nova.tools.delegate_tool.registry", local_registry),
+    ):
         discover_builtin_tools(config)
 
     assert "delegate_task" not in local_registry.all_tool_names
@@ -421,8 +436,10 @@ def test_discover_builtin_tools_skips_delegate_for_leaf():
     local_registry = ToolRegistry()
     config = _minimal_config(delegation_enabled=True, depth=2)  # depth == max_spawn_depth
 
-    with patch("nova.tools.registry.registry", local_registry), \
-         patch("nova.tools.delegate_tool.registry", local_registry):
+    with (
+        patch("nova.tools.registry.registry", local_registry),
+        patch("nova.tools.delegate_tool.registry", local_registry),
+    ):
         discover_builtin_tools(config)
 
     assert "delegate_task" not in local_registry.all_tool_names
@@ -431,6 +448,7 @@ def test_discover_builtin_tools_skips_delegate_for_leaf():
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
+
 
 def test_max_timeout_is_300():
     assert MAX_TIMEOUT_SECONDS == 300

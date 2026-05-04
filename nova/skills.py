@@ -22,7 +22,7 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
     if end == -1:
         return {}, content
 
-    body = content[end + 4:].lstrip("\n")
+    body = content[end + 4 :].lstrip("\n")
     frontmatter_text = content[3:end].strip()
 
     # Simple YAML parsing (avoid pyyaml dependency for frontmatter)
@@ -88,12 +88,14 @@ def discover_skills(
             category = frontmatter.get("category", "general")
             description = extract_skill_description(frontmatter, body)
 
-            skills.append({
-                "name": name,
-                "category": category,
-                "description": description,
-                "path": str(skill_file),
-            })
+            skills.append(
+                {
+                    "name": name,
+                    "category": category,
+                    "description": description,
+                    "path": str(skill_file),
+                }
+            )
         except Exception as e:
             logger.debug("Failed to parse skill %s: %s", skill_dir, e)
 
@@ -129,9 +131,9 @@ def build_skills_prompt(
     )
 
     for category in sorted(by_category.keys()):
-        lines.append(f"  <category name=\"{category}\">")
+        lines.append(f'  <category name="{category}">')
         for skill in by_category[category]:
-            lines.append(f"    <skill name=\"{skill['name']}\">{skill['description']}</skill>")
+            lines.append(f'    <skill name="{skill["name"]}">{skill["description"]}</skill>')
         lines.append("  </category>")
 
     lines.append("</skills>")

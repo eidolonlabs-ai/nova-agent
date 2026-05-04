@@ -173,7 +173,9 @@ def test_sse_transport_initialization():
 
 
 def test_sse_transport_custom_post_url():
-    config = McpSseConfig(url="https://api.example.com/sse", post_url="https://api.example.com/post")
+    config = McpSseConfig(
+        url="https://api.example.com/sse", post_url="https://api.example.com/post"
+    )
     transport = _SseTransport(config)
     assert transport._post_url == "https://api.example.com/post"
     transport.disconnect()
@@ -183,7 +185,9 @@ def test_sse_transport_custom_post_url():
 def test_sse_transport_send_request(mock_client_cls):
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.json.return_value = {"result": {"content": [{"type": "text", "text": "sse response"}]}}
+    mock_response.json.return_value = {
+        "result": {"content": [{"type": "text", "text": "sse response"}]}
+    }
     mock_response.headers = {}
     mock_response.raise_for_status = MagicMock()
     mock_client.post.return_value = mock_response
@@ -232,10 +236,14 @@ def test_extract_tool_result_text():
 
 
 def test_extract_tool_result_multiple_parts():
-    response = {"result": {"content": [
-        {"type": "text", "text": "part1"},
-        {"type": "text", "text": "part2"},
-    ]}}
+    response = {
+        "result": {
+            "content": [
+                {"type": "text", "text": "part1"},
+                {"type": "text", "text": "part2"},
+            ]
+        }
+    }
     result = McpClient._extract_tool_result(response)
     assert result == "part1\npart2"
 
@@ -364,36 +372,18 @@ def test_build_mcp_client_no_mcp_key():
 
 
 def test_build_mcp_client_missing_command_stdio():
-    config = {
-        "mcp": {
-            "servers": {
-                "bad": {"type": "stdio"}
-            }
-        }
-    }
+    config = {"mcp": {"servers": {"bad": {"type": "stdio"}}}}
     client = build_mcp_client(config)
     assert "bad" not in client._server_configs
 
 
 def test_build_mcp_client_missing_url_http():
-    config = {
-        "mcp": {
-            "servers": {
-                "bad": {"type": "http"}
-            }
-        }
-    }
+    config = {"mcp": {"servers": {"bad": {"type": "http"}}}}
     client = build_mcp_client(config)
     assert "bad" not in client._server_configs
 
 
 def test_build_mcp_client_missing_url_sse():
-    config = {
-        "mcp": {
-            "servers": {
-                "bad": {"type": "sse"}
-            }
-        }
-    }
+    config = {"mcp": {"servers": {"bad": {"type": "sse"}}}}
     client = build_mcp_client(config)
     assert "bad" not in client._server_configs

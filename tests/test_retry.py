@@ -48,7 +48,10 @@ def test_classify_unknown_is_retryable():
 
 def test_classify_overflow_takes_priority():
     # Even with a retryable status code, overflow should win
-    assert classify_error(status_code=500, message="context length exceeded") == ErrorType.CONTEXT_OVERFLOW
+    assert (
+        classify_error(status_code=500, message="context length exceeded")
+        == ErrorType.CONTEXT_OVERFLOW
+    )
 
 
 # ── retry_with_backoff ──────────────────────────────────────────────────────
@@ -197,7 +200,11 @@ def test_retry_max_delay_cap():
         contextlib.suppress(ValueError),
     ):
         retry_with_backoff(
-            failing, max_retries=5, base_delay=1.0, max_delay=3.0, jitter=False,
+            failing,
+            max_retries=5,
+            base_delay=1.0,
+            max_delay=3.0,
+            jitter=False,
         )
 
     # All delays should be capped at 3.0
@@ -240,7 +247,9 @@ def test_retry_api_call_with_retries():
     mock_client.post.side_effect = side_effect
 
     result = retry_api_call(
-        mock_client, "POST", "/test",
+        mock_client,
+        "POST",
+        "/test",
         json={"data": "test"},
         max_retries=3,
         base_delay=0.01,

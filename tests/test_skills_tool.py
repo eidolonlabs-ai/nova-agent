@@ -35,8 +35,10 @@ def test_skills_list_with_skills(temp_skills_dir, skills_config):
     skill_file = skill_dir / "SKILL.md"
     skill_file.write_text("---\nname: test_skill\ndescription: Test\n---\nContent here")
 
-    with patch("nova.tools.skills_tool.discover_skills") as mock_discover, \
-         patch("nova.tools.skills_tool.build_skills_prompt") as mock_build:
+    with (
+        patch("nova.tools.skills_tool.discover_skills") as mock_discover,
+        patch("nova.tools.skills_tool.build_skills_prompt") as mock_build,
+    ):
         mock_discover.return_value = [{"name": "test_skill"}]
         mock_build.return_value = "Found: test_skill"
         result = _skills_list({}, config=skills_config)

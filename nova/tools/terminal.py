@@ -14,14 +14,23 @@ logger = logging.getLogger(__name__)
 
 # Destructive commands that should be flagged in logs
 _DESTRUCTIVE_PATTERNS = [
-    "rm -rf", "rm -r /", "dd if=", "mkfs", "fdisk",
-    "bash -c", "sh -c", "eval",
-    "chmod 777", "chown", "sudo",
+    "rm -rf",
+    "rm -r /",
+    "dd if=",
+    "mkfs",
+    "fdisk",
+    "bash -c",
+    "sh -c",
+    "eval",
+    "chmod 777",
+    "chown",
+    "sudo",
 ]
 
 # Commands that are suspicious but not destructive (flagged for logging only)
 _SUSPICIOUS_PATTERNS = [
-    "curl", "wget",
+    "curl",
+    "wget",
 ]
 
 TERMINAL_SCHEMA = {
@@ -87,6 +96,7 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
     # Validate workdir if provided
     if workdir is not None:
         from pathlib import Path as _Path
+
         wd = _Path(workdir).expanduser()
         if not wd.exists():
             return f"Error: Working directory not found: {workdir}"
@@ -98,6 +108,7 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
     config = kwargs.get("config")
     if config:
         from nova.permissions import build_permission_checker
+
         checker = build_permission_checker(config)
         perm_result = checker.evaluate("terminal", command=command)
         if not perm_result.allowed:

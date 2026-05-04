@@ -128,11 +128,13 @@ def test_patch_file_basic():
     test_file = tmpdir / "test.txt"
     test_file.write_text("hello world\nfoo bar\n", encoding="utf-8")
 
-    result = _patch_file({
-        "path": str(test_file),
-        "old_string": "hello world",
-        "new_string": "goodbye world",
-    })
+    result = _patch_file(
+        {
+            "path": str(test_file),
+            "old_string": "hello world",
+            "new_string": "goodbye world",
+        }
+    )
     assert "Patched" in result or "patched" in result.lower() or "success" in result.lower()
     content = test_file.read_text()
     assert "goodbye world" in content
@@ -145,11 +147,13 @@ def test_patch_file_no_match():
     test_file = tmpdir / "test.txt"
     test_file.write_text("hello world\n", encoding="utf-8")
 
-    result = _patch_file({
-        "path": str(test_file),
-        "old_string": "not found",
-        "new_string": "replacement",
-    })
+    result = _patch_file(
+        {
+            "path": str(test_file),
+            "old_string": "not found",
+            "new_string": "replacement",
+        }
+    )
     assert "Error" in result or "not found" in result.lower()
 
 
@@ -172,11 +176,13 @@ def test_search_files_regex():
     tmpdir = Path(tempfile.mkdtemp())
     (tmpdir / "test.py").write_text("def test_foo():\n    pass\n", encoding="utf-8")
 
-    result = _search_files({
-        "pattern": "def test_\\w+",
-        "path": str(tmpdir),
-        "mode": "regex",
-    })
+    result = _search_files(
+        {
+            "pattern": "def test_\\w+",
+            "path": str(tmpdir),
+            "mode": "regex",
+        }
+    )
     assert "test.py" in result
 
 
@@ -186,11 +192,13 @@ def test_search_files_with_glob():
     (tmpdir / "file.py").write_text("hello\n", encoding="utf-8")
     (tmpdir / "file.txt").write_text("hello\n", encoding="utf-8")
 
-    result = _search_files({
-        "pattern": "hello",
-        "path": str(tmpdir),
-        "file_pattern": "*.py",
-    })
+    result = _search_files(
+        {
+            "pattern": "hello",
+            "path": str(tmpdir),
+            "file_pattern": "*.py",
+        }
+    )
     assert "file.py" in result
     assert "file.txt" not in result
 
@@ -279,9 +287,12 @@ def test_search_bing_rss_respects_num_results():
 
 
 def test_web_search_formats_output():
-    with patch("nova.tools.web._search_bing_rss", return_value=[
-        {"title": "Python.org", "url": "https://www.python.org", "snippet": "Official site."},
-    ]):
+    with patch(
+        "nova.tools.web._search_bing_rss",
+        return_value=[
+            {"title": "Python.org", "url": "https://www.python.org", "snippet": "Official site."},
+        ],
+    ):
         result = _web_search({"query": "python"})
 
     assert "Python.org" in result
@@ -318,6 +329,7 @@ def test_web_search_clamps_num_results():
 
 def test_web_search_handles_http_error():
     import httpx as _httpx
+
     with patch("nova.tools.web._search_bing_rss", side_effect=_httpx.HTTPError("timeout")):
         result = _web_search({"query": "test"})
 

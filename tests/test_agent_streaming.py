@@ -53,6 +53,7 @@ def mock_session_store():
 
 def make_mock_stream_response(lines):
     """Create a context manager mock for streaming response."""
+
     @contextmanager
     def stream_context(*args, **kwargs):
         response = MagicMock(spec=httpx.Response)
@@ -60,6 +61,7 @@ def make_mock_stream_response(lines):
         response.iter_lines.return_value = iter(lines)
         response.raise_for_status = MagicMock()
         yield response
+
     return stream_context
 
 
@@ -80,7 +82,7 @@ def test_stream_response_watchdog_timeout(minimal_config, mock_session_store):
     )
 
     # Patch time.monotonic to simulate timeout
-    with patch('nova.agent.time.monotonic') as mock_time:
+    with patch("nova.agent.time.monotonic") as mock_time:
         # Simulate initial time and then timeout (>30s no data)
         mock_time.side_effect = [0.0, 31.0]
         result = agent._stream_response({"messages": []})
@@ -124,9 +126,9 @@ def test_stream_response_malformed_json_recovers(minimal_config, mock_session_st
 
     lines = [
         'data: {"choices": [{"delta": {"content": "OK"}}]}',
-        'data: {invalid json',  # Malformed, should be skipped
+        "data: {invalid json",  # Malformed, should be skipped
         'data: {"choices": [{"delta": {"content": " done"}}]}',
-        'data: [DONE]',
+        "data: [DONE]",
     ]
     mock_client.stream = make_mock_stream_response(lines)
 
@@ -148,7 +150,7 @@ def test_stream_response_empty_content(minimal_config, mock_session_store):
     mock_client = MagicMock(spec=httpx.Client)
 
     lines = [
-        'data: [DONE]',
+        "data: [DONE]",
     ]
     mock_client.stream = make_mock_stream_response(lines)
 
@@ -173,7 +175,7 @@ def test_stream_response_multiple_tool_calls(minimal_config, mock_session_store)
         'data: {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "{\\"cmd"}}]}}]}',
         'data: {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "\\":\\"ls\\"}"}}]}}]}',
         'data: {"choices": [{"delta": {"tool_calls": [{"index": 1, "id": "c2", "function": {"name": "file_ops"}}]}}]}',
-        'data: [DONE]',
+        "data: [DONE]",
     ]
     mock_client.stream = make_mock_stream_response(lines)
 
@@ -203,7 +205,7 @@ def test_stream_response_reasoning_callback(minimal_config, mock_session_store):
     lines = [
         'data: {"choices": [{"delta": {"reasoning": "Let me"}}]}',
         'data: {"choices": [{"delta": {"reasoning": " think"}}]}',
-        'data: [DONE]',
+        "data: [DONE]",
     ]
     mock_client.stream = make_mock_stream_response(lines)
 
@@ -233,7 +235,7 @@ def test_stream_response_text_callback(minimal_config, mock_session_store):
     lines = [
         'data: {"choices": [{"delta": {"content": "Hello"}}]}',
         'data: {"choices": [{"delta": {"content": " world"}}]}',
-        'data: [DONE]',
+        "data: [DONE]",
     ]
     mock_client.stream = make_mock_stream_response(lines)
 

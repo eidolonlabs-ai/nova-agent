@@ -26,14 +26,16 @@ EVENT_POST_LLM_CALL = "post_llm_call"
 EVENT_SESSION_START = "session_start"
 EVENT_SESSION_END = "session_end"
 
-ALL_EVENTS: frozenset[str] = frozenset({
-    EVENT_PRE_TOOL_CALL,
-    EVENT_POST_TOOL_CALL,
-    EVENT_PRE_LLM_CALL,
-    EVENT_POST_LLM_CALL,
-    EVENT_SESSION_START,
-    EVENT_SESSION_END,
-})
+ALL_EVENTS: frozenset[str] = frozenset(
+    {
+        EVENT_PRE_TOOL_CALL,
+        EVENT_POST_TOOL_CALL,
+        EVENT_PRE_LLM_CALL,
+        EVENT_POST_LLM_CALL,
+        EVENT_SESSION_START,
+        EVENT_SESSION_END,
+    }
+)
 
 
 class HookRegistry:

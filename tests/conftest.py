@@ -72,6 +72,7 @@ def mock_memory_store() -> MemoryStore:
 @pytest.fixture
 def make_agent(minimal_config, mock_session_store, mock_http_client):
     """Factory fixture: call make_agent() or make_agent(config=...) to create a NovaAgent."""
+
     def _factory(config=None, session_id=None, memory_store=None):
         return NovaAgent(
             config=config or minimal_config,
@@ -80,6 +81,7 @@ def make_agent(minimal_config, mock_session_store, mock_http_client):
             session_id=session_id,
             memory_store=memory_store,
         )
+
     return _factory
 
 
@@ -106,9 +108,11 @@ def make_tool_call_response(tool_name: str, arguments: dict, call_id: str = "cal
     """Build a mock response where the LLM requests a tool call."""
     return mock_llm_response(
         content=None,
-        tool_calls=[{
-            "id": call_id,
-            "type": "function",
-            "function": {"name": tool_name, "arguments": json.dumps(arguments)},
-        }],
+        tool_calls=[
+            {
+                "id": call_id,
+                "type": "function",
+                "function": {"name": tool_name, "arguments": json.dumps(arguments)},
+            }
+        ],
     )

@@ -113,11 +113,14 @@ def _task_create(args: dict[str, Any], **kwargs) -> str:
 
     mgr = get_task_manager()
     task_id = mgr.create_shell_task(command, description)
-    return json.dumps({
-        "success": True,
-        "task_id": task_id,
-        "description": description or command[:80],
-    }, indent=2)
+    return json.dumps(
+        {
+            "success": True,
+            "task_id": task_id,
+            "description": description or command[:80],
+        },
+        indent=2,
+    )
 
 
 def _task_status(args: dict[str, Any], **kwargs) -> str:
@@ -131,19 +134,22 @@ def _task_status(args: dict[str, Any], **kwargs) -> str:
     if not task:
         return json.dumps({"success": False, "error": f"Task '{task_id}' not found."})
 
-    return json.dumps({
-        "task_id": task.id,
-        "type": task.type,
-        "status": task.status,
-        "description": task.description,
-        "command": task.command,
-        "pid": task.pid,
-        "return_code": task.return_code,
-        "created_at": task.created_at,
-        "started_at": task.started_at,
-        "ended_at": task.ended_at,
-        "metadata": task.metadata,
-    }, indent=2)
+    return json.dumps(
+        {
+            "task_id": task.id,
+            "type": task.type,
+            "status": task.status,
+            "description": task.description,
+            "command": task.command,
+            "pid": task.pid,
+            "return_code": task.return_code,
+            "created_at": task.created_at,
+            "started_at": task.started_at,
+            "ended_at": task.ended_at,
+            "metadata": task.metadata,
+        },
+        indent=2,
+    )
 
 
 def _task_output(args: dict[str, Any], **kwargs) -> str:
@@ -175,21 +181,24 @@ def _task_list(args: dict[str, Any], **kwargs) -> str:
     mgr = get_task_manager()
     tasks = mgr.list_tasks(status=status)
 
-    return json.dumps({
-        "tasks": [
-            {
-                "task_id": t.id,
-                "type": t.type,
-                "status": t.status,
-                "description": t.description,
-                "command": t.command[:100] if t.command else "",
-                "pid": t.pid,
-                "return_code": t.return_code,
-            }
-            for t in tasks
-        ],
-        "count": len(tasks),
-    }, indent=2)
+    return json.dumps(
+        {
+            "tasks": [
+                {
+                    "task_id": t.id,
+                    "type": t.type,
+                    "status": t.status,
+                    "description": t.description,
+                    "command": t.command[:100] if t.command else "",
+                    "pid": t.pid,
+                    "return_code": t.return_code,
+                }
+                for t in tasks
+            ],
+            "count": len(tasks),
+        },
+        indent=2,
+    )
 
 
 registry.register(

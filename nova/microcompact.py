@@ -60,26 +60,28 @@ def microcompact_messages(
             if "tool_calls" in new_msg and new_msg["tool_calls"]:
                 truncated_calls = []
                 for tc in new_msg["tool_calls"]:
-                    truncated_calls.append({
-                        "id": tc.get("id", ""),
-                        "type": tc.get("type", "function"),
-                        "function": {
-                            "name": tc.get("function", {}).get("name", ""),
-                            "arguments": "{}",  # Strip arguments to save tokens
-                        },
-                    })
+                    truncated_calls.append(
+                        {
+                            "id": tc.get("id", ""),
+                            "type": tc.get("type", "function"),
+                            "function": {
+                                "name": tc.get("function", {}).get("name", ""),
+                                "arguments": "{}",  # Strip arguments to save tokens
+                            },
+                        }
+                    )
                 new_msg["tool_calls"] = truncated_calls
 
         result.append(new_msg)
 
     stripped_count = sum(
-        1 for i, m in enumerate(messages)
-        if i < split_point and m.get("role") == "tool"
+        1 for i, m in enumerate(messages) if i < split_point and m.get("role") == "tool"
     )
     if stripped_count > 0:
         logger.info(
             "Microcompact: stripped %d old tool results (kept last %d messages)",
-            stripped_count, keep_recent,
+            stripped_count,
+            keep_recent,
         )
 
     return result

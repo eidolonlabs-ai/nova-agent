@@ -135,7 +135,9 @@ def build_system_prompt(
             max_count=budgets.get("skills_max_count", 50),
             max_chars=budgets.get("skills_max_chars", 15000),
         )
-        skills_prompt = build_skills_prompt(skills, max_chars=budgets.get("skills_max_chars", 15000))
+        skills_prompt = build_skills_prompt(
+            skills, max_chars=budgets.get("skills_max_chars", 15000)
+        )
         if skills_prompt:
             parts.append(skills_prompt)
 
@@ -152,6 +154,7 @@ def build_system_prompt(
 
     # 7. Current date (ISO format — unambiguous and token-efficient)
     from datetime import date
+
     parts.append(f"Today: {date.today().isoformat()}")
 
     # 8. Model info
@@ -166,7 +169,8 @@ def build_system_prompt(
     if current_tokens > max_tokens:
         logger.warning(
             "System prompt exceeds budget: %d > %d tokens — rebuilding without context files",
-            current_tokens, max_tokens,
+            current_tokens,
+            max_tokens,
         )
         # Rebuild without context files first
         core_parts = [p for p in parts if not p.startswith("# Project Context")]
@@ -176,7 +180,8 @@ def build_system_prompt(
     if current_tokens > max_tokens:
         logger.warning(
             "System prompt still exceeds budget after dropping context: %d > %d tokens — truncating",
-            current_tokens, max_tokens,
+            current_tokens,
+            max_tokens,
         )
         chars_to_keep = int(len(result) * max_tokens / current_tokens)
         result = result[:chars_to_keep] + "\n\n[...system prompt truncated to fit budget...]"

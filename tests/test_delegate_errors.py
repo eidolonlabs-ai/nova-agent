@@ -254,7 +254,12 @@ def test_delegate_label_generation():
         mock_executor_class.return_value.__exit__ = MagicMock(return_value=None)
 
         mock_future = MagicMock()
-        mock_future.result.return_value = {"success": True, "result": "OK", "label": "generated", "usage": {}}
+        mock_future.result.return_value = {
+            "success": True,
+            "result": "OK",
+            "label": "generated",
+            "usage": {},
+        }
         mock_executor.submit.return_value = mock_future
 
         # Should succeed with auto-generated label

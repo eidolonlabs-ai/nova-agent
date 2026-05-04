@@ -115,13 +115,11 @@ class CostTracker:
         """Return a human-readable usage summary."""
         t = self.total
         lines = [
-            f"Tokens: {t.total_tokens:,} total "
-            f"({t.input_tokens:,} in, {t.output_tokens:,} out)",
+            f"Tokens: {t.total_tokens:,} total ({t.input_tokens:,} in, {t.output_tokens:,} out)",
         ]
         if t.total_cost > 0:
             lines.append(
-                f"Cost: ${t.total_cost:.6f} "
-                f"(${t.input_cost:.6f} in, ${t.output_cost:.6f} out)"
+                f"Cost: ${t.total_cost:.6f} (${t.input_cost:.6f} in, ${t.output_cost:.6f} out)"
             )
         return " | ".join(lines)
 

@@ -16,36 +16,71 @@ logger = logging.getLogger(__name__)
 # Threat patterns for prompt injection scanning
 # Patterns are checked against unicode-normalized content (NFKC form)
 _CONTEXT_THREAT_PATTERNS = [
-    (r'ignore\s+(previous|all|above|prior)\s+instructions', "prompt_injection"),
-    (r'do\s+not\s+tell\s+the\s+user', "deception_hide"),
-    (r'system\s+prompt\s+override', "sys_prompt_override"),
-    (r'disregard\s+(your|all|any)\s+(instructions|rules|guidelines)', "disregard_rules"),
+    (r"ignore\s+(previous|all|above|prior)\s+instructions", "prompt_injection"),
+    (r"do\s+not\s+tell\s+the\s+user", "deception_hide"),
+    (r"system\s+prompt\s+override", "sys_prompt_override"),
+    (r"disregard\s+(your|all|any)\s+(instructions|rules|guidelines)", "disregard_rules"),
     (
-        r'act\s+as\s+(if|though)\s+you\s+(have\s+no|don\'t\s+have)\s+'
-        r'(restrictions|limits|rules)',
+        r"act\s+as\s+(if|though)\s+you\s+(have\s+no|don\'t\s+have)\s+"
+        r"(restrictions|limits|rules)",
         "bypass_restrictions",
     ),
-    (r'curl\s+[^\n]*\$\{?\w*(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|API)', "exfil_curl"),
-    (r'cat\s+[^\n]*(\.env|credentials|\.netrc|\.pgpass)', "read_secrets"),
+    (r"curl\s+[^\n]*\$\{?\w*(KEY|TOKEN|SECRET|PASSWORD|CREDENTIAL|API)", "exfil_curl"),
+    (r"cat\s+[^\n]*(\.env|credentials|\.netrc|\.pgpass)", "read_secrets"),
     # Additional patterns for common injection techniques
-    (r'forget\s+(all\s+)?(previous|prior|above)\s+(instructions|context)', "forget_instructions"),
-    (r'you\s+are\s+now\s+(in\s+)?(developer|debug|unrestricted)\s+mode', "mode_switch"),
-    (r'output\s+(only|just)\s+(the\s+)?(raw|full)\s+(response|answer)', "output_manipulation"),
-    (r'base64\s*:\s*[A-Za-z0-9+/=]{20,}', "base64_payload"),
-    (r'&#x[0-9a-fA-F]+;', "html_entity_encoding"),
-    (r'\\u[0-9a-fA-F]{4}', "unicode_escape"),
+    (r"forget\s+(all\s+)?(previous|prior|above)\s+(instructions|context)", "forget_instructions"),
+    (r"you\s+are\s+now\s+(in\s+)?(developer|debug|unrestricted)\s+mode", "mode_switch"),
+    (r"output\s+(only|just)\s+(the\s+)?(raw|full)\s+(response|answer)", "output_manipulation"),
+    (r"base64\s*:\s*[A-Za-z0-9+/=]{20,}", "base64_payload"),
+    (r"&#x[0-9a-fA-F]+;", "html_entity_encoding"),
+    (r"\\u[0-9a-fA-F]{4}", "unicode_escape"),
 ]
 
 # Invisible/zero-width characters that can be used to hide injection payloads
 _CONTEXT_INVISIBLE_CHARS = {
-    '\u200b', '\u200c', '\u200d', '\u2060', '\ufeff',
-    '\u202a', '\u202b', '\u202c', '\u202d', '\u202e',
-    '\u200e', '\u200f', '\u2066', '\u2067', '\u2068', '\u2069',
-    '\u00ad', '\u034f', '\u180e', '\u2000', '\u2001', '\u2002',
-    '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008',
-    '\u2009', '\u200a', '\u2061', '\u2062', '\u2063', '\u2064',
-    '\u206a', '\u206b', '\u206c', '\u206d', '\u206e', '\u206f',
-    '\u3164', '\uf8ff', '\uffa0',
+    "\u200b",
+    "\u200c",
+    "\u200d",
+    "\u2060",
+    "\ufeff",
+    "\u202a",
+    "\u202b",
+    "\u202c",
+    "\u202d",
+    "\u202e",
+    "\u200e",
+    "\u200f",
+    "\u2066",
+    "\u2067",
+    "\u2068",
+    "\u2069",
+    "\u00ad",
+    "\u034f",
+    "\u180e",
+    "\u2000",
+    "\u2001",
+    "\u2002",
+    "\u2003",
+    "\u2004",
+    "\u2005",
+    "\u2006",
+    "\u2007",
+    "\u2008",
+    "\u2009",
+    "\u200a",
+    "\u2061",
+    "\u2062",
+    "\u2063",
+    "\u2064",
+    "\u206a",
+    "\u206b",
+    "\u206c",
+    "\u206d",
+    "\u206e",
+    "\u206f",
+    "\u3164",
+    "\uf8ff",
+    "\uffa0",
 }
 
 # Truncation ratios (from OpenClaw)
@@ -63,9 +98,7 @@ def _normalize_for_scanning(content: str) -> str:
     # NFKC normalization: converts compatibility characters to canonical form
     normalized = unicodedata.normalize("NFKC", content)
     # Remove invisible/zero-width characters
-    normalized = "".join(
-        ch for ch in normalized if ch not in _CONTEXT_INVISIBLE_CHARS
-    )
+    normalized = "".join(ch for ch in normalized if ch not in _CONTEXT_INVISIBLE_CHARS)
     return normalized.lower()
 
 

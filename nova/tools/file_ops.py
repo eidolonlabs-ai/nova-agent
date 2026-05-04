@@ -16,16 +16,26 @@ logger = logging.getLogger(__name__)
 
 # Paths that should never be accessed by the agent
 _BLOCKED_PATHS = {
-    "/etc/shadow", "/etc/passwd", "/etc/sudoers",
-    "/etc/ssh", "/etc/ssl",
+    "/etc/shadow",
+    "/etc/passwd",
+    "/etc/sudoers",
+    "/etc/ssh",
+    "/etc/ssl",
 }
 _BLOCKED_PREFIXES = [
-    "/proc/", "/sys/", "/dev/",
+    "/proc/",
+    "/sys/",
+    "/dev/",
 ]
 # Sensitive directories that should be blocked
 _SENSITIVE_DIRS = [
-    ".ssh", ".gnupg", ".aws", ".config/gcloud",
-    ".kube", ".docker", ".terraform",
+    ".ssh",
+    ".gnupg",
+    ".aws",
+    ".config/gcloud",
+    ".kube",
+    ".docker",
+    ".terraform",
 ]
 
 READ_FILE_SCHEMA = {

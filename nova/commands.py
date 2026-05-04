@@ -12,14 +12,14 @@ try:
     from prompt_toolkit.completion import Completer, Completion
     from prompt_toolkit.document import Document
 except ImportError:  # pragma: no cover
-    Completer = object    # type: ignore[assignment,misc,misc]
-    Completion = None   # type: ignore[assignment,misc]
-    Document = None     # type: ignore[assignment,misc]
+    Completer = object  # type: ignore[assignment,misc,misc]
+    Completion = None  # type: ignore[assignment,misc]
+    Document = None  # type: ignore[assignment,misc]
 
 
 @dataclass(frozen=True)
 class CommandDef:
-    name: str                          # canonical name without slash
+    name: str  # canonical name without slash
     description: str
     category: str
     aliases: tuple[str, ...] = ()
@@ -29,41 +29,50 @@ class CommandDef:
 
 COMMAND_REGISTRY: list[CommandDef] = [
     # Session
-    CommandDef("new",      "Start a fresh session",                    "Session", aliases=("reset",)),
-    CommandDef("clear",    "Clear screen",                             "Session"),
-    CommandDef("history",  "Show conversation history",                "Session"),
-    CommandDef("undo",     "Remove the last exchange",                 "Session"),
-    CommandDef("retry",    "Resend the last message",                  "Session"),
-    CommandDef("status",   "Show session info",                        "Session"),
-    CommandDef("sessions", "List recent sessions",                     "Session"),
-    CommandDef("resume",   "Resume a previous session",                "Session", args_hint="[id]"),
-    CommandDef("title",    "Set a title for this session",             "Session", args_hint="[name]"),
-    CommandDef("compact",  "Summarise and compress context",           "Session"),
-
+    CommandDef("new", "Start a fresh session", "Session", aliases=("reset",)),
+    CommandDef("clear", "Clear screen", "Session"),
+    CommandDef("history", "Show conversation history", "Session"),
+    CommandDef("undo", "Remove the last exchange", "Session"),
+    CommandDef("retry", "Resend the last message", "Session"),
+    CommandDef("status", "Show session info", "Session"),
+    CommandDef("sessions", "List recent sessions", "Session"),
+    CommandDef("resume", "Resume a previous session", "Session", args_hint="[id]"),
+    CommandDef("title", "Set a title for this session", "Session", args_hint="[name]"),
+    CommandDef("compact", "Summarise and compress context", "Session"),
     # Configuration
-    CommandDef("model",    "Show or switch model",                     "Configuration", args_hint="[model]"),
-    CommandDef("config",   "Show current configuration",               "Configuration"),
-    CommandDef("reasoning","Toggle reasoning display",                 "Configuration",
-               subcommands=("show", "hide"), args_hint="[show|hide]"),
-
+    CommandDef("model", "Show or switch model", "Configuration", args_hint="[model]"),
+    CommandDef("config", "Show current configuration", "Configuration"),
+    CommandDef(
+        "reasoning",
+        "Toggle reasoning display",
+        "Configuration",
+        subcommands=("show", "hide"),
+        args_hint="[show|hide]",
+    ),
     # Memory
-    CommandDef("memory",   "Search or clear memory",                   "Memory",
-               subcommands=("search", "clear", "list"), args_hint="[search|clear|list] [query]"),
-
+    CommandDef(
+        "memory",
+        "Search or clear memory",
+        "Memory",
+        subcommands=("search", "clear", "list"),
+        args_hint="[search|clear|list] [query]",
+    ),
     # Skills
-    CommandDef("skills",   "List or manage skills",                    "Skills",
-               subcommands=("list", "view"), args_hint="[list|view] [name]"),
-
+    CommandDef(
+        "skills",
+        "List or manage skills",
+        "Skills",
+        subcommands=("list", "view"),
+        args_hint="[list|view] [name]",
+    ),
     # Tools
-    CommandDef("tools",    "List available tools",                     "Tools"),
-
+    CommandDef("tools", "List available tools", "Tools"),
     # Info
-    CommandDef("help",     "Show available commands",                  "Info"),
-    CommandDef("copy",     "Copy last response to clipboard",          "Info"),
-    CommandDef("usage",    "Show token usage for this session",        "Info"),
-
+    CommandDef("help", "Show available commands", "Info"),
+    CommandDef("copy", "Copy last response to clipboard", "Info"),
+    CommandDef("usage", "Show token usage for this session", "Info"),
     # Exit
-    CommandDef("quit",     "Exit Nova",                                "Exit", aliases=("exit", "q")),
+    CommandDef("quit", "Exit Nova", "Exit", aliases=("exit", "q")),
 ]
 
 
@@ -115,7 +124,7 @@ class SlashCompleter(Completer):
                         hint = f" {cmd.args_hint}" if cmd.args_hint else ""
                         display_text = f"/{name}{hint}"
                         yield Completion(
-                            name[len(cmd_part):],
+                            name[len(cmd_part) :],
                             display=display_text,
                             display_meta=cmd.description,
                         )
@@ -127,6 +136,6 @@ class SlashCompleter(Completer):
                 for sub in resolved.subcommands:
                     if sub.startswith(sub_part):
                         yield Completion(
-                            sub[len(sub_part):],
+                            sub[len(sub_part) :],
                             display=sub,
                         )

@@ -14,7 +14,9 @@ from nova.agent import NovaAgent
 from nova.tools.registry import discover_builtin_tools
 
 
-def make_mock_response(status_code: int = 200, json_data: dict | None = None, text: str | None = None) -> MagicMock:
+def make_mock_response(
+    status_code: int = 200, json_data: dict | None = None, text: str | None = None
+) -> MagicMock:
     """Create a generic mock httpx.Response."""
     if json_data is None:
         json_data = {}
@@ -24,7 +26,6 @@ def make_mock_response(status_code: int = 200, json_data: dict | None = None, te
     resp.text = text or json.dumps(json_data)
     resp.headers = {}
     return resp
-
 
 
 def test_agent_creation_with_injected_deps(minimal_config, mock_session_store, mock_http_client):
@@ -83,12 +84,14 @@ def test_agent_loads_existing_session(minimal_config, mock_session_store, mock_h
 def test_agent_run_no_tool_calls(minimal_config, mock_session_store, mock_http_client):
     """Test a simple run with no tool calls from the model."""
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "The answer is 42.",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "The answer is 42.",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = make_mock_response(200, llm_response)
 
@@ -114,28 +117,34 @@ def test_agent_run_with_tool_call(minimal_config, mock_session_store, mock_http_
 
     # First response: tool call, second response: final answer
     tool_call_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{
-                    "id": "call_123",
-                    "type": "function",
-                    "function": {
-                        "name": "terminal",
-                        "arguments": json.dumps({"command": "echo hello"}),
-                    },
-                }],
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_123",
+                            "type": "function",
+                            "function": {
+                                "name": "terminal",
+                                "arguments": json.dumps({"command": "echo hello"}),
+                            },
+                        }
+                    ],
+                }
             }
-        }]
+        ]
     }
     final_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "The command output was: hello",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "The command output was: hello",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.side_effect = [
         make_mock_response(200, tool_call_response),
@@ -159,12 +168,14 @@ def test_agent_history_truncation(minimal_config, mock_session_store, mock_http_
     minimal_config["budgets"]["conversation_turn_limit"] = 2  # Very small limit for testing
 
     llm_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": "OK",
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "OK",
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = make_mock_response(200, llm_response)
 
@@ -229,7 +240,9 @@ def test_agent_execute_tool_call_unknown_tool(minimal_config, mock_session_store
     assert "Error" in result
 
 
-def test_agent_build_system_prompt_with_memory(minimal_config, mock_session_store, mock_http_client, mock_memory_store):
+def test_agent_build_system_prompt_with_memory(
+    minimal_config, mock_session_store, mock_http_client, mock_memory_store
+):
     """Test that system prompt includes memory content when memory is enabled."""
     minimal_config["memory"]["enabled"] = True
 
@@ -248,7 +261,9 @@ def test_agent_build_system_prompt_with_memory(minimal_config, mock_session_stor
     assert "dark mode" in agent._system_prompt
 
 
-def test_agent_refresh_system_prompt(minimal_config, mock_session_store, mock_http_client, mock_memory_store):
+def test_agent_refresh_system_prompt(
+    minimal_config, mock_session_store, mock_http_client, mock_memory_store
+):
     """Test that _refresh_system_prompt updates the prompt and session."""
     minimal_config["memory"]["enabled"] = True
 
@@ -278,20 +293,24 @@ def test_agent_max_iterations_limit(minimal_config, mock_session_store, mock_htt
 
     # Always return a tool call — should stop after 2 iterations
     tool_call_response = {
-        "choices": [{
-            "message": {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{
-                    "id": "call_loop",
-                    "type": "function",
-                    "function": {
-                        "name": "terminal",
-                        "arguments": json.dumps({"command": "echo test"}),
-                    },
-                }],
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_loop",
+                            "type": "function",
+                            "function": {
+                                "name": "terminal",
+                                "arguments": json.dumps({"command": "echo test"}),
+                            },
+                        }
+                    ],
+                }
             }
-        }]
+        ]
     }
     mock_http_client.post.return_value = make_mock_response(200, tool_call_response)
 
@@ -350,7 +369,9 @@ def test_agent_is_not_leaf_below_max_depth(delegation_config, mock_http_client, 
     assert agent.is_leaf_agent is False
 
 
-def test_agent_prompt_mode_respected_for_subagent(delegation_config, mock_http_client, mock_session_store):
+def test_agent_prompt_mode_respected_for_subagent(
+    delegation_config, mock_http_client, mock_session_store
+):
     """Sub-agent config with _prompt_mode='minimal' should produce a minimal prompt."""
     delegation_config["_subagent_depth"] = 1
     delegation_config["_prompt_mode"] = "minimal"

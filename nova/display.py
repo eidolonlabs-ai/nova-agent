@@ -116,12 +116,14 @@ def extract_reasoning_blocks(text: str) -> list[dict[str, str | int]]:
             text,
             flags=re.DOTALL | re.IGNORECASE,
         ):
-            blocks.append({
-                "tag": tag,
-                "content": match.group(1).strip(),
-                "start": match.start(),
-                "end": match.end(),
-            })
+            blocks.append(
+                {
+                    "tag": tag,
+                    "content": match.group(1).strip(),
+                    "start": match.start(),
+                    "end": match.end(),
+                }
+            )
     # Sort by position
     blocks.sort(key=lambda b: b["start"])  # type: ignore[arg-type]
     return blocks
@@ -152,15 +154,38 @@ def split_reasoning_and_response(text: str) -> tuple[list[dict[str, str | int]],
 _SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
 KAWAII_FACES = [
-    "(｡◕‿◕｡)", "( ˘▽˘)っ", "(◕ᴗ◕)", "(✿◠◠)", "٩(◕‿◕｡)۶",
-    "ヾ(＾∇＾)", "(≧◡≦)", "♪(´ε` )", "(★ω★)", "ヽ(>∀<☆)☆",
-    "(´·_·`)", "(¬‿¬)", "( •_•)>⌐■-■", "(⌐■_■)", "٩(๑❛ᴗ❛๑)۶",
+    "(｡◕‿◕｡)",
+    "( ˘▽˘)っ",
+    "(◕ᴗ◕)",
+    "(✿◠◠)",
+    "٩(◕‿◕｡)۶",
+    "ヾ(＾∇＾)",
+    "(≧◡≦)",
+    "♪(´ε` )",
+    "(★ω★)",
+    "ヽ(>∀<☆)☆",
+    "(´·_·`)",
+    "(¬‿¬)",
+    "( •_•)>⌐■-■",
+    "(⌐■_■)",
+    "٩(๑❛ᴗ❛๑)۶",
 ]
 
 THINKING_VERBS = [
-    "pondering", "contemplating", "musing", "cogitating", "ruminating",
-    "deliberating", "mulling", "reflecting", "processing", "reasoning",
-    "analyzing", "computing", "synthesizing", "formulating",
+    "pondering",
+    "contemplating",
+    "musing",
+    "cogitating",
+    "ruminating",
+    "deliberating",
+    "mulling",
+    "reflecting",
+    "processing",
+    "reasoning",
+    "analyzing",
+    "computing",
+    "synthesizing",
+    "formulating",
 ]
 
 
@@ -181,14 +206,14 @@ class NovaTUI:
         self.context_window = context_window
         self.context_tokens = 0
         self.session_start = time.monotonic()
-        self._agent_running = threading.Event()   # thread-safe flag
+        self._agent_running = threading.Event()  # thread-safe flag
         self._interrupt_requested = threading.Event()  # Ctrl+C → cancel agent
-        self._last_ctrl_c_time: float = 0.0           # for double Ctrl+C force-exit
+        self._last_ctrl_c_time: float = 0.0  # for double Ctrl+C force-exit
         self._spinner_frame = 0
         self._spinner_verb_idx = 0
-        self._app: Any | None = None          # prompt_toolkit Application
+        self._app: Any | None = None  # prompt_toolkit Application
         self._should_exit = threading.Event()  # thread-safe exit flag
-        self._last_invalidate: float = 0.0    # throttle repaint calls
+        self._last_invalidate: float = 0.0  # throttle repaint calls
 
     # ── Status bar fragments (called on every repaint) ────────────────────────
 
@@ -223,13 +248,18 @@ class NovaTUI:
                 return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 
             bar_style = (
-                "class:status-bar-critical" if pct >= 90
-                else "class:status-bar-warn" if pct >= 70
+                "class:status-bar-critical"
+                if pct >= 90
+                else "class:status-bar-warn"
+                if pct >= 70
                 else "class:status-bar-good"
             )
             frags += [
                 ("class:status-bar-dim", " │ "),
-                ("class:status-bar-dim", f"{_fmt(self.context_tokens)}/{_fmt(self.context_window)}"),
+                (
+                    "class:status-bar-dim",
+                    f"{_fmt(self.context_tokens)}/{_fmt(self.context_window)}",
+                ),
                 ("class:status-bar-dim", " │ "),
                 (bar_style, f"[{bar}]"),
                 ("class:status-bar-dim", f" {pct}%"),
@@ -274,16 +304,18 @@ class NovaTUI:
 
         from nova.commands import SlashCompleter, get_commands_by_category, resolve_command
 
-        style = Style.from_dict({
-            "prompt":               "#00D4FF bold",
-            "input-area":          "#ffffff",
-            "status-bar":          "bg:#1a1a2e #888888",
-            "status-bar-strong":   "bg:#1a1a2e #00D4FF bold",
-            "status-bar-dim":      "bg:#1a1a2e #555555",
-            "status-bar-good":     "bg:#1a1a2e #00AA00 bold",
-            "status-bar-warn":     "bg:#1a1a2e #FFD700 bold",
-            "status-bar-critical": "bg:#1a1a2e #FF4444 bold",
-        })
+        style = Style.from_dict(
+            {
+                "prompt": "#00D4FF bold",
+                "input-area": "#ffffff",
+                "status-bar": "bg:#1a1a2e #888888",
+                "status-bar-strong": "bg:#1a1a2e #00D4FF bold",
+                "status-bar-dim": "bg:#1a1a2e #555555",
+                "status-bar-good": "bg:#1a1a2e #00AA00 bold",
+                "status-bar-warn": "bg:#1a1a2e #FFD700 bold",
+                "status-bar-critical": "bg:#1a1a2e #FF4444 bold",
+            }
+        )
 
         # ── Input queue (agent thread reads from this) ────────────────────────
         _input_queue: queue.Queue[str] = queue.Queue()
@@ -362,11 +394,13 @@ class NovaTUI:
         completions_menu = CompletionsMenu(max_height=12, scroll_offset=1)
 
         layout = Layout(
-            HSplit([
-                input_area,
-                status_bar,
-                completions_menu,
-            ]),
+            HSplit(
+                [
+                    input_area,
+                    status_bar,
+                    completions_menu,
+                ]
+            ),
             focused_element=input_area,
         )
 
@@ -387,8 +421,7 @@ class NovaTUI:
                 _cprint(f"\n{_DIM}{cat}{_RST}")
                 for cmd in cmds:
                     aliases = (
-                        f"  [{', '.join('/' + a for a in cmd.aliases)}]"
-                        if cmd.aliases else ""
+                        f"  [{', '.join('/' + a for a in cmd.aliases)}]" if cmd.aliases else ""
                     )
                     hint = f" {cmd.args_hint}" if cmd.args_hint else ""
                     _cprint(
@@ -399,6 +432,7 @@ class NovaTUI:
         # ── Spinner thread ────────────────────────────────────────────────────
         def _spinner_loop() -> None:
             import random
+
             verb_indices = list(range(len(THINKING_VERBS)))
             random.shuffle(verb_indices)
             vi = 0
@@ -443,6 +477,7 @@ class NovaTUI:
                         continue
                     if cmd_def.name == "clear":
                         import subprocess
+
                         subprocess.run(["clear"], check=False)
                         continue
                     # All other slash commands → agent (with user echo)
@@ -490,25 +525,45 @@ class NovaTUI:
 
 # Keep old names as stubs so existing imports don't break
 class FooterSpinner:
-    def __init__(self, *a, **kw): pass
-    def start(self): pass
-    def stop(self): pass
+    def __init__(self, *a, **kw):
+        pass
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
 
 KawaiiSpinner = FooterSpinner
 
 
 # ─── ANSI helpers ────────────────────────────────────────────────────────────
 
-_RST   = "\033[0m"
-_DIM   = "\033[2m"           # dim grey for thinking/meta text
-_CYAN  = "\033[36m"          # user prompt / accent colour
-_GOLD  = "\033[38;2;255;215;0m"   # warm gold for assistant response (matches Hermes)
-_BOLD  = "\033[1m"
+_RST = "\033[0m"
+_DIM = "\033[2m"  # dim grey for thinking/meta text
+_CYAN = "\033[36m"  # user prompt / accent colour
+_GOLD = "\033[38;2;255;215;0m"  # warm gold for assistant response (matches Hermes)
+_BOLD = "\033[1m"
 
 # ─── Streaming display ───────────────────────────────────────────────────────
 
-_OPEN_TAGS  = ("<REASONING_SCRATCHPAD>", "<think>", "<reasoning>", "<THINKING>", "<thinking>", "<thought>")
-_CLOSE_TAGS = ("</REASONING_SCRATCHPAD>", "</think>", "</reasoning>", "</THINKING>", "</thinking>", "</thought>")
+_OPEN_TAGS = (
+    "<REASONING_SCRATCHPAD>",
+    "<think>",
+    "<reasoning>",
+    "<THINKING>",
+    "<thinking>",
+    "<thought>",
+)
+_CLOSE_TAGS = (
+    "</REASONING_SCRATCHPAD>",
+    "</think>",
+    "</reasoning>",
+    "</THINKING>",
+    "</thinking>",
+    "</thought>",
+)
 
 
 def _cprint(text: str) -> None:
@@ -523,6 +578,7 @@ def _cprint(text: str) -> None:
     try:
         from prompt_toolkit import print_formatted_text as _pt_print
         from prompt_toolkit.formatted_text import ANSI as _PT_ANSI
+
         _pt_print(_PT_ANSI(text))
     except Exception:
         try:
@@ -546,8 +602,8 @@ class StreamingReasoningBox:
     def __init__(self, console=None):  # console kept for compat, unused
         self._reasoning_tokens = 0
         self._reasoning_lines: list[str] = []
-        self._reasoning_buf = ""       # partial line buffer for reasoning
-        self._response_buf = ""        # partial line buffer for response
+        self._reasoning_buf = ""  # partial line buffer for reasoning
+        self._response_buf = ""  # partial line buffer for response
         self._reasoning_opened = False
         self._response_opened = False
         self._in_reasoning = False
@@ -579,6 +635,7 @@ class StreamingReasoningBox:
         # Wrap text to terminal width like Hermes
         try:
             import textwrap
+
             w = shutil.get_terminal_size().columns
             wrap_w = max(40, w - 6)  # account for "  └─ " prefix
             wrapped: list[str] = []
@@ -633,7 +690,7 @@ class StreamingReasoningBox:
         last_nl = preceding.rfind("\n")
         if last_nl == -1:
             return self._last_was_newline and preceding.strip() == ""
-        return preceding[last_nl + 1:].strip() == ""
+        return preceding[last_nl + 1 :].strip() == ""
 
     def feed(self, text: str) -> str:
         if not text:
@@ -651,7 +708,7 @@ class StreamingReasoningBox:
                     self._emit_response(preceding)
                     self._last_was_newline = preceding.endswith("\n")
                 self._in_reasoning = True
-                self._prefilt_buf = self._prefilt_buf[idx + len(tag):]
+                self._prefilt_buf = self._prefilt_buf[idx + len(tag) :]
                 break
             else:
                 safe = self._prefilt_buf
@@ -663,7 +720,7 @@ class StreamingReasoningBox:
                 if safe:
                     self._emit_response(safe)
                     self._last_was_newline = safe.endswith("\n")
-                    self._prefilt_buf = self._prefilt_buf[len(safe):]
+                    self._prefilt_buf = self._prefilt_buf[len(safe) :]
                 return ""
 
         for tag in _CLOSE_TAGS:
@@ -673,7 +730,7 @@ class StreamingReasoningBox:
                 inner = self._prefilt_buf[:idx]
                 if inner:
                     self._emit_reasoning(inner)
-                after = self._prefilt_buf[idx + len(tag):]
+                after = self._prefilt_buf[idx + len(tag) :]
                 self._prefilt_buf = ""
                 if after:
                     return self.feed(after)
@@ -732,8 +789,10 @@ def print_tool_calls(tool_names: list[str]) -> None:
 
 # ─── Footer / Status Bar ────────────────────────────────────────────────────
 
-def print_footer(console, model: str, elapsed: float,
-                 context_tokens: int = 0, context_window: int = 0) -> None:
+
+def print_footer(
+    console, model: str, elapsed: float, context_tokens: int = 0, context_window: int = 0
+) -> None:
     """Print Hermes-style status footer: – ready | model | ctx | bar | elapsed"""
     model_short = model.split("/")[-1] if "/" in model else model
 
@@ -748,9 +807,11 @@ def print_footer(console, model: str, elapsed: float,
         bar_w = 14
         filled = round((pct / 100) * bar_w)
         bar = "█" * filled + "░" * (bar_w - filled)
+
         # Format like Hermes: 15.5k/128k
         def _fmt(n: int) -> str:
             return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
+
         parts.append(f"{_fmt(context_tokens)}/{_fmt(context_window)}")
         parts.append(f"[{bar}] {pct}%")
 

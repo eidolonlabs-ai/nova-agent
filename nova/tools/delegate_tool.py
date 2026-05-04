@@ -153,7 +153,8 @@ def _run_subagent(
     # Build sub-agent config
     delegation_cfg = parent_agent.config.get("delegation", {})
     max_iterations = delegation_cfg.get("subagent_budgets", {}).get(
-        "max_iterations", DEFAULT_MAX_ITERATIONS,
+        "max_iterations",
+        DEFAULT_MAX_ITERATIONS,
     )
     subagent_config = _build_subagent_config(
         parent_config=parent_agent.config,
@@ -207,7 +208,9 @@ def _run_subagent(
         tool_msgs = sum(1 for m in subagent.messages if m.get("role") == "tool")
         logger.info(
             "%s completed in %.1fs, ~%d tool calls",
-            log_prefix, elapsed, tool_msgs,
+            log_prefix,
+            elapsed,
+            tool_msgs,
         )
 
         usage_data = _extract_cost_data(subagent)
@@ -241,7 +244,6 @@ def _run_subagent(
         }
 
 
-
 def _delegate_task(args: dict[str, Any], **kwargs) -> str:
     """Handler for the delegate_task tool."""
     agent = kwargs.get("agent")
@@ -257,7 +259,8 @@ def _delegate_task(args: dict[str, Any], **kwargs) -> str:
     context_mode = args.get("context_mode", "isolated")
     # Read default timeout from config, fall back to module constant
     config_default_timeout = agent.config.get("delegation", {}).get(
-        "default_timeout_seconds", DEFAULT_TIMEOUT_SECONDS,
+        "default_timeout_seconds",
+        DEFAULT_TIMEOUT_SECONDS,
     )
     timeout_seconds = min(
         int(args.get("timeout_seconds", config_default_timeout)),
@@ -272,13 +275,15 @@ def _delegate_task(args: dict[str, Any], **kwargs) -> str:
     depth = getattr(agent, "depth", 0)
     max_spawn_depth = agent.config.get("delegation", {}).get("max_spawn_depth", 2)
     if depth >= max_spawn_depth:
-        return json.dumps({
-            "success": False,
-            "error": (
-                f"Cannot spawn sub-agent: already at max depth ({depth}/{max_spawn_depth}). "
-                "This agent is a leaf and cannot delegate further."
-            ),
-        })
+        return json.dumps(
+            {
+                "success": False,
+                "error": (
+                    f"Cannot spawn sub-agent: already at max depth ({depth}/{max_spawn_depth}). "
+                    "This agent is a leaf and cannot delegate further."
+                ),
+            }
+        )
 
     # Run sub-agent in worker thread with hard timeout
     with ThreadPoolExecutor(max_workers=1) as executor:
@@ -338,7 +343,8 @@ def register_delegate_tool(agent_config: dict | None = None) -> None:
     if depth >= max_depth:
         logger.debug(
             "Agent at depth %d >= max_spawn_depth %d — skipping delegate_task (leaf agent)",
-            depth, max_depth,
+            depth,
+            max_depth,
         )
         return
 

@@ -102,8 +102,7 @@ def test_prompt_budget_enforcement():
 
     # Add a lot of memory content
     memory_content = "## Memories\n" + "\n".join(
-        f"- Fact number {i}: This is a detailed fact about something."
-        for i in range(100)
+        f"- Fact number {i}: This is a detailed fact about something." for i in range(100)
     )
 
     result = build_system_prompt(config, mode="minimal", memory_content=memory_content)
@@ -146,6 +145,7 @@ def test_prompt_includes_date_and_model():
 # ---------------------------------------------------------------------------
 # Delegation prompt tests
 # ---------------------------------------------------------------------------
+
 
 def _delegation_config(depth: int = 0, max_spawn_depth: int = 2) -> dict:
     """Config with delegation enabled."""
