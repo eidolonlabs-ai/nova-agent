@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 import pytest
 
@@ -62,7 +61,7 @@ class TestListFiles:
         })
         # Should show at most 1 file
         lines = result.split("\n")
-        file_lines = [l for l in lines if l.strip().endswith(".py")]
+        file_lines = [line for line in lines if line.strip().endswith(".py")]
         assert len(file_lines) <= 1
 
     def test_list_absolute_paths(self, temp_project):
