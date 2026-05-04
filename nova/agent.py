@@ -442,6 +442,7 @@ class NovaAgent:
                 arguments,
                 config=self.config,
                 memory=self.memory,
+                session_store=self.session_store,
                 agent=self,
             )
 
