@@ -62,6 +62,7 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | `file-editing` | development | ✅ Active | Safe file editing patterns, verification steps |
 | `code-review` | development | ✅ Active | Code review conventions and checklists |
 | `documentation-template-builder` | development | ✅ Active | Generate docs in ai-companions style (README, Roadmap, Spec, ADR, etc.) |
+| `nova-development` | development | ✅ Active | Tool system, permissions, hooks, testing patterns, config, architecture, and CI |
 
 ---
 
@@ -72,9 +73,9 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | Guides (GUIDE-NNN) | 8 | ✅ All current |
 | ADRs (ADR-NNN) | 3 | ✅ All current |
 | Reports (REPORT-NNN) | 1 | ✅ Current |
-| Starter skills | 5 | ✅ All current |
+| Starter skills | 6 | ✅ All current |
 | Root docs (README, CONTRIBUTING, SECURITY) | 3 | ✅ All current |
-| **Total** | **20** | ✅ |
+| **Total** | **21** | ✅ |
 
 ---
 

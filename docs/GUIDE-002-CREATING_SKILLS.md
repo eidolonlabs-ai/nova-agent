@@ -370,7 +370,7 @@ Or ask Nova: *"Delete the my-skill skill."*
 
 ## Starter Skills
 
-Nova ships with 5 starter skills. Copy them to your Nova home:
+Nova ships with 6 starter skills. Copy them to your Nova home:
 
 ```bash
 cp -r config/skills/* ~/.nova/skills/
@@ -383,6 +383,7 @@ cp -r config/skills/* ~/.nova/skills/
 | `file-editing` | development | ✅ Active | Safe file editing patterns, verification steps |
 | `code-review` | development | ✅ Active | Code review conventions and checklists |
 | `documentation-template-builder` | development | ✅ Active | Generate docs in ai-companions style |
+| `nova-development` | development | ✅ Active | Tool system, permissions, hooks, testing patterns, config, architecture |
 
 ---
 

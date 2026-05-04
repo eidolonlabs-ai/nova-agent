@@ -22,7 +22,7 @@ For nova-agent, also verify the CI invariants manually if CI is not available:
 ```bash
 ruff check .                   # must be clean
 mypy nova/                     # must be 0 errors
-pytest                         # all 557 tests must pass
+pytest                         # all 596 tests must pass
 ```
 
 ## What to Check

@@ -62,6 +62,15 @@ pytest tests/test_foo.py::test_bar -v
 pytest -k "search" -v
 ```
 
+## Code Style
+
+- **No comments by default** — only add one when the *why* is non-obvious (hidden constraint, subtle invariant, workaround for a specific bug). If removing the comment wouldn't confuse a future reader, don't write it.
+- **No docstrings** — avoid unless a framework requires them. Never write multi-line docstring blocks; one short line is the maximum.
+- **Don't explain what code does** — well-named identifiers do that. Don't write `# increment counter` above `count += 1`.
+- **Scope discipline** — don't add features, refactor, or introduce abstractions beyond what the task requires. Three similar lines is better than a premature abstraction.
+- **Delete unused code** — don't rename to `_unused_x` or add `# removed` comments. Just delete it.
+- **No error handling for things that can't happen** — only validate at system boundaries (user input, external APIs). Trust internal code and framework guarantees.
+
 ## Error Handling
 
 - Catch specific exceptions, not bare `except Exception`
