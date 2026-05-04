@@ -29,7 +29,8 @@
 | [GUIDE-005-COST_TRACKING](GUIDE-005-COST_TRACKING.md) | ✅ Active | Token usage, dollar cost estimation, per-model pricing |
 | [GUIDE-006-HOOKS](GUIDE-006-HOOKS.md) | ✅ Active | Lifecycle callbacks: pre/post tool call, LLM call, session |
 | [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md) | ✅ Active | Connect stdio, HTTP, and SSE Model Context Protocol servers |
-| [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) | ✅ Active | Defense-in-depth cascade, allow/deny lists, path rules |
+| [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) | ✅ Active | Defense-in-depth cascade, allow/deny lists, path rules, opinionated profiles |
+| [GUIDE-009-USING_NOVA](GUIDE-009-USING_NOVA.md) | ✅ Active | Effective use patterns: task descriptions, sessions, memory, tools |
 
 ---
 
@@ -62,7 +63,8 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | `file-editing` | development | ✅ Active | Safe file editing patterns, verification steps |
 | `code-review` | development | ✅ Active | Code review conventions and checklists |
 | `documentation-template-builder` | development | ✅ Active | Generate docs in ai-companions style (README, Roadmap, Spec, ADR, etc.) |
-| `nova-development` | development | ✅ Active | Tool system, permissions, hooks, testing patterns, config, architecture, and CI |
+| `nova-development` | development | ✅ Active | Tool system, permissions, hooks, delegation, testing patterns, config, CI |
+| `nova-debugging` | development | ✅ Active | Loops, hallucinations, context drift, tool failures, permission issues |
 
 ---
 
@@ -70,12 +72,12 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Guides (GUIDE-NNN) | 8 | ✅ All current |
+| Guides (GUIDE-NNN) | 9 | ✅ All current |
 | ADRs (ADR-NNN) | 3 | ✅ All current |
 | Reports (REPORT-NNN) | 1 | ✅ Current |
-| Starter skills | 6 | ✅ All current |
+| Starter skills | 7 | ✅ All current |
 | Root docs (README, CONTRIBUTING, SECURITY) | 3 | ✅ All current |
-| **Total** | **21** | ✅ |
+| **Total** | **23** | ✅ |
 
 ---
 

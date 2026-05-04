@@ -110,6 +110,76 @@ permissions:
 
 ---
 
+## Opinionated Profiles
+
+Three ready-to-use configs for common situations.
+
+### Developer workstation — trust the agent, move fast
+
+```yaml
+permissions:
+  mode: "auto"
+  denied_tools: []
+  denied_commands:
+    - "rm -rf /"
+    - "rm -rf /*"
+    - ":(){*};:*"
+    - "mkfs*"
+    - "shutdown*"
+    - "reboot*"
+```
+
+All tools run without confirmation. Catastrophic shell commands are blocked. Good for a personal dev machine where you're watching the session.
+
+### Shared or sensitive environment — confirm before writing
+
+```yaml
+permissions:
+  mode: "ask"
+  denied_tools: []
+  allowed_tools:
+    - "read_file"
+    - "search_files"
+    - "web_search"
+    - "skills_list"
+    - "skill_view"
+  denied_commands:
+    - "rm -rf /"
+    - "rm -rf /*"
+    - ":(){*};:*"
+    - "mkfs*"
+    - "shutdown*"
+    - "curl *"
+    - "wget *"
+  path_rules:
+    - pattern: "/etc/*"
+      allow: false
+    - pattern: "/var/*"
+      allow: false
+```
+
+Read-only tools run freely. Anything that writes, executes, or modifies requires confirmation. Network commands blocked.
+
+### Read-only audit — no writes at all
+
+```yaml
+permissions:
+  mode: "auto"
+  denied_tools:
+    - "terminal"
+    - "write_file"
+    - "patch_file"
+    - "skill_manage"
+    - "memory"
+    - "delegate_task"
+    - "task_create"
+    - "task_stop"
+```
+
+Nova can read, search, and answer questions but cannot modify anything. Useful for code review sessions, audits, or onboarding.
+
+---
+
 ## Related Documentation
 
 | Document | Purpose |

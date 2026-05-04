@@ -181,6 +181,58 @@ def test_agent_something(minimal_config, mock_session_store):
 
 Use `conftest.py` fixtures (`minimal_config`, `mock_session_store`) — they're already defined.
 
+## Delegation Patterns
+
+### When to delegate
+
+- **Parallel independent tasks** — two tasks with no dependency between them
+- **Isolated focus** — a task that needs its own context without the parent conversation's noise
+- **Long subtasks** — a step that takes many tool calls and would bloat the parent context window
+
+### When NOT to delegate
+
+- **Simple or fast tasks** — delegation overhead (spawn, timeout, context) isn't worth it for 2–3 tool calls
+- **Sequential dependencies** — if task B needs task A's output, don't parallelize
+- **Tasks needing parent context** — unless you use `context_mode: "fork"`
+
+### Writing effective sub-agent task descriptions
+
+Sub-agents start with an empty conversation. The task must be fully self-contained — no references to "earlier" or "what we discussed":
+
+```
+# ❌ Assumes context the sub-agent doesn't have
+"Fix the bug we just discussed in the file"
+
+# ✅ Self-contained
+"In nova/tools/file_ops.py, the _read_file handler returns None instead of
+an error string when the file exceeds the size limit. Fix it to return
+'Error: file exceeds 100KB limit' when len(content) > 102400. The handler
+signature is _read_file(args: dict, **kwargs) -> str."
+```
+
+Include: exact file/function, what the problem is, what the expected behavior should be.
+
+### Context mode
+
+- `isolated` (default) — sub-agent starts fresh. Best for most cases.
+- `fork` — sub-agent inherits the parent transcript. Use only when the sub-agent genuinely needs conversational history to do its job.
+
+### Config reference
+
+```yaml
+delegation:
+  enabled: true
+  max_spawn_depth: 2              # root → child → leaf (leaf cannot delegate)
+  default_timeout_seconds: 60     # increase for long tasks (max 300)
+  subagent_budgets:
+    max_iterations: 30
+```
+
+Use a cheaper model for leaf/simple sub-tasks by specifying the model in the task:
+```
+delegate_task(task="...", model="qwen/qwen3.6-flash", timeout_seconds=120)
+```
+
 ## Permission System
 
 The agent checks permissions automatically at dispatch. Tools with file paths or commands can also call the checker directly:
