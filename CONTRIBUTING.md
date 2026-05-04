@@ -27,7 +27,7 @@ All contributions must pass:
 
 - **Linting**: `ruff check .` — no errors
 - **Type checking**: `mypy nova/` — 0 errors in all files
-- **Tests**: `pytest` — all tests must pass (currently 101)
+- **Tests**: `pytest` — all tests must pass (currently 557)
 
 Run the full CI check before submitting:
 

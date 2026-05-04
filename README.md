@@ -314,7 +314,7 @@ pip install mypy
 # Run all checks
 ruff check .          # Lint
 mypy nova/            # Type check
-pytest                # Tests (302 passing)
+pytest                # Tests (557 passing)
 
 # Full CI check
 ruff check . && mypy nova/ && pytest
