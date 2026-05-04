@@ -12,7 +12,7 @@
 
 ```bash
 # Full CI check (must pass before submitting PR)
-ruff check . && mypy nova/ && pytest
+ruff check . && ruff format --check . && mypy nova/ && pytest
 
 # Run a single test file
 pytest tests/test_agent.py -v
@@ -44,13 +44,14 @@ ruff check . && mypy nova/ && pytest
 All contributions must pass:
 
 - **Linting**: `ruff check .` — no errors
+- **Formatting**: `ruff format --check .` — no diffs
 - **Type checking**: `mypy nova/` — 0 errors in all files
-- **Tests**: `pytest` — all tests must pass (currently 596)
+- **Tests**: `pytest` — all tests must pass (currently 596), coverage ≥ 70%
 
 Run the full CI check before submitting:
 
 ```bash
-ruff check . && mypy nova/ && pytest
+ruff check . && ruff format --check . && mypy nova/ && pytest
 ```
 
 ## Testing

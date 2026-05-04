@@ -29,7 +29,7 @@ feat: add semantic symbol search tool
 fix: handle empty context files gracefully
 test: expand CLI coverage to 82%
 refactor: extract token budget logic into tokens.py
-docs: update test counts to reflect 557 tests
+docs: update test counts to reflect 596 tests
 ```
 
 ## Pre-Commit Checklist
@@ -37,7 +37,7 @@ docs: update test counts to reflect 557 tests
 Always run the full CI check before committing:
 
 ```bash
-ruff check . && mypy nova/ && pytest
+ruff check . && ruff format --check . && mypy nova/ && pytest
 ```
 
 If any step fails, fix it before committing. Never commit broken code.
@@ -46,7 +46,7 @@ If any step fails, fix it before committing. Never commit broken code.
 
 1. `git status` — understand current state
 2. Make changes
-3. `ruff check . && mypy nova/ && pytest` — full CI check must pass
+3. `ruff check . && ruff format --check . && mypy nova/ && pytest` — full CI check must pass
 4. `git diff --staged` — review exactly what you're committing
 5. `git add <specific files>` — stage intentionally, never `git add .`
 6. `git commit -m "type: subject"` — follow conventional commits
@@ -71,8 +71,11 @@ gh pr create --title "feat: add X" --body "$(cat <<'EOF'
 - What changed and why
 
 ## Test plan
-- [ ] All 557 tests pass
-- [ ] ruff and mypy clean
+- [ ] All 596 tests pass (`pytest`)
+- [ ] Lint clean (`ruff check .`)
+- [ ] Format clean (`ruff format --check .`)
+- [ ] Types clean (`mypy nova/`)
+- [ ] No CVEs (`pip-audit`)
 EOF
 )"
 

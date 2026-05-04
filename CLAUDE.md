@@ -55,6 +55,8 @@ pip install -e ".[dev]"
 # Linting & formatting
 ruff check .              # Check for issues
 ruff check --fix .        # Auto-fix
+ruff format .             # Format code
+ruff format --check .     # Check formatting (CI)
 
 # Type checking
 mypy nova/
@@ -64,8 +66,11 @@ pytest                    # Run all tests
 pytest -v                 # Verbose output
 pytest --cov=nova         # Coverage report
 
+# Security scan
+pip-audit                 # Check for CVEs in dependencies
+
 # Full CI check
-ruff check . && mypy nova/ && pytest
+ruff check . && ruff format --check . && mypy nova/ && pytest
 ```
 
 ### Running the Agent
@@ -106,15 +111,15 @@ nova reset                # Reset session state
 
 - Tests use `pytest` with fixtures in `conftest.py`
 - Mock HTTP client, session store, and memory store for isolation
-- Full CI check: `ruff check . && mypy nova/ && pytest`
-- Coverage target: 80%+ for new code
+- Full CI check: `ruff check . && ruff format --check . && mypy nova/ && pytest`
+- Coverage minimum: 70% (enforced by CI); target 80%+ for new code
 
 ## Current Status
 
 ✅ All 596 tests passing  
 ✅ Linting clean (ruff)  
 ✅ Type checking clean (mypy)  
-✅ Coverage: 75.69% (exceeds 60% requirement)
+✅ Coverage: 75.69% (exceeds 70% minimum)
 ✅ CLI functional (chat, ask, sessions, reset)  
 ✅ 10+ tools available (terminal, read_file, write_file, patch_file, search_files, web_search, skills_list, skill_view, skill_manage, memory, git, http_client, etc.)
 

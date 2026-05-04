@@ -6,19 +6,63 @@ description: Working on the nova-agent codebase — tool system, permissions, ho
 
 # Nova Development
 
+## Development Loop
+
+Complete flow for any change — follow this order every time:
+
+```bash
+# 1. Branch (skip for minor fixes directly on main)
+git checkout -b feat/short-description   # or fix/, docs/, test/, refactor/
+
+# 2. Write code
+#    Follow python-coding conventions (type hints, no unnecessary comments)
+#    Keep the change scoped — don't refactor adjacent code
+
+# 3. Write or update tests
+#    New features need tests; bug fixes need a regression test
+.venv/bin/pytest tests/test_affected.py -v   # run affected tests as you go
+
+# 4. Full CI check — must be green before committing
+.venv/bin/ruff check . && ruff format --check . && .venv/bin/mypy nova/ && .venv/bin/pytest
+
+# 5. Fix any failures before proceeding
+#    ruff:   .venv/bin/ruff check --fix . && ruff format .
+#    mypy:   fix type errors in source, not with `type: ignore` casts
+#    pytest: fix failing tests, never delete or skip them
+
+# 6. Stage specific files and commit
+git add nova/specific_file.py tests/test_specific.py
+git commit -m "feat: short description"   # conventional commit
+
+# 7. Push and open PR
+git push -u origin HEAD
+gh pr create --title "feat: short description" --body "..."
+```
+
+**Rules:**
+- Never commit with failing CI — fix first, then commit
+- Never `git add .` — always stage specific files
+- One logical change per commit; don't mix feat + fix
+
 ## CI Commands
 
 Always use `.venv/bin/` — never global python3 or pytest.
 
 ```bash
 # Full CI check — must pass before any commit
-.venv/bin/ruff check . && .venv/bin/mypy nova/ && .venv/bin/pytest
+.venv/bin/ruff check . && ruff format --check . && .venv/bin/mypy nova/ && .venv/bin/pytest
+
+# Fix lint + format in one shot
+.venv/bin/ruff check --fix . && ruff format .
 
 # Quick smoke (stop on first failure)
 .venv/bin/pytest -x -q
 
 # Coverage report
 .venv/bin/pytest --cov=nova --cov-report=term-missing
+
+# Security scan
+pip-audit
 
 # Single file
 .venv/bin/pytest tests/test_tools.py -v
