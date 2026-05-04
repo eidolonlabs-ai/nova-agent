@@ -79,11 +79,11 @@ nova reset                # Reset session state
 
 ## Code Quality Standards
 
-**Type hints:** All public functions require type annotations. Verify with `mypy nova/` (0 errors in 20 files).
+**Type hints:** All public functions require type annotations. Verify with `mypy nova/` (0 errors in 36 source files).
 
 **Linting:** Code must pass `ruff check .` with no errors.
 
-**Tests:** All 557 tests must pass.
+**Tests:** All 596 tests must pass.
 - Test coverage baseline: CLI 82%, sessions/file_ops 91–100%
 - Use dependency injection: pass mock `http_client`, `session_store`, and `memory_store` to `NovaAgent`
 - Test files live in `tests/` with names matching source modules (e.g., `tests/test_agent.py` for `nova/agent.py`)
@@ -111,11 +111,12 @@ nova reset                # Reset session state
 
 ## Current Status
 
-✅ All 557 tests passing  
+✅ All 596 tests passing  
 ✅ Linting clean (ruff)  
 ✅ Type checking clean (mypy)  
+✅ Coverage: 75.69% (exceeds 60% requirement)
 ✅ CLI functional (chat, ask, sessions, reset)  
-✅ 10 tools available (terminal, read_file, write_file, patch_file, search_files, web_search, skills_list, skill_view, skill_manage, memory)
+✅ 10+ tools available (terminal, read_file, write_file, patch_file, search_files, web_search, skills_list, skill_view, skill_manage, memory, git, http_client, etc.)
 
 ## Commit Message Convention
 
