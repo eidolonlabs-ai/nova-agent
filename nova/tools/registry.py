@@ -187,6 +187,7 @@ def discover_builtin_tools(config: dict | None = None):
         "nova.tools.git_tool",
         "nova.tools.skills_tool",
         "nova.tools.memory_tool",
+        "nova.tools.search_sessions_tool",
         "nova.tools.task_tools",
     ]
 
