@@ -309,12 +309,11 @@ docs/
 ```bash
 # Install dev dependencies
 pip install -e ".[dev]"
-pip install mypy
 
 # Run all checks
 ruff check .          # Lint
 mypy nova/            # Type check
-pytest                # Tests (557 passing)
+pytest                # Tests (596 passing)
 
 # Full CI check
 ruff check . && mypy nova/ && pytest

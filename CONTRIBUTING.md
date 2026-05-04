@@ -15,7 +15,6 @@ source .venv/bin/activate
 
 # Install in editable mode with dev dependencies
 pip install -e ".[dev]"
-pip install mypy
 
 # Verify everything works
 ruff check . && mypy nova/ && pytest
@@ -27,7 +26,7 @@ All contributions must pass:
 
 - **Linting**: `ruff check .` — no errors
 - **Type checking**: `mypy nova/` — 0 errors in all files
-- **Tests**: `pytest` — all tests must pass (currently 557)
+- **Tests**: `pytest` — all tests must pass (currently 596)
 
 Run the full CI check before submitting:
 
