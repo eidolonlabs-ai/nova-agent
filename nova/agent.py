@@ -414,7 +414,7 @@ class NovaAgent:
         hooks.emit(EVENT_PRE_TOOL_CALL, tool_name=name, args=arguments)
 
         # Execute with automatic retry on transient errors
-        max_retries = self.config.get("agent", {}).get("tool_retry_max_attempts", 2)
+        max_retries = max(0, self.config.get("agent", {}).get("tool_retry_max_attempts", 2))
         for attempt in range(max_retries + 1):
             # Pass config, memory, and agent reference to tool handlers via kwargs
             result = registry.dispatch(
@@ -424,16 +424,21 @@ class NovaAgent:
             # Fire post_tool_call hook
             hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=arguments, result=result)
 
-            # Check if error is transient
-            if isinstance(result, str) and result.startswith("Error:"):
-                if self._is_transient_error(result) and attempt < max_retries:
-                    wait_time = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
-                    logger.warning(
-                        "Tool %s failed with transient error (attempt %d/%d), retrying in %ds: %s",
-                        name, attempt + 1, max_retries + 1, wait_time, result[:100],
-                    )
-                    time.sleep(wait_time)
-                    continue
+            # Retry on transient errors (timeout, network, rate-limit)
+            is_transient = (
+                isinstance(result, str)
+                and result.startswith("Error:")
+                and self._is_transient_error(result)
+                and attempt < max_retries
+            )
+            if is_transient:
+                wait_time = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
+                logger.warning(
+                    "Tool %s failed with transient error (attempt %d/%d), retrying in %ds: %s",
+                    name, attempt + 1, max_retries + 1, wait_time, result[:100],
+                )
+                time.sleep(wait_time)
+                continue
 
             # Success or permanent error — return
             return result
