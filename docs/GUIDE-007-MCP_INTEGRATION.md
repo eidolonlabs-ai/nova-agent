@@ -1,6 +1,10 @@
 # MCP Integration
 
-Nova Agent supports the Model Context Protocol (MCP) with three transport types, allowing you to connect to local and remote MCP servers.
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** GUIDE (Feature Reference)
+
+> Nova Agent supports the Model Context Protocol (MCP) with three transport types, allowing you to connect to local and remote MCP servers.
 
 ## Transport Types
 
@@ -238,3 +242,14 @@ mcp:
 ### HTTP session issues
 
 The HTTP transport uses `Mcp-Session-Id` headers for session persistence. If your server doesn't support session IDs, the transport still works — it just won't send the header.
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Full `config.yaml` reference |
+| [Creating Tools](GUIDE-001-CREATING_TOOLS.md) | Build native tools alongside MCP tools |
+| [Permissions](GUIDE-008-PERMISSIONS.md) | Restrict which MCP tools can be called |
+| [MCP Server Directory](https://github.com/modelcontextprotocol/servers) | Community-maintained MCP servers |

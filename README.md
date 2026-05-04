@@ -4,9 +4,11 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/eidolonlabs-ai/nova-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/eidolonlabs-ai/nova-agent/actions/workflows/ci.yml)
 
-A minimalist personal AI agent with explicit token budgets and smart context management.
+**Status:** ✅ Active — production ready  
+**Last Updated:** May 2026  
+**By:** [Eidolon Labs LLC](https://github.com/eidolonlabs-ai)
 
-By [Eidolon Labs LLC](https://github.com/eidolonlabs-ai).
+> A minimalist personal AI agent with explicit token budgets and smart context management.
 
 
 <img width="1324" height="444" alt="image" src="https://github.com/user-attachments/assets/8e7bfe5d-5b88-4ef4-a587-4a295bcb1aa6" />
@@ -24,23 +26,25 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 
 ## Features
 
-- **Explicit token budgets** at every layer — system prompt, skills, context files, conversation history
-- **Smart context management** with head/tail truncation (70/20 ratio), microcompact, and LLM-based compression
-- **Automatic retry** with exponential backoff and jitter for transient API errors
-- **Permission system** with defense-in-depth cascade (sensitive paths, tool deny/allow, command deny, path rules)
-- **Hook/callback system** for lifecycle events (pre/post tool call, pre/post LLM call, session start/end)
-- **Cost tracking** with per-model pricing and dollar cost estimation
-- **Background task management** — fire-and-forget shell execution with status tracking
-- **MCP integration** — connect to external Model Context Protocol servers
-- **Tool registry** for extensible tools with JSON schema definitions
-- **Skills system** with SKILL.md files and starter skills for coding, git, and file editing
-- **Context file discovery** (AGENTS.md, SOUL.md, CLAUDE.md, .cursorrules) with injection scanning
-- **SQLite session storage** with FTS5 search
-- **Prompt mode gating** — full mode for main agent, minimal for sub-agents
-- **OpenRouter API** for flexible model selection (100+ models)
-- **Streaming responses** with rich terminal UI
-- **Simple file-based memory** system with automatic system prompt refresh
-- **Web search** via Bing RSS (zero dependencies, zero API key)
+| Feature | Status | Details |
+|---------|--------|---------|
+| Explicit token budgets | ✅ Active | Budgets at every layer — system prompt, skills, context, history |
+| Smart context management | ✅ Active | Head/tail truncation (70/20), microcompact, LLM compression |
+| Automatic retry | ✅ Active | Exponential backoff and jitter for transient API errors |
+| Permission system | ✅ Active | Defense-in-depth cascade (sensitive paths, deny/allow lists) |
+| Hook/callback system | ✅ Active | Lifecycle events: pre/post tool call, LLM call, session start/end |
+| Cost tracking | ✅ Active | Per-model pricing and dollar cost estimation |
+| Background tasks | ✅ Active | Fire-and-forget shell execution with status tracking |
+| MCP integration | ✅ Active | Connect to external Model Context Protocol servers |
+| Tool registry | ✅ Active | Extensible tools with JSON schema definitions |
+| Skills system | ✅ Active | SKILL.md files with starter skills for coding, git, file editing |
+| Context file discovery | ✅ Active | AGENTS.md, SOUL.md, CLAUDE.md, .cursorrules with injection scanning |
+| Session storage | ✅ Active | SQLite with FTS5 full-text search |
+| Prompt mode gating | ✅ Active | Full mode for main agent, minimal for sub-agents |
+| OpenRouter API | ✅ Active | 100+ models via OpenRouter |
+| Streaming responses | ✅ Active | Rich terminal UI |
+| File-based memory | ✅ Active | Persistent memory with LRU eviction |
+| Web search | ✅ Active | Bing RSS — zero dependencies, zero API key |
 
 ## Built-in Tools
 
@@ -162,7 +166,7 @@ cp config/SOUL.md.example ~/.nova/SOUL.md
 cp -r config/skills/* ~/.nova/skills/
 ```
 
-See [docs/customizing.md](docs/customizing.md) for the full customization guide.
+See [docs/GUIDE-003-CUSTOMIZING.md](docs/GUIDE-003-CUSTOMIZING.md) for the full customization guide.
 
 ## Sub-Agent Delegation
 
@@ -294,14 +298,14 @@ config/
     git-workflow/
     file-editing/
 docs/
-  customizing.md    # Comprehensive customization guide
-  creating-tools.md # Developer guide: building custom tools
-  creating-skills.md # Developer guide: building custom skills
-  permissions.md    # Permission system configuration
-  hooks.md          # Hook/callback system
-  background-tasks.md # Background task management
-  mcp-integration.md # MCP server integration
-  cost-tracking.md  # Cost tracking and usage monitoring
+  GUIDE-003-CUSTOMIZING.md    # Comprehensive customization guide
+  GUIDE-001-CREATING_TOOLS.md # Developer guide: building custom tools
+  GUIDE-002-CREATING_SKILLS.md # Developer guide: building custom skills
+  GUIDE-008-PERMISSIONS.md    # Permission system configuration
+  GUIDE-006-HOOKS.md          # Hook/callback system
+  GUIDE-004-BACKGROUND_TASKS.md # Background task management
+  GUIDE-007-MCP_INTEGRATION.md # MCP server integration
+  GUIDE-005-COST_TRACKING.md  # Cost tracking and usage monitoring
 ```
 
 ## Development
@@ -323,16 +327,17 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 ## Documentation
 
-| Guide | Description |
-|-------|-------------|
-| [Customizing Nova](docs/customizing.md) | Config, SOUL.md, context files, memory, sessions |
-| [Creating Tools](docs/creating-tools.md) | Build custom tools with schemas, handlers, and tests |
-| [Creating Skills](docs/creating-skills.md) | Write effective SKILL.md files for specialized knowledge |
-| [Permissions](docs/permissions.md) | Permission system, defense-in-depth, config reference |
-| [Hooks](docs/hooks.md) | Lifecycle callbacks, audit logging, event system |
-| [Background Tasks](docs/background-tasks.md) | Fire-and-forget execution, status tracking |
-| [MCP Integration](docs/mcp-integration.md) | Connect to MCP servers (stdio, HTTP, SSE) |
-| [Cost Tracking](docs/cost-tracking.md) | Token usage, dollar cost estimation |
+| Document | Type | Status | Purpose |
+|----------|------|--------|---------|
+| [Customizing Nova](docs/GUIDE-003-CUSTOMIZING.md) | GUIDE | ✅ Active | Config, SOUL.md, context files, memory, sessions |
+| [Creating Tools](docs/GUIDE-001-CREATING_TOOLS.md) | GUIDE | ✅ Active | Build custom tools with schemas, handlers, and tests |
+| [Creating Skills](docs/GUIDE-002-CREATING_SKILLS.md) | GUIDE | ✅ Active | Write effective SKILL.md files for specialized knowledge |
+| [Permissions](docs/GUIDE-008-PERMISSIONS.md) | GUIDE | ✅ Active | Permission system, defense-in-depth, config reference |
+| [Hooks](docs/GUIDE-006-HOOKS.md) | GUIDE | ✅ Active | Lifecycle callbacks, audit logging, event system |
+| [Background Tasks](docs/GUIDE-004-BACKGROUND_TASKS.md) | GUIDE | ✅ Active | Fire-and-forget execution, status tracking |
+| [MCP Integration](docs/GUIDE-007-MCP_INTEGRATION.md) | GUIDE | ✅ Active | Connect to MCP servers (stdio, HTTP, SSE) |
+| [Cost Tracking](docs/GUIDE-005-COST_TRACKING.md) | GUIDE | ✅ Active | Token usage, dollar cost estimation |
+| [Documentation Index](docs/DOCUMENTATION_INDEX.md) | INDEX | ✅ Active | Full inventory of all docs |
 
 ## License
 

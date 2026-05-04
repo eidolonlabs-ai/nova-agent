@@ -40,14 +40,14 @@
 | File | Purpose |
 |------|---------|
 | `README.md` | Project overview, features, installation |
-| `docs/customizing.md` | Full customization guide |
-| `docs/creating-tools.md` | Custom tool development |
-| `docs/creating-skills.md` | Custom skill development |
-| `docs/permissions.md` | Permission system |
-| `docs/hooks.md` | Hook/callback system |
-| `docs/background-tasks.md` | Background task management |
-| `docs/mcp-integration.md` | MCP server integration |
-| `docs/cost-tracking.md` | Cost tracking and usage |
+| `docs/GUIDE-003-CUSTOMIZING.md` | Full customization guide |
+| `docs/GUIDE-001-CREATING_TOOLS.md` | Custom tool development |
+| `docs/GUIDE-002-CREATING_SKILLS.md` | Custom skill development |
+| `docs/GUIDE-008-PERMISSIONS.md` | Permission system |
+| `docs/GUIDE-006-HOOKS.md` | Hook/callback system |
+| `docs/GUIDE-004-BACKGROUND_TASKS.md` | Background task management |
+| `docs/GUIDE-007-MCP_INTEGRATION.md` | MCP server integration |
+| `docs/GUIDE-005-COST_TRACKING.md` | Cost tracking and usage |
 
 ---
 

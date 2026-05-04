@@ -1,6 +1,10 @@
 # Hook System
 
-Nova Agent includes a lightweight hook/callback system for lifecycle events. This enables audit logging, custom tool result transformation, and future plugin development without modifying core code.
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** GUIDE (Feature Reference)
+
+> Nova Agent includes a lightweight hook/callback system for lifecycle events. Enables audit logging, custom tool result transformation, and plugin development without modifying core code.
 
 ## Quick Start
 
@@ -132,3 +136,15 @@ from nova.hooks import HookRegistry
 my_hooks = HookRegistry()
 my_hooks.on("pre_tool_call", my_callback)
 ```
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Full configuration reference |
+| [Background Tasks](GUIDE-004-BACKGROUND_TASKS.md) | Use hooks with task lifecycle events |
+| [Cost Tracking](GUIDE-005-COST_TRACKING.md) | `EVENT_POST_LLM_CALL` for per-call tracking |
+| [Permissions](GUIDE-008-PERMISSIONS.md) | Defense-in-depth before hooks fire |
+| [Creating Tools](GUIDE-001-CREATING_TOOLS.md) | Tools that trigger hook events |

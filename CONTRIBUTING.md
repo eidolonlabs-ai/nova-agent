@@ -1,6 +1,25 @@
 # Contributing to Nova Agent
 
-Thank you for your interest in contributing! Nova Agent is developed by [Eidolon Labs LLC](https://github.com/eidolonlabs-ai).
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Audience:** Open-source contributors, Eidolon Labs team
+
+> Thank you for your interest in contributing! Nova Agent is developed by [Eidolon Labs LLC](https://github.com/eidolonlabs-ai).
+
+---
+
+## Quick Reference
+
+```bash
+# Full CI check (must pass before submitting PR)
+ruff check . && mypy nova/ && pytest
+
+# Run a single test file
+pytest tests/test_agent.py -v
+
+# Format and fix lint issues
+ruff check --fix .
+```
 
 ## Development Setup
 
@@ -113,8 +132,20 @@ Use conventional commit format:
 
 ## Adding Skills
 
-Skills are markdown files with YAML frontmatter. See [docs/customizing.md](docs/customizing.md) for the format.
+Skills are markdown files with YAML frontmatter. See [docs/GUIDE-003-CUSTOMIZING.md](docs/GUIDE-003-CUSTOMIZING.md) for the format.
 
 ## License
 
 By contributing, you agree that your contributions will be licensed under the MIT License.
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [README](README.md) | Project overview, features, installation |
+| [Creating Tools](docs/GUIDE-001-CREATING_TOOLS.md) | Full guide for adding new tools |
+| [Creating Skills](docs/GUIDE-002-CREATING_SKILLS.md) | Full guide for adding new skills |
+| [Permissions](docs/GUIDE-008-PERMISSIONS.md) | Permission system reference |
+| [SECURITY.md](SECURITY.md) | Reporting security vulnerabilities |

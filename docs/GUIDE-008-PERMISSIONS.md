@@ -1,6 +1,10 @@
 # Permission System
 
-Nova Agent includes a configurable permission system that controls tool execution through a defense-in-depth cascade. This prevents accidental or malicious actions while maintaining flexibility.
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** GUIDE (Feature Reference)
+
+> Nova Agent includes a configurable permission system that controls tool execution through a defense-in-depth cascade. This prevents accidental or malicious actions while maintaining flexibility.
 
 ## Quick Start
 
@@ -103,3 +107,14 @@ permissions:
     # - pattern: "/etc/*"
     #   allow: false
 ```
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Full configuration reference |
+| [Hooks](GUIDE-006-HOOKS.md) | Register callbacks that fire before/after permission checks |
+| [Creating Tools](GUIDE-001-CREATING_TOOLS.md) | Mark tools as read-only or mutating |
+| [SECURITY.md](../SECURITY.md) | Reporting security vulnerabilities |

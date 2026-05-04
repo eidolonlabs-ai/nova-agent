@@ -1,6 +1,12 @@
 # Customizing Nova Agent
 
-Nova Agent is designed to be personalized. This guide covers every way you can customize it.
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** GUIDE (Comprehensive Reference)
+
+> Nova Agent is designed to be personalized. This guide covers every way you can customize it.
+
+---
 
 ## Quick Start
 
@@ -126,7 +132,7 @@ Skills are directories containing `SKILL.md` files with YAML frontmatter. They p
 
 Skills live in `~/.nova/skills/`. Nova discovers them automatically at startup.
 
-**→ Full guide: [Creating Skills](creating-skills.md)**
+**→ Full guide: [Creating Skills](GUIDE-002-CREATING_SKILLS.md)**
 
 ### Starter Skills
 
@@ -174,30 +180,30 @@ The agent is instructed to:
 
 Nova comes with 16 built-in tools:
 
-| Tool | Toolset | Description |
-|------|---------|-------------|
-| `terminal` | terminal | Execute shell commands with timeout |
-| `read_file` | file | Read file contents with line ranges |
-| `write_file` | file | Write/overwrite files with atomic saves |
-| `patch_file` | file | Search/replace patches for targeted edits |
-| `search_files` | file | Grep/regex search across project files |
-| `web_search` | web | Web search via Bing RSS (zero dependencies, zero API key) |
-| `skills_list` | skills | List all available skills by category |
-| `skill_view` | skills | Load a skill's full instructions |
-| `skill_manage` | skills | Create, update, or delete skills |
-| `memory` | memory | Add, search, delete, or clear persistent memories |
-| `delegate_task` | delegation | Spawn a sub-agent for isolated tasks |
-| `task_create` | tasks | Start a background shell command |
-| `task_status` | tasks | Check a background task's status |
-| `task_output` | tasks | Read the tail of a task's log |
-| `task_stop` | tasks | Stop a running background task |
-| `task_list` | tasks | List all background tasks |
+| Tool | Toolset | Status | Description |
+|------|---------|--------|-------------|
+| `terminal` | terminal | ✅ Active | Execute shell commands with timeout |
+| `read_file` | file | ✅ Active | Read file contents with line ranges |
+| `write_file` | file | ✅ Active | Write/overwrite files with atomic saves |
+| `patch_file` | file | ✅ Active | Search/replace patches for targeted edits |
+| `search_files` | file | ✅ Active | Grep/regex search across project files |
+| `web_search` | web | ✅ Active | Web search via Bing RSS (zero dependencies) |
+| `skills_list` | skills | ✅ Active | List all available skills by category |
+| `skill_view` | skills | ✅ Active | Load a skill's full instructions |
+| `skill_manage` | skills | ✅ Active | Create, update, or delete skills |
+| `memory` | memory | ✅ Active | Add, search, delete, or clear persistent memories |
+| `delegate_task` | delegation | ✅ Active | Spawn a sub-agent for isolated tasks |
+| `task_create` | tasks | ✅ Active | Start a background shell command |
+| `task_status` | tasks | ✅ Active | Check a background task's status |
+| `task_output` | tasks | ✅ Active | Read the tail of a task's log |
+| `task_stop` | tasks | ✅ Active | Stop a running background task |
+| `task_list` | tasks | ✅ Active | List all background tasks |
 
 ### Adding Custom Tools
 
 Tools are Python modules in `nova/tools/` that define a JSON schema and a handler function, then self-register via `registry.register()`.
 
-**→ Full guide: [Creating Tools](creating-tools.md)**
+**→ Full guide: [Creating Tools](GUIDE-001-CREATING_TOOLS.md)**
 
 Quick example:
 
@@ -287,7 +293,7 @@ nova reset --session <session-id>
 
 Nova includes a configurable permission system with defense-in-depth protection.
 
-**→ Full guide: [Permissions](permissions.md)**
+**→ Full guide: [Permissions](GUIDE-008-PERMISSIONS.md)**
 
 Quick config:
 
@@ -305,7 +311,7 @@ permissions:
 
 Register callbacks for lifecycle events like pre/post tool calls, LLM calls, and session start/end.
 
-**→ Full guide: [Hooks](hooks.md)**
+**→ Full guide: [Hooks](GUIDE-006-HOOKS.md)**
 
 Quick example:
 
@@ -322,7 +328,7 @@ hooks.on(EVENT_PRE_TOOL_CALL, audit)
 
 Run long-running commands without blocking the conversation.
 
-**→ Full guide: [Background Tasks](background-tasks.md)**
+**→ Full guide: [Background Tasks](GUIDE-004-BACKGROUND_TASKS.md)**
 
 Use the built-in tools in chat:
 - `task_create("command", "description")` — start a background task
@@ -335,7 +341,7 @@ Use the built-in tools in chat:
 
 Connect to external Model Context Protocol servers for additional tools.
 
-**→ Full guide: [MCP Integration](mcp-integration.md)**
+**→ Full guide: [MCP Integration](GUIDE-007-MCP_INTEGRATION.md)**
 
 Quick config:
 
@@ -351,7 +357,7 @@ mcp:
 
 Track token usage and estimated dollar costs per session.
 
-**→ Full guide: [Cost Tracking](cost-tracking.md)**
+**→ Full guide: [Cost Tracking](GUIDE-005-COST_TRACKING.md)**
 
 View with `/usage` in chat:
 ```
@@ -418,3 +424,17 @@ retry:
 8. **Connect MCP servers** — for filesystem, GitHub, database, and other external tool access
 9. **Use a cheap model for `summary_model`** — compression runs frequently, so cost matters
 10. **Increase `max_retries` for rate-limited models** — if you hit 429s often, more retries help
+
+---
+
+## Related Documentation
+
+| Document | Type | Purpose |
+|----------|------|---------|
+| [Creating Skills](GUIDE-002-CREATING_SKILLS.md) | GUIDE | Write and manage SKILL.md files |
+| [Creating Tools](GUIDE-001-CREATING_TOOLS.md) | GUIDE | Add custom tool implementations |
+| [Permissions](GUIDE-008-PERMISSIONS.md) | GUIDE | Configure the permission system |
+| [Hooks](GUIDE-006-HOOKS.md) | GUIDE | Lifecycle callbacks and event system |
+| [Background Tasks](GUIDE-004-BACKGROUND_TASKS.md) | GUIDE | Fire-and-forget task execution |
+| [MCP Integration](GUIDE-007-MCP_INTEGRATION.md) | GUIDE | Connect to external MCP servers |
+| [Cost Tracking](GUIDE-005-COST_TRACKING.md) | GUIDE | Token usage and dollar cost tracking |

@@ -1,6 +1,10 @@
 # Creating Custom Skills
 
-Skills are markdown files that give Nova specialized knowledge for specific domains — coding conventions, deployment workflows, API patterns, or anything else you repeat often. This guide covers everything you need to write effective skills.
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** GUIDE (Developer Reference)
+
+> Skills are markdown files that give Nova specialized knowledge for specific domains — coding conventions, deployment workflows, API patterns, or anything else you repeat often. This guide covers everything you need to write effective skills.
 
 ---
 
@@ -413,3 +417,14 @@ Before using a new skill:
 - [ ] Common commands are complete and copy-pasteable
 - [ ] Pitfalls section covers known gotchas
 - [ ] Skill loads correctly: ask Nova *"Load the <name> skill"*
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Creating Tools](GUIDE-001-CREATING_TOOLS.md) | Add new capabilities via Python instead of markdown |
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Skills config, budgets, and discovery |
+| [Documentation Index](DOCUMENTATION_INDEX.md) | Full list of starter skills and their status |
+| [CONTRIBUTING](../CONTRIBUTING.md) | PR workflow for contributing new skills |

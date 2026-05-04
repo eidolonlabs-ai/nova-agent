@@ -1,6 +1,10 @@
 # Cost Tracking
 
-Nova Agent tracks token usage and estimates dollar costs for each session, helping you monitor spending across different models.
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** GUIDE (Feature Reference)
+
+> Nova Agent tracks token usage and estimates dollar costs for each session, helping you monitor spending across different models.
 
 ## Quick Start
 
@@ -93,4 +97,14 @@ response = {
 
 usage = extract_usage_from_response(response)
 # {"input_tokens": 1000, "output_tokens": 500, "output_cost": 0.000075}
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Token budget configuration |
+| [Hooks](GUIDE-006-HOOKS.md) | `EVENT_POST_LLM_CALL` for per-call cost monitoring |
+| [README](../README.md) | Supported models overview |
 ```

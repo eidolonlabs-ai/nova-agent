@@ -1,6 +1,10 @@
 # Creating Custom Tools
 
-Tools are the primary way Nova takes action in the world — running commands, reading files, calling APIs, and more. This guide walks you through building your own tools from scratch.
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** GUIDE (Developer Reference)
+
+> Tools are the primary way Nova takes action in the world — running commands, reading files, calling APIs, and more. This guide walks you through building your own tools from scratch.
 
 ---
 
@@ -98,7 +102,7 @@ registry.register(
 )
 ```
 
-See [docs/permissions.md](permissions.md) for details on the permission system.
+See [docs/GUIDE-008-PERMISSIONS.md](GUIDE-008-PERMISSIONS.md) for details on the permission system.
 
 ---
 
@@ -113,7 +117,7 @@ Every tool call fires `pre_tool_call` and `post_tool_call` hooks automatically. 
 # 3. post_tool_call(tool_name="my_tool", args={...}, result="...")
 ```
 
-See [docs/hooks.md](hooks.md) for details on registering hook callbacks.
+See [docs/GUIDE-006-HOOKS.md](GUIDE-006-HOOKS.md) for details on registering hook callbacks.
 
 ---
 
@@ -544,3 +548,16 @@ Before shipping a new tool:
 - [ ] Tests written and passing (`pytest tests/`)
 - [ ] Lint clean (`ruff check .`)
 - [ ] Type hints on handler function
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Creating Skills](GUIDE-002-CREATING_SKILLS.md) | Add knowledge domains via markdown instead of code |
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Full tools reference and config |
+| [Permissions](GUIDE-008-PERMISSIONS.md) | Mark tools as read-only or mutating |
+| [Hooks](GUIDE-006-HOOKS.md) | Lifecycle callbacks that fire around tool calls |
+| [Background Tasks](GUIDE-004-BACKGROUND_TASKS.md) | Build tools that run long commands asynchronously |
+| [CONTRIBUTING](../CONTRIBUTING.md) | PR workflow and code quality standards |

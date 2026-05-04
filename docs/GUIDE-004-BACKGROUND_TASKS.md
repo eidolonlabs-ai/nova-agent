@@ -1,6 +1,10 @@
 # Background Tasks
 
-Nova Agent supports fire-and-forget background task execution. Start long-running commands without blocking the conversation, check their status, read output, or stop them at any time.
+**Status:** ✅ Active  
+**Last Updated:** May 2026  
+**Type:** GUIDE (Feature Reference)
+
+> Nova Agent supports fire-and-forget background task execution. Start long-running commands without blocking the conversation, check their status, read output, or stop them at any time.
 
 ## Quick Start
 
@@ -132,3 +136,14 @@ mgr.register_completion_listener(on_complete)
 ## Configuration
 
 Background tasks are always available — no config needed. Task logs are stored in `~/.nova/tasks/`.
+
+---
+
+## Related Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [Customizing Nova](GUIDE-003-CUSTOMIZING.md) | Full configuration reference |
+| [Hooks](GUIDE-006-HOOKS.md) | Register callbacks on task lifecycle events |
+| [Permissions](GUIDE-008-PERMISSIONS.md) | Control which shell commands are allowed |
+| [Creating Tools](GUIDE-001-CREATING_TOOLS.md) | Build tools that wrap background tasks |

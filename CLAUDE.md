@@ -139,7 +139,7 @@ Examples:
 
 **Adding tools:** See [CONTRIBUTING.md](CONTRIBUTING.md#adding-tools) for the tool creation workflow (schema, handler, registration, tests).
 
-**Adding skills:** See [docs/creating-skills.md](docs/creating-skills.md) for skill format and examples.
+**Adding skills:** See [docs/GUIDE-002-CREATING_SKILLS.md](docs/GUIDE-002-CREATING_SKILLS.md) for skill format and examples.
 
 **Full contribution guidelines:** See [CONTRIBUTING.md](CONTRIBUTING.md).
 
