@@ -56,10 +56,6 @@ class SessionStore:
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id)
                 );
 
-                -- Standalone FTS5 table with session_id for search
-                CREATE VIRTUAL TABLE IF NOT EXISTS session_search
-                    USING fts5(session_id, title, content);
-
                 CREATE TRIGGER IF NOT EXISTS session_fts_insert
                     AFTER INSERT ON session_fts
                 BEGIN
@@ -75,6 +71,30 @@ class SessionStore:
                     WHERE session_id = new.session_id;
                 END;
             """)
+            self._ensure_fts_trigram(conn)
+
+    def _ensure_fts_trigram(self, conn: sqlite3.Connection) -> None:
+        """Create or migrate session_search to use the FTS5 trigram tokenizer.
+
+        The trigram tokenizer enables substring and fuzzy matching. Existing
+        databases using the default unicode tokenizer are migrated automatically
+        by dropping and repopulating from session_fts (which is the source of truth).
+        user_version 1 marks the migration as complete.
+        """
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if version >= 1:
+            return
+
+        conn.execute("DROP TABLE IF EXISTS session_search")
+        conn.execute(
+            "CREATE VIRTUAL TABLE session_search "
+            "USING fts5(session_id, title, content, tokenize='trigram')"
+        )
+        conn.execute(
+            "INSERT INTO session_search(session_id, title, content) "
+            "SELECT session_id, title, content FROM session_fts"
+        )
+        conn.execute("PRAGMA user_version = 1")
 
     def create_session(
         self,
@@ -253,15 +273,12 @@ class SessionStore:
         return len(old_ids)
 
     def search_sessions(self, query: str, limit: int = 10) -> list[dict]:
-        """Search sessions using FTS5."""
-        # Quote each token individually so multi-word queries are AND'd, not phrase-matched.
-        # Last token gets a trailing * for prefix matching ("foundin" finds "founding").
-        tokens = query.split()
-        if not tokens:
+        """Search sessions using FTS5 trigram index."""
+        # Strip quotes to avoid unintended FTS5 phrase syntax; trigram handles
+        # substring and multi-term AND matching natively without special operators.
+        fts_query = query.replace('"', "").strip()
+        if not fts_query:
             return []
-        quoted = [f'"{t.replace(chr(34), "")}"' for t in tokens]
-        quoted[-1] = quoted[-1] + "*"
-        fts_query = " ".join(quoted)
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT s.session_id, s.title, s.updated_at, s.message_count "
