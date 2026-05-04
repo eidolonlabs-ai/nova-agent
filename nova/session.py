@@ -3,6 +3,7 @@
 Stores conversation sessions with message history, system prompts, and metadata.
 """
 
+import atexit
 import json
 import logging
 import sqlite3
@@ -20,10 +21,22 @@ class SessionStore:
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
+        atexit.register(self.close)
+
+    def close(self) -> None:
+        """Merge FTS5 index segments for efficient future searches."""
+        if not self.db_path.exists():
+            return
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                conn.execute("PRAGMA optimize")
+        except sqlite3.OperationalError:
+            pass
 
     def _init_db(self):
         """Initialize database schema."""
         with sqlite3.connect(self.db_path) as conn:
+            conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS sessions (
                     session_id TEXT PRIMARY KEY,
