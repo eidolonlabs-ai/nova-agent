@@ -19,6 +19,7 @@ from nova.tools.delegate_tool import (
     _build_subagent_config,
     _delegate_task,
     _is_delegation_enabled,
+    _run_subagent,
     register_delegate_tool,
 )
 from nova.tools.registry import ToolRegistry, discover_builtin_tools
@@ -460,3 +461,233 @@ def test_default_timeout_is_60():
 
 def test_default_max_iterations_is_30():
     assert DEFAULT_MAX_ITERATIONS == 30
+
+
+# ---------------------------------------------------------------------------
+# _run_subagent — core execution logic
+# ---------------------------------------------------------------------------
+
+
+def _make_parent_agent(depth: int = 0, messages: list | None = None) -> MagicMock:
+    """Build a minimal mock parent agent."""
+    parent = MagicMock()
+    parent.depth = depth
+    parent.messages = messages or []
+    parent.config = _minimal_config(delegation_enabled=True, depth=depth)
+    parent.session_store = _mock_session_store()
+    parent.memory = None
+    parent.cost_tracker = None
+    return parent
+
+
+def test_run_subagent_happy_path():
+    """_run_subagent returns success dict when sub-agent completes normally."""
+    parent = _make_parent_agent(depth=0)
+    mock_subagent = MagicMock()
+    mock_subagent.run.return_value = "task result"
+    mock_subagent.messages = []
+    mock_subagent.cost_tracker = None
+
+    mock_http_ctx = MagicMock()
+    mock_http_ctx.__enter__ = MagicMock(return_value=mock_http_ctx)
+    mock_http_ctx.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.agent.NovaAgent", return_value=mock_subagent),
+    ):
+        result = _run_subagent(
+            task="do something",
+            parent_agent=parent,
+            label="test-task",
+            model=None,
+            timeout_seconds=60,
+            context_mode="isolated",
+        )
+
+    assert result["success"] is True
+    assert result["result"] == "task result"
+    assert result["label"] == "test-task"
+    assert result["depth"] == 1
+    assert result["error"] is None
+    assert result["timeout"] is False
+    assert "elapsed_seconds" in result
+
+
+def test_run_subagent_exception_returns_error_dict():
+    """_run_subagent returns error dict when sub-agent raises."""
+    parent = _make_parent_agent(depth=0)
+
+    mock_http_ctx = MagicMock()
+    mock_http_ctx.__enter__ = MagicMock(return_value=mock_http_ctx)
+    mock_http_ctx.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.agent.NovaAgent", side_effect=RuntimeError("connection refused")),
+    ):
+        result = _run_subagent(
+            task="do something",
+            parent_agent=parent,
+            label="fail-task",
+            model=None,
+            timeout_seconds=60,
+            context_mode="isolated",
+        )
+
+    assert result["success"] is False
+    assert result["result"] is None
+    assert result["error"] == "connection refused"
+    assert result["label"] == "fail-task"
+    assert result["timeout"] is False
+
+
+def test_run_subagent_fork_mode_prefills_messages():
+    """_run_subagent with context_mode='fork' injects parent messages."""
+    parent_messages = [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi there"},
+    ]
+    parent = _make_parent_agent(depth=0, messages=parent_messages)
+
+    mock_subagent = MagicMock()
+    mock_subagent.run.return_value = "forked result"
+    mock_subagent.messages = list(parent_messages)
+    mock_subagent.cost_tracker = None
+
+    mock_http_ctx = MagicMock()
+    mock_http_ctx.__enter__ = MagicMock(return_value=mock_http_ctx)
+    mock_http_ctx.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.agent.NovaAgent", return_value=mock_subagent),
+    ):
+        result = _run_subagent(
+            task="forked task",
+            parent_agent=parent,
+            label="fork",
+            model=None,
+            timeout_seconds=60,
+            context_mode="fork",
+        )
+
+    assert result["success"] is True
+    # Subagent.messages should have been set to parent's messages
+    assert mock_subagent.messages == parent_messages
+
+
+def test_run_subagent_isolated_mode_no_prefill():
+    """_run_subagent with context_mode='isolated' does not inject parent messages."""
+    parent_messages = [{"role": "user", "content": "parent ctx"}]
+    parent = _make_parent_agent(depth=0, messages=parent_messages)
+
+    mock_subagent = MagicMock()
+    mock_subagent.run.return_value = "isolated result"
+    mock_subagent.messages = []
+    mock_subagent.cost_tracker = None
+
+    mock_http_ctx = MagicMock()
+    mock_http_ctx.__enter__ = MagicMock(return_value=mock_http_ctx)
+    mock_http_ctx.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.agent.NovaAgent", return_value=mock_subagent),
+    ):
+        result = _run_subagent(
+            task="isolated task",
+            parent_agent=parent,
+            label="iso",
+            model=None,
+            timeout_seconds=60,
+            context_mode="isolated",
+        )
+
+    assert result["success"] is True
+    # In isolated mode, messages attribute is NOT set on subagent
+    assert mock_subagent.run.called
+
+
+def test_run_subagent_depth_incremented():
+    """_run_subagent reports depth as parent.depth + 1."""
+    parent = _make_parent_agent(depth=1)
+
+    mock_subagent = MagicMock()
+    mock_subagent.run.return_value = "ok"
+    mock_subagent.messages = []
+    mock_subagent.cost_tracker = None
+
+    mock_http_ctx = MagicMock()
+    mock_http_ctx.__enter__ = MagicMock(return_value=mock_http_ctx)
+    mock_http_ctx.__exit__ = MagicMock(return_value=False)
+
+    with (
+        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.agent.NovaAgent", return_value=mock_subagent),
+    ):
+        result = _run_subagent(
+            task="t",
+            parent_agent=parent,
+            label="d",
+            model=None,
+            timeout_seconds=60,
+            context_mode="isolated",
+        )
+
+    assert result["depth"] == 2
+
+
+def test_run_subagent_custom_model_passed_to_config():
+    """_run_subagent passes custom model into sub-agent config."""
+    parent = _make_parent_agent(depth=0)
+    captured_configs = []
+
+    mock_subagent = MagicMock()
+    mock_subagent.run.return_value = "ok"
+    mock_subagent.messages = []
+    mock_subagent.cost_tracker = None
+
+    mock_http_ctx = MagicMock()
+    mock_http_ctx.__enter__ = MagicMock(return_value=mock_http_ctx)
+    mock_http_ctx.__exit__ = MagicMock(return_value=False)
+
+    def capture_config(*args, **kwargs):
+        captured_configs.append(kwargs.get("config", {}))
+        return mock_subagent
+
+    with (
+        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.agent.NovaAgent", side_effect=capture_config),
+    ):
+        _run_subagent(
+            task="t",
+            parent_agent=parent,
+            label="m",
+            model="custom/model",
+            timeout_seconds=60,
+            context_mode="isolated",
+        )
+
+    assert len(captured_configs) == 1
+    assert captured_configs[0]["openrouter"]["model"] == "custom/model"
+
+
+def test_register_delegate_tool_depth_limit_logging(caplog):
+    """register_delegate_tool logs when agent is at max spawn depth."""
+    import logging
+
+    from nova.tools.delegate_tool import register_delegate_tool
+    from nova.tools.registry import ToolRegistry
+
+    local_registry = ToolRegistry()
+    config = _minimal_config(delegation_enabled=True, depth=2)  # depth == max_spawn_depth
+
+    with (
+        patch("nova.tools.delegate_tool.registry", local_registry),
+        caplog.at_level(logging.DEBUG, logger="nova.tools.delegate_tool"),
+    ):
+        register_delegate_tool(agent_config=config)
+
+    assert "delegate_task" not in local_registry.all_tool_names
+    assert any("leaf agent" in r.message for r in caplog.records)
