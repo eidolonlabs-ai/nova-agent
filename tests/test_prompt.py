@@ -194,7 +194,7 @@ def test_subagent_uses_minimal_prompt_mode():
     config = _delegation_config(depth=1)
     config["_prompt_mode"] = "minimal"
     config["skills"]["enabled"] = True
-    config["context_files"] = [".nova.md"]
+    config["context_files"] = ["NOVA.md"]
     discover_builtin_tools(config)
 
     # build_system_prompt should respect _prompt_mode from config when no explicit mode given

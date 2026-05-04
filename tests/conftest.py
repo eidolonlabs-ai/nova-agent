@@ -3,6 +3,7 @@
 import json
 import tempfile
 from pathlib import Path
+from unittest import mock
 from unittest.mock import MagicMock
 
 import httpx
@@ -11,6 +12,13 @@ import pytest
 from nova.agent import NovaAgent
 from nova.memory import MemoryStore
 from nova.session import SessionStore
+
+
+@pytest.fixture(autouse=True)
+def _mock_global_personality():
+    """Auto-mock load_global_personality to prevent loading real ~/.nova/SOUL.md during tests."""
+    with mock.patch("nova.prompt.load_global_personality", return_value=None):
+        yield
 
 
 @pytest.fixture

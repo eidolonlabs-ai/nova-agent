@@ -99,32 +99,32 @@ agent:
 
 ## SOUL.md — Agent Personality
 
-`SOUL.md` in `~/.nova/` defines the agent's identity, tone, and behavior. Nova loads this as the first section of the system prompt.
+`SOUL.md` in `~/.nova/` defines the agent's identity, tone, and behavior. Nova loads this as the first section of the system prompt before any project context.
 
 ```bash
 # Create your SOUL.md
 cp config/SOUL.md.example ~/.nova/SOUL.md
 ```
 
-Edit it to match your preferences. The agent reads this on every session start.
+Edit it to match your preferences. The agent reads this on every session start, so your personality is always consistent.
 
-## .nova.md — Project Instructions
+## Project Context Files
 
-`.nova.md` in your working directory contains project-specific instructions. Nova discovers it automatically when you chat from that directory.
+Nova discovers project-specific instructions in your working directory:
 
 ```bash
-# Create project instructions
-cp config/.nova.md.example /path/to/project/.nova.md
+# Create project config
+cp config/NOVA.md.example /path/to/project/NOVA.md
+
+# Create project agent instructions
+cp config/AGENTS.md.example /path/to/project/AGENTS.md
 ```
 
-**Discovery order** (first found wins):
-1. `.nova.md` / `NOVA.md` (walks up to git root)
-2. `AGENTS.md` (cwd only)
-3. `SOUL.md` (cwd only)
-4. `CLAUDE.md` (cwd only)
-5. `.cursorrules` (cwd only)
+**Discovery order** (searches up to git root):
+1. `NOVA.md` — Project configuration and high-level instructions
+2. `AGENTS.md` — Agent-specific behaviors and constraints for the project
 
-This means Nova works with any project that already has AI agent instructions.
+Nova walks up the directory tree from your current working directory to the git root, loading the first matching file. This means Nova works automatically with any project that has these files.
 
 ## Skills
 
@@ -264,8 +264,7 @@ nova reset --session <session-id>
 
 ```
 ~/.nova/
-├── SOUL.md              # Agent personality (optional)
-├── .nova.md             # Project instructions (per-project)
+├── SOUL.md              # Global agent personality
 ├── config.yaml          # Global configuration
 ├── memory.json          # Persistent memories (LRU eviction)
 ├── nova.log             # Log file
@@ -280,6 +279,10 @@ nova reset --session <session-id>
 │       └── SKILL.md
 └── tasks/               # Background task logs
     └── b3f8a2c.log
+
+# Project-level (in your project directory)
+NOVA.md                 # Project configuration (optional)
+AGENTS.md               # Agent instructions (optional)
 ```
 
 ## Environment Variables
@@ -415,15 +418,16 @@ retry:
 ## Tips
 
 1. **Keep SOUL.md concise** — it's in every API call, so shorter = cheaper
-2. **Use skills for workflows** — if you repeat a process, save it as a skill
-3. **Use memory for facts** — preferences, environment details, conventions
-4. **Use .nova.md for projects** — project-specific instructions that override defaults
-5. **Lower budgets for cheaper models** — if using a fast/cheap model, reduce context budgets
-6. **Use `permissions.mode: "ask"`** — for safer tool execution (future TUI will show approval dialogs)
-7. **Use background tasks** — for long-running commands like test suites or builds
-8. **Connect MCP servers** — for filesystem, GitHub, database, and other external tool access
-9. **Use a cheap model for `summary_model`** — compression runs frequently, so cost matters
-10. **Increase `max_retries` for rate-limited models** — if you hit 429s often, more retries help
+2. **Use NOVA.md for project settings** — project-specific instructions that override defaults
+3. **Use AGENTS.md for agent behaviors** — agent constraints and specific workflows
+4. **Use skills for workflows** — if you repeat a process, save it as a skill
+5. **Use memory for facts** — preferences, environment details, conventions
+6. **Lower budgets for cheaper models** — if using a fast/cheap model, reduce context budgets
+7. **Use `permissions.mode: "ask"`** — for safer tool execution (future TUI will show approval dialogs)
+8. **Use background tasks** — for long-running commands like test suites or builds
+9. **Connect MCP servers** — for filesystem, GitHub, database, and other external tool access
+10. **Use a cheap model for `summary_model`** — compression runs frequently, so cost matters
+11. **Increase `max_retries` for rate-limited models** — if you hit 429s often, more retries help
 
 ---
 

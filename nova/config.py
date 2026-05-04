@@ -41,7 +41,7 @@ DEFAULT_CONFIG = {
         "summary_model": "qwen/qwen3.6-flash",
         "reserve_tokens": 15000,
     },
-    "context_files": [".nova.md", "NOVA.md", "AGENTS.md", "SOUL.md", "CLAUDE.md", ".cursorrules"],
+    "context_files": ["NOVA.md", "AGENTS.md"],
     "memory": {
         "enabled": True,
         "max_entries": 100,

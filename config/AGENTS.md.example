@@ -1,0 +1,20 @@
+# AGENTS.md — Agent Instructions
+
+This file contains agent-specific instructions and constraints for this project.
+It is automatically discovered and loaded when you chat from this directory.
+
+## Project Rules
+
+<!-- Add constraints and rules for agent behavior in this project -->
+
+## Constraints
+
+<!-- Document what the agent should NOT do in this project -->
+
+## Workflows
+
+<!-- Document specific workflows or patterns the agent should follow -->
+
+## Architecture
+
+<!-- Describe the project architecture so the agent understands it better -->

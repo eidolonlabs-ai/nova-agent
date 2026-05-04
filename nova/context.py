@@ -1,6 +1,7 @@
 """Context file discovery, budgeting, and truncation.
 
-Discovers project context files (AGENTS.md, SOUL.md, etc.) with:
+Loads global personality (SOUL.md from ~/.nova/) and project context files
+(NOVA.md, AGENTS.md) with:
 - Explicit character budgets per file and total
 - Head/tail truncation (70/20 ratio) preserving beginning and end
 - Prompt injection scanning with unicode normalization
@@ -88,6 +89,34 @@ _HEAD_RATIO = 0.70
 _TAIL_RATIO = 0.20
 
 
+def load_global_personality() -> str | None:
+    """Load global personality from ~/.nova/SOUL.md.
+
+    Returns content if file exists and passes injection scanning, None otherwise.
+    This is loaded separately as agent identity and should not be included
+    in project context files.
+    """
+    soul_path = Path.home() / ".nova" / "SOUL.md"
+    if not soul_path.exists():
+        return None
+
+    try:
+        content = soul_path.read_text(encoding="utf-8").strip()
+        if not content:
+            return None
+
+        # Scan for injection
+        scanned = scan_context_content(content, "SOUL.md")
+        if scanned and scanned.startswith("[BLOCKED:"):
+            logger.warning("SOUL.md blocked due to injection pattern")
+            return None
+
+        return scanned or content
+    except Exception as e:
+        logger.debug("Could not read SOUL.md: %s", e)
+        return None
+
+
 def _normalize_for_scanning(content: str) -> str:
     """Normalize content for injection scanning.
 
@@ -169,7 +198,10 @@ def discover_context_files(
     max_chars_per_file: int = 10000,
     max_total_chars: int = 50000,
 ) -> list[tuple[str, str]]:
-    """Discover and load context files from the workspace.
+    """Discover and load project context files from the workspace.
+
+    Loads NOVA.md (project-level config) and AGENTS.md (agent instructions).
+    Global personality is loaded separately via load_global_personality().
 
     Returns list of (filename, content) tuples, respecting budgets.
     Files are loaded in priority order until the total budget is exhausted.
@@ -177,7 +209,7 @@ def discover_context_files(
     if cwd is None:
         cwd = Path.cwd()
     if file_names is None:
-        file_names = [".nova.md", "NOVA.md", "AGENTS.md", "SOUL.md", "CLAUDE.md", ".cursorrules"]
+        file_names = ["NOVA.md", "AGENTS.md"]
 
     cwd = cwd.resolve()
     git_root = _find_git_root(cwd)

@@ -7,7 +7,7 @@ Supports full/minimal/none modes for prompt gating.
 import logging
 from pathlib import Path
 
-from nova.context import build_context_prompt
+from nova.context import build_context_prompt, load_global_personality
 from nova.skills import build_skills_prompt, discover_skills
 from nova.tokens import estimate_tokens
 from nova.tools.registry import registry
@@ -94,8 +94,9 @@ def build_system_prompt(
 
     parts = []
 
-    # 1. Identity
-    identity = agent_config.get("identity", DEFAULT_IDENTITY)
+    # 1. Identity (try global personality first, fall back to config)
+    global_personality = load_global_personality()
+    identity = global_personality or agent_config.get("identity", DEFAULT_IDENTITY)
     parts.append(identity)
 
     # 2. Tool summary (compact bullet list — two-tier approach)

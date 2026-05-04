@@ -14,7 +14,7 @@
 |------|---------|
 | Get specific output | Include file paths, function names, and constraints in the task |
 | Long multi-step task | Break into checkpoints — verify each before continuing |
-| Repeated workflow | Save it to a skill or `.nova.md` |
+| Repeated workflow | Save it to a skill or `NOVA.md` |
 | Preserve important facts | Save to memory |
 | Confused or drifting session | `/compact` or `/new` |
 | Sensitive environment | Set `permissions.mode: "ask"` |
@@ -99,14 +99,14 @@ Memory persists across all sessions. Keep it useful by being selective.
 
 - Personal preferences: `"I prefer seeing the full diff before summaries"`
 - Environment facts: `"This machine uses Python 3.13, venv is at ~/.venvs/nova"`
-- Project conventions not in `.nova.md`: `"We never squash commits on this repo"`
+- Project conventions not in `NOVA.md`: `"We never squash commits on this repo"`
 - Discovered tool quirks: `"ruff format converts single to double quotes here"`
 
 ### Don't save to memory
 
 - Task progress (`"I was working on feature X"`) — use sessions for this
 - Temporary state (`"Current branch is feat/thing"`) — will be stale next session
-- Anything already in `.nova.md` or `CLAUDE.md` — redundant
+- Anything already in `NOVA.md` or `AGENTS.md` — redundant
 - Facts with implicit timestamps that will become incorrect
 
 ### Review memory periodically
@@ -119,15 +119,16 @@ Remove stale entries before they mislead future sessions.
 
 ---
 
-## Context Files (`.nova.md`)
+## Context Files (`NOVA.md` and `AGENTS.md`)
 
 Loaded on every session. Use for project-specific conventions the agent should always follow. Keep them concise — they count against your token budget on every turn.
 
 ```bash
-cp config/.nova.md.example /path/to/project/.nova.md
+cp config/NOVA.md.example /path/to/project/NOVA.md
+cp config/AGENTS.md.example /path/to/project/AGENTS.md
 ```
 
-Good candidates for `.nova.md`:
+Good candidates for `NOVA.md`:
 - Naming conventions and code style rules for this project
 - Which commands to use (e.g., always use `.venv/bin/pytest`, not `pytest`)
 - Architecture rules (e.g., "tools live in `nova/tools/`, never in `nova/`)
@@ -216,7 +217,7 @@ git diff HEAD   # everything since last commit
 ### Exploring an unfamiliar codebase
 
 ```
-1. "Read CLAUDE.md and summarize the architecture in 5 bullets"
+1. "Read NOVA.md and AGENTS.md to understand the architecture"
 2. "Search nova/ for the entry point of the permission system"
 3. "Read nova/permissions.py and explain how the cascade works"
 ```
