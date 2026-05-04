@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from nova.session import SessionStore
-from nova.tools.search_sessions_tool import _search_sessions_tool
+from nova.tools.search_sessions_tool import _read_session_tool, _search_sessions_tool
 
 
 @pytest.fixture
@@ -178,4 +178,61 @@ def test_search_sessions_message_content_search(temp_session_store):
         session_store=temp_session_store,
     )
     assert "Found" in result
+    assert "Docker Setup" in result
+
+
+# --- read_session tests ---
+
+
+def test_read_session_returns_messages(temp_session_store):
+    sessions = temp_session_store.list_sessions()
+    session_id = sessions[0]["session_id"]
+    result = _read_session_tool({"session_id": session_id}, session_store=temp_session_store)
+    assert "Session:" in result
+    assert "[USER]" in result
+    assert "[ASSISTANT]" in result
+
+
+def test_read_session_not_found(temp_session_store):
+    result = _read_session_tool({"session_id": "nonexistent_id"}, session_store=temp_session_store)
+    assert "Error" in result
+    assert "not found" in result
+
+
+def test_read_session_empty_id(temp_session_store):
+    result = _read_session_tool({"session_id": ""}, session_store=temp_session_store)
+    assert "Error" in result
+    assert "required" in result
+
+
+def test_read_session_no_store():
+    result = _read_session_tool({"session_id": "any"}, session_store=None)
+    assert "Error" in result
+    assert "not available" in result
+
+
+def test_read_session_with_limit(temp_session_store):
+    sessions = temp_session_store.list_sessions()
+    session_id = sessions[0]["session_id"]
+    result = _read_session_tool(
+        {"session_id": session_id, "limit": 1}, session_store=temp_session_store
+    )
+    assert "[USER]" in result or "[ASSISTANT]" in result
+    # Only 1 message returned — count role markers
+    assert result.count("[USER]") + result.count("[ASSISTANT]") == 1
+
+
+def test_read_session_invalid_limit(temp_session_store):
+    sessions = temp_session_store.list_sessions()
+    session_id = sessions[0]["session_id"]
+    result = _read_session_tool(
+        {"session_id": session_id, "limit": "bad"}, session_store=temp_session_store
+    )
+    assert "Session:" in result  # Falls back to no limit, still works
+
+
+def test_read_session_shows_title(temp_session_store):
+    sessions = temp_session_store.list_sessions()
+    session_id = next(s["session_id"] for s in sessions if s.get("title") == "Docker Setup")
+    result = _read_session_tool({"session_id": session_id}, session_store=temp_session_store)
     assert "Docker Setup" in result

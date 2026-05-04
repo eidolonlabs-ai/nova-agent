@@ -1,7 +1,7 @@
-"""Search sessions tool — find past conversations by keyword.
+"""Session tools — search and read past conversations.
 
-Allows the agent to search across all session titles and message content
-using full-text search (FTS5) to find relevant past conversations.
+search_sessions: FTS5 keyword search across all session titles and messages.
+read_session: fetch the full message history for a given session ID.
 """
 
 import logging
@@ -74,5 +74,72 @@ registry.register(
     schema=SEARCH_SESSIONS_SCHEMA,
     handler=_search_sessions_tool,
     emoji="🔍",
+    is_read_only=True,
+)
+
+READ_SESSION_SCHEMA = {
+    "name": "read_session",
+    "description": (
+        "Read the full message history of a past chat session by ID. "
+        "Use search_sessions first to find the session ID, then call this "
+        "to retrieve the actual conversation content."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "session_id": {
+                "type": "string",
+                "description": "The session ID to read (from search_sessions results).",
+            },
+            "limit": {
+                "type": "integer",
+                "description": "Maximum number of most-recent messages to return (default: all).",
+            },
+        },
+        "required": ["session_id"],
+    },
+}
+
+
+def _read_session_tool(args: dict[str, Any], **kwargs) -> str:
+    session_store = kwargs.get("session_store")
+    if session_store is None:
+        return "Error: Session store is not available."
+
+    session_id = args.get("session_id", "").strip()
+    if not session_id:
+        return "Error: 'session_id' is required."
+
+    info = session_store.get_session_info(session_id)
+    if info is None:
+        return f"Error: Session '{session_id}' not found."
+
+    limit = args.get("limit")
+    try:
+        limit = min(max(int(limit), 1), 200) if limit is not None else None  # Clamp to 1-200
+    except (ValueError, TypeError):
+        limit = None
+
+    messages = session_store.get_messages(session_id, limit=limit)
+    if not messages:
+        return f"Session '{session_id}' has no messages."
+
+    title = info.get("title") or "(untitled)"
+    lines = [f"Session: {title} [{session_id}]", f"Messages: {len(messages)}", ""]
+    for msg in messages:
+        role = msg["role"].upper()
+        content = msg["content"]
+        lines.append(f"[{role}] {content}")
+        lines.append("")
+
+    return "\n".join(lines).rstrip()
+
+
+registry.register(
+    name="read_session",
+    toolset="sessions",
+    schema=READ_SESSION_SCHEMA,
+    handler=_read_session_tool,
+    emoji="📖",
     is_read_only=True,
 )
