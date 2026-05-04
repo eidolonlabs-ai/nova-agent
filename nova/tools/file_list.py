@@ -103,8 +103,8 @@ def _list_files(args: dict[str, Any], **kwargs) -> str:
             return f"No files found matching '{pattern}' in {root}"
 
         lines = [f"Found {len(matches)} file(s) matching '{pattern}':"]
-        for path in matches:
-            lines.append(f"  {path}")
+        for match in matches:
+            lines.append(f"  {match}")
 
         if len(matches) >= limit:
             lines.append(f"\n(Truncated at {limit} results)")
