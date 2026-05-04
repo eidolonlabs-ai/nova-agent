@@ -17,21 +17,7 @@ permissions:
   mode: "ask"                       # Require confirmation for mutating tools
   denied_tools: []                  # Add tools here to block entirely
   allowed_tools: []                 # Tools that bypass confirmation
-  denied_commands:
-    - "rm -rf /"
-    - "rm -rf /*"
-    - ":(){*};:*"                   # Fork bomb
-    - "mkfs*"
-    - "fdisk*"
-    - "format*"
-    - "shutdown*"
-    - "reboot*"
-    - "halt*"
-    - "poweroff*"
-    - "curl *"
-    - "wget *"
-    - "bash -c *"
-    - "eval *"
+  denied_commands: []               # Shell command patterns that are always blocked
   path_rules:
     - pattern: "/etc/*"
       allow: false

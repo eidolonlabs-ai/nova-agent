@@ -42,13 +42,10 @@ compression:
 
 # ── Context Files ───────────────────────────────────────────────────────────
 # Files Nova discovers automatically (searched in priority order, cwd → git root).
+# Note: Global personality file (~/.nova/SOUL.md) is loaded separately.
 context_files:
-  - ".nova.md"
   - "NOVA.md"
   - "AGENTS.md"
-  - "SOUL.md"
-  - "CLAUDE.md"
-  - ".cursorrules"
 
 # ── Memory ──────────────────────────────────────────────────────────────────
 # Persistent cross-session facts with LRU eviction.
@@ -84,6 +81,7 @@ delegation:
     max_iterations: 30              # Max tool calls per sub-agent turn
     system_prompt_max: 4000         # Smaller system prompt for sub-agents
     tool_result_max_chars: 4000     # Smaller tool result budget
+    tool_result_max_tokens: 1500    # Token limit per tool result
 
 # ── Permission System ───────────────────────────────────────────────────────
 # Defense-in-depth tool execution control.
@@ -91,10 +89,7 @@ permissions:
   mode: "auto"                      # "auto" (allow all) or "ask" (confirm mutating tools)
   denied_tools: []                  # Tools the agent can never use
   allowed_tools: []                 # Tools that bypass confirmation (ask mode)
-  denied_commands:                  # Shell command patterns that are always blocked
-    - "rm -rf /"
-    - "rm -rf /*"
-    - ":(){*};:*"                   # Fork bomb
+  denied_commands: []               # Shell command patterns that are always blocked (fnmatch patterns)
   path_rules: []                    # Path-level allow/deny rules (fnmatch patterns)
     # - pattern: "/etc/*"
     #   allow: false
