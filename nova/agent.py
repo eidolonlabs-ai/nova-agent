@@ -361,8 +361,22 @@ class NovaAgent:
             }]
         }
 
+    @staticmethod
+    def _is_transient_error(error_msg: str) -> bool:
+        """Check if an error is transient (retryable) vs permanent."""
+        error_lower = error_msg.lower()
+        transient_keywords = {
+            "timeout", "timed out", "connection", "reset", "refused",
+            "temporarily unavailable", "too many requests", "rate limit",
+            "502", "503", "504", "connection error",
+        }
+        return any(kw in error_lower for kw in transient_keywords)
+
     def _execute_tool_call(self, tool_call: dict) -> str:
-        """Execute a single tool call and return the result."""
+        """Execute a single tool call and return the result.
+
+        Automatically retries transient errors (timeout, network) but not permanent ones.
+        """
         function = tool_call.get("function", {})
         name = function.get("name", "")
         arguments_str = function.get("arguments", "{}")
@@ -399,13 +413,35 @@ class NovaAgent:
         # first so the permission check happens before the hook)
         hooks.emit(EVENT_PRE_TOOL_CALL, tool_name=name, args=arguments)
 
-        # Pass config, memory, and agent reference to tool handlers via kwargs
-        result = registry.dispatch(
-            name, arguments, config=self.config, memory=self.memory, agent=self,
-        )
+        # Execute with automatic retry on transient errors
+        max_retries = max(0, self.config.get("agent", {}).get("tool_retry_max_attempts", 2))
+        for attempt in range(max_retries + 1):
+            # Pass config, memory, and agent reference to tool handlers via kwargs
+            result = registry.dispatch(
+                name, arguments, config=self.config, memory=self.memory, agent=self,
+            )
 
-        # Fire post_tool_call hook (also fired in registry.dispatch)
-        hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=arguments, result=result)
+            # Fire post_tool_call hook
+            hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=arguments, result=result)
+
+            # Retry on transient errors (timeout, network, rate-limit)
+            is_transient = (
+                isinstance(result, str)
+                and result.startswith("Error:")
+                and self._is_transient_error(result)
+                and attempt < max_retries
+            )
+            if is_transient:
+                wait_time = 2 ** attempt  # exponential backoff: 1s, 2s, 4s
+                logger.warning(
+                    "Tool %s failed with transient error (attempt %d/%d), retrying in %ds: %s",
+                    name, attempt + 1, max_retries + 1, wait_time, result[:100],
+                )
+                time.sleep(wait_time)
+                continue
+
+            # Success or permanent error — return
+            return result
 
         return result
 
