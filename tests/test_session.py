@@ -177,6 +177,32 @@ def test_search_sessions():
         assert sid2 in session_ids
 
 
+def test_search_sessions_multi_term_and():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "test.db"
+        store = SessionStore(db)
+
+        # Words appear non-adjacent — phrase search would miss this
+        sid = store.create_session(title="Founding Discussion")
+        store.add_message(sid, "user", "We are defining the founding team structure")
+        store.add_message(sid, "assistant", "Great, here are the key roles we need to fill")
+
+        results = store.search_sessions("founding roles")
+        assert any(r["session_id"] == sid for r in results)
+
+
+def test_search_sessions_prefix_on_last_term():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "test.db"
+        store = SessionStore(db)
+
+        sid = store.create_session(title="Architecture")
+        store.add_message(sid, "user", "How do we handle database migrations")
+
+        results = store.search_sessions("database migr")
+        assert any(r["session_id"] == sid for r in results)
+
+
 def test_search_sessions_empty_query():
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "test.db"

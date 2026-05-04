@@ -254,8 +254,14 @@ class SessionStore:
 
     def search_sessions(self, query: str, limit: int = 10) -> list[dict]:
         """Search sessions using FTS5."""
-        # Escape FTS5 special characters for safe querying
-        safe_query = query.replace('"', '""')
+        # Quote each token individually so multi-word queries are AND'd, not phrase-matched.
+        # Last token gets a trailing * for prefix matching ("foundin" finds "founding").
+        tokens = query.split()
+        if not tokens:
+            return []
+        quoted = [f'"{t.replace(chr(34), "")}"' for t in tokens]
+        quoted[-1] = quoted[-1] + "*"
+        fts_query = " ".join(quoted)
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute(
                 "SELECT s.session_id, s.title, s.updated_at, s.message_count "
@@ -263,7 +269,7 @@ class SessionStore:
                 "JOIN session_search fs ON s.session_id = fs.session_id "
                 "WHERE session_search MATCH ? "
                 "ORDER BY rank LIMIT ?",
-                (f'"{safe_query}"*', limit),
+                (fts_query, limit),
             )
             return [
                 {
