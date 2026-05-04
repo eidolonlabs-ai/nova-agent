@@ -83,7 +83,7 @@ nova reset                # Reset session state
 
 **Linting:** Code must pass `ruff check .` with no errors.
 
-**Tests:** All 101 tests must pass.
+**Tests:** All 557 tests must pass.
 - Test coverage baseline: CLI 82%, sessions/file_ops 91–100%
 - Use dependency injection: pass mock `http_client`, `session_store`, and `memory_store` to `NovaAgent`
 - Test files live in `tests/` with names matching source modules (e.g., `tests/test_agent.py` for `nova/agent.py`)
@@ -111,7 +111,7 @@ nova reset                # Reset session state
 
 ## Current Status
 
-✅ All 101 tests passing  
+✅ All 557 tests passing  
 ✅ Linting clean (ruff)  
 ✅ Type checking clean (mypy)  
 ✅ CLI functional (chat, ask, sessions, reset)  
