@@ -143,6 +143,43 @@ Examples:
 
 **Full contribution guidelines:** See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Documentation Standards
+
+All documentation for this project follows **ai-companions style**. These rules apply whenever you create or edit any `.md` file in this repo.
+
+**File placement:** Every doc lives in `docs/`. Never create `.md` files at the repo root (except README.md, CONTRIBUTING.md, SECURITY.md, CLAUDE.md).
+
+**Naming convention — always use the correct type prefix:**
+
+| Type | Prefix | When to use |
+|------|--------|-------------|
+| Feature/usage guide | `GUIDE-NNN-NAME.md` | How-to docs, developer references |
+| Architecture decision | `ADR-NNN-NAME.md` | Design decisions and rationale |
+| Technical specification | `SPEC-NNN-NAME.md` | Feature design, data models, APIs |
+| Deployment/runbook | `RUN-NNN-NAME.md` | Step-by-step operational procedures |
+| Status/project report | `REPORT-NNN-NAME.md` | Point-in-time project status |
+
+Use the next available number in sequence. Check `docs/DOCUMENTATION_INDEX.md` for the current highest number per type.
+
+**Required metadata in every doc** (first 5 lines after the title):
+```markdown
+**Status:** ✅ Active
+**Last Updated:** Month YYYY
+**Type:** GUIDE (Developer Reference)   ← match the prefix type
+```
+
+**Status indicators** — use consistently:
+- `✅` Active / complete / passing
+- `🟡` In progress / partial
+- `📋` Planned / not started
+- `🔴` Blocked / deprecated
+
+**Every doc must include:**
+- A Related Documentation section at the bottom with a cross-reference table
+- Status symbols in any feature or capability tables
+
+**When generating documentation:** Load the `documentation-template-builder` skill — it contains full templates and rich examples for all doc types. Use `skill_view("documentation-template-builder")` before writing any new doc.
+
 ## Working in Worktrees
 
 When you create or enter a worktree, make sure to:
