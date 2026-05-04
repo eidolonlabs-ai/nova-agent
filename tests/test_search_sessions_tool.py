@@ -18,19 +18,27 @@ def temp_session_store() -> SessionStore:
     # Create some test sessions with different content
     session1 = store.create_session(title="Python Tips")
     store.add_message(session1, "user", "How do I use list comprehensions?")
-    store.add_message(session1, "assistant", "List comprehensions are a concise way to create lists in Python.")
+    store.add_message(
+        session1, "assistant", "List comprehensions are a concise way to create lists in Python."
+    )
     store.add_message(session1, "user", "Can you show me an example?")
-    store.add_message(session1, "assistant", "[x*2 for x in range(10)] creates a list of doubled numbers.")
+    store.add_message(
+        session1, "assistant", "[x*2 for x in range(10)] creates a list of doubled numbers."
+    )
 
     session2 = store.create_session(title="Docker Setup")
     store.add_message(session2, "user", "How do I containerize my application?")
     store.add_message(session2, "assistant", "You'll need a Dockerfile and docker-compose.yml")
     store.add_message(session2, "user", "What's the difference between images and containers?")
-    store.add_message(session2, "assistant", "Images are templates, containers are running instances.")
+    store.add_message(
+        session2, "assistant", "Images are templates, containers are running instances."
+    )
 
     session3 = store.create_session(title="Database Design")
     store.add_message(session3, "user", "How do I normalize a database schema?")
-    store.add_message(session3, "assistant", "Normalization reduces redundancy and improves data integrity.")
+    store.add_message(
+        session3, "assistant", "Normalization reduces redundancy and improves data integrity."
+    )
 
     return store
 
