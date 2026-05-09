@@ -826,12 +826,7 @@ class NovaAgent:
                 parts = user_input[1:].split(None, 1)
                 cmd_name = parts[0].lower()
                 cmd_args = parts[1] if len(parts) > 1 else ""
-                cmd_def = resolve_command(cmd_name)
 
-                if cmd_def is None:
-                    return
-
-                # Try the handler registry first; fall back to sending as message
                 if dispatch_command(cmd_name, self, cmd_args):
                     return
 
