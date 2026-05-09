@@ -267,6 +267,12 @@ def test_skill_export_not_found(temp_skills_dir, skills_config):
     assert "not found" in result
 
 
+def test_skill_export_empty_name(temp_skills_dir, skills_config):
+    """Test exporting with an empty name returns an error message."""
+    result = _skill_export({"name": ""}, config=skills_config)
+    assert "not found" in result
+
+
 def test_skill_manage_create_default_category(temp_skills_dir, skills_config):
     result = _skill_manage(
         {

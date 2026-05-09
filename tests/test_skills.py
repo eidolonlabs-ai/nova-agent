@@ -348,6 +348,20 @@ def test_export_skill_inlines_references():
     assert "{skill_dir}" not in result
 
 
+def test_export_skill_empty_references_dir():
+    """Test exporting a skill whose references/ dir exists but has no .md files."""
+    tmpdir = Path(tempfile.mkdtemp())
+    skill_dir = tmpdir / "my-skill"
+    (skill_dir / "references").mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: my-skill\n---\n# My Skill\n\nContent here.", encoding="utf-8"
+    )
+    result = export_skill(skill_dir)
+    assert result is not None
+    assert "Content here" in result
+    assert "Reference Examples" not in result
+
+
 def test_export_skill_not_found():
     """Test exporting a nonexistent skill returns None."""
     result = export_skill(Path("/nonexistent/skill-dir"))

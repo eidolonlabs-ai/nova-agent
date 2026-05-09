@@ -198,9 +198,9 @@ def export_skill(skill_dir: Path) -> str | None:
         return None
 
     try:
-        content = skill_file.read_text(encoding="utf-8")
-        _, body = parse_frontmatter(content)
-        body = body.replace("{skill_dir}", str(skill_dir))
+        body = load_skill_content(str(skill_file), skill_dir=skill_dir)
+        if body is None:
+            return None
 
         refs_dir = skill_dir / "references"
         if not refs_dir.exists():

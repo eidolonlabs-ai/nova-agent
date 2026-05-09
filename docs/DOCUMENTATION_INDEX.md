@@ -79,6 +79,8 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | Root docs (README, CONTRIBUTING, SECURITY) | 3 | ✅ All current |
 | **Total** | **23** | ✅ |
 
+**Supported doc type prefixes:** GUIDE · PRD · PERSONA · SPEC · ADR · RUN · RELEASE · STRATEGY · RESEARCH · GTM · REPORT
+
 ---
 
 ## 🆘 Troubleshooting
