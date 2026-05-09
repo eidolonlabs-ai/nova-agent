@@ -298,14 +298,19 @@ config/
     git-workflow/
     file-editing/
 docs/
-  GUIDE-003-CUSTOMIZING.md    # Comprehensive customization guide
-  GUIDE-001-CREATING_TOOLS.md # Developer guide: building custom tools
-  GUIDE-002-CREATING_SKILLS.md # Developer guide: building custom skills
-  GUIDE-008-PERMISSIONS.md    # Permission system configuration
-  GUIDE-006-HOOKS.md          # Hook/callback system
-  GUIDE-004-BACKGROUND_TASKS.md # Background task management
-  GUIDE-007-MCP_INTEGRATION.md # MCP server integration
-  GUIDE-005-COST_TRACKING.md  # Cost tracking and usage monitoring
+  GUIDE-003-CUSTOMIZING.md           # Comprehensive customization guide
+  GUIDE-001-CREATING_TOOLS.md        # Developer guide: building custom tools
+  GUIDE-002-CREATING_SKILLS.md       # Developer guide: building custom skills
+  GUIDE-008-PERMISSIONS.md           # Permission system configuration
+  GUIDE-006-HOOKS.md                 # Hook/callback system
+  GUIDE-004-BACKGROUND_TASKS.md      # Background task management
+  GUIDE-007-MCP_INTEGRATION.md       # MCP server integration
+  GUIDE-005-COST_TRACKING.md         # Cost tracking and usage monitoring
+  GUIDE-010-ROADMAP.md               # Project phases, timeline, and targets
+  GUIDE-011-CONTEXT_COMPRESSION.md   # Three-tier context management strategy
+  GUIDE-012-SESSION_MANAGEMENT.md    # SQLite sessions, FTS5 search, commands
+  GUIDE-013-MEMORY_SYSTEM.md         # File-based persistent memory
+  GUIDE-014-RETRY_AND_ERROR_HANDLING.md  # Retry logic and error classification
 ```
 
 ## Development
@@ -337,6 +342,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 | [Background Tasks](docs/GUIDE-004-BACKGROUND_TASKS.md) | GUIDE | ✅ Active | Fire-and-forget execution, status tracking |
 | [MCP Integration](docs/GUIDE-007-MCP_INTEGRATION.md) | GUIDE | ✅ Active | Connect to MCP servers (stdio, HTTP, SSE) |
 | [Cost Tracking](docs/GUIDE-005-COST_TRACKING.md) | GUIDE | ✅ Active | Token usage, dollar cost estimation |
+| [Roadmap](docs/GUIDE-010-ROADMAP.md) | GUIDE | ✅ Active | Project phases, timeline, and targets |
+| [Context Compression](docs/GUIDE-011-CONTEXT_COMPRESSION.md) | GUIDE | ✅ Active | Three-tier context management: microcompact, LLM compress, reset |
+| [Session Management](docs/GUIDE-012-SESSION_MANAGEMENT.md) | GUIDE | ✅ Active | SQLite sessions, FTS5 search, slash commands |
+| [Memory System](docs/GUIDE-013-MEMORY_SYSTEM.md) | GUIDE | ✅ Active | File-based persistent memory, LRU eviction |
+| [Retry & Error Handling](docs/GUIDE-014-RETRY_AND_ERROR_HANDLING.md) | GUIDE | ✅ Active | Exponential backoff, error classification, retries |
 | [Documentation Index](docs/DOCUMENTATION_INDEX.md) | INDEX | ✅ Active | Full inventory of all docs |
 
 ## License

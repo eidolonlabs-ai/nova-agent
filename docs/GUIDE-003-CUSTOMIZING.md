@@ -150,7 +150,7 @@ cp -r config/skills/* ~/.nova/skills/
 
 ## Memory
 
-Nova has a simple file-based memory system for persistent facts.
+Nova has a simple file-based memory system for persistent facts. See [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) for full details on architecture, categories, and LRU eviction.
 
 ### Configuration
 
@@ -376,7 +376,7 @@ cost_tracking:
 
 ## Context Compression
 
-Nova uses a two-tier compaction strategy to manage context windows:
+Nova uses a three-tier compaction strategy to manage context windows. See [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) for the full strategy, trade-offs, and configuration reference.
 
 **Tier 1: Microcompact** — Strips old tool result content while preserving message structure. Cheap, no LLM call needed.
 
@@ -398,10 +398,11 @@ The compression flow is:
 1. Check if total tokens exceed threshold (context_window × threshold_percent - reserve_tokens)
 2. **Tier 1**: Strip old tool content → if still over threshold →
 3. **Tier 2**: LLM summarizes older messages, injects summary as system message
+4. **Tier 3**: User runs `/new` to start a fresh session (manual reset)
 
 ## Retry Logic
 
-Nova automatically retries failed API calls with exponential backoff and jitter:
+Nova automatically retries failed API calls with exponential backoff and jitter. See [GUIDE-014-RETRY_AND_ERROR_HANDLING](GUIDE-014-RETRY_AND_ERROR_HANDLING.md) for error classification, retry algorithm, and configuration reference.
 
 ```yaml
 retry:
@@ -442,3 +443,8 @@ retry:
 | [Background Tasks](GUIDE-004-BACKGROUND_TASKS.md) | GUIDE | Fire-and-forget task execution |
 | [MCP Integration](GUIDE-007-MCP_INTEGRATION.md) | GUIDE | Connect to external MCP servers |
 | [Cost Tracking](GUIDE-005-COST_TRACKING.md) | GUIDE | Token usage and dollar cost tracking |
+| [Roadmap](GUIDE-010-ROADMAP.md) | GUIDE | Project phases, timeline, and targets |
+| [Context Compression](GUIDE-011-CONTEXT_COMPRESSION.md) | GUIDE | Three-tier context management strategy |
+| [Session Management](GUIDE-012-SESSION_MANAGEMENT.md) | GUIDE | SQLite sessions, FTS5 search, slash commands |
+| [Memory System](GUIDE-013-MEMORY_SYSTEM.md) | GUIDE | File-based persistent memory, LRU eviction |
+| [Retry & Error Handling](GUIDE-014-RETRY_AND_ERROR_HANDLING.md) | GUIDE | Exponential backoff, error classification |

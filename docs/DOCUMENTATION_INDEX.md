@@ -31,6 +31,11 @@
 | [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md) | ✅ Active | Connect stdio, HTTP, and SSE Model Context Protocol servers |
 | [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) | ✅ Active | Defense-in-depth cascade, allow/deny lists, path rules, opinionated profiles |
 | [GUIDE-009-USING_NOVA](GUIDE-009-USING_NOVA.md) | ✅ Active | Effective use patterns: task descriptions, sessions, memory, tools |
+| [GUIDE-010-ROADMAP](GUIDE-010-ROADMAP.md) | ✅ Active | Project phases, timeline, completed and planned work |
+| [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) | ✅ Active | Three-tier context management: microcompact, LLM compress, session reset |
+| [GUIDE-012-SESSION_MANAGEMENT](GUIDE-012-SESSION_MANAGEMENT.md) | ✅ Active | SQLite session storage, FTS5 search, commands, lifecycle |
+| [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) | ✅ Active | File-based persistent memory across sessions, LRU eviction |
+| [GUIDE-014-RETRY_AND_ERROR_HANDLING](GUIDE-014-RETRY_AND_ERROR_HANDLING.md) | ✅ Active | Exponential backoff, error classification, retry configuration |
 
 ---
 
@@ -72,12 +77,12 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 
 | Category | Count | Status |
 |----------|-------|--------|
-| Guides (GUIDE-NNN) | 9 | ✅ All current |
+| Guides (GUIDE-NNN) | 14 | ✅ All current |
 | ADRs (ADR-NNN) | 3 | ✅ All current |
 | Reports (REPORT-NNN) | 1 | ✅ Current |
 | Starter skills | 7 | ✅ All current |
 | Root docs (README, CONTRIBUTING, SECURITY) | 3 | ✅ All current |
-| **Total** | **23** | ✅ |
+| **Total** | **28** | ✅ |
 
 **Supported doc type prefixes:** GUIDE · PRD · PERSONA · SPEC · ADR · RUN · RELEASE · STRATEGY · RESEARCH · GTM · REPORT
 
@@ -87,6 +92,6 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 
 1. **Can't connect to OpenRouter** → Check `OPENROUTER_API_KEY` env var or `config.yaml`
 2. **Tool blocked unexpectedly** → See [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) — check `denied_tools` and `path_rules`
-3. **Context too long / compression triggering** → See [GUIDE-003-CUSTOMIZING](GUIDE-003-CUSTOMIZING.md#context-compression) — adjust `threshold_percent`
+3. **Context too long / compression triggering** → See [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) — adjust `threshold_percent`
 4. **MCP server not appearing** → See [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md#troubleshooting)
 5. **Skills not loading** → Check `~/.nova/skills/<name>/SKILL.md` exists with valid YAML frontmatter
