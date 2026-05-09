@@ -161,9 +161,15 @@ All documentation for this project follows **ai-companions style**. These rules 
 | Type | Prefix | When to use |
 |------|--------|-------------|
 | Feature/usage guide | `GUIDE-NNN-NAME.md` | How-to docs, developer references |
+| Product requirements | `PRD-NNN-NAME.md` | Feature requirements, user stories, acceptance criteria |
+| User personas | `PERSONA-NNN-NAME.md` | Who we're building for — goals, frustrations, behaviors |
 | Architecture decision | `ADR-NNN-NAME.md` | Design decisions and rationale |
 | Technical specification | `SPEC-NNN-NAME.md` | Feature design, data models, APIs |
 | Deployment/runbook | `RUN-NNN-NAME.md` | Step-by-step operational procedures |
+| Release notes | `RELEASE-NNN-NAME.md` | Customer-facing changelog for a version |
+| Product strategy | `STRATEGY-NNN-NAME.md` | Vision, bets, OKRs, long-term direction |
+| Competitive analysis | `RESEARCH-NNN-NAME.md` | Market landscape, competitor teardowns, positioning |
+| Go-to-market plan | `GTM-NNN-NAME.md` | Launch coordination across PM, Marketing, CS |
 | Status/project report | `REPORT-NNN-NAME.md` | Point-in-time project status |
 
 Use the next available number in sequence. Check `docs/DOCUMENTATION_INDEX.md` for the current highest number per type.

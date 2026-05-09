@@ -1,0 +1,10 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "documentation-template-builder",
+  "version": "1.0.0",
+  "description": "Generate project documentation in ai-companions style — README, Roadmap, GUIDE, PRD, PERSONA, SPEC, ADR, RUN, RELEASE, STRATEGY, RESEARCH, GTM, REPORT. Produces complete markdown with status indicators, quick reference tables, and Related Documentation sections.",
+  "category": "development",
+  "tags": ["documentation", "product-management", "templates", "prd", "adr", "spec"],
+  "entrypoint": "SKILL.md",
+  "references_dir": "references"
+}

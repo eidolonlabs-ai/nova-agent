@@ -2,8 +2,14 @@
 
 Skills are directories containing SKILL.md files with YAML frontmatter.
 Inspired by both Hermes-Agent (snapshot caching) and OpenClaw (compact XML format).
+
+Portability: each skill directory may also contain a skill.json manifest
+(schema: nova-skill-v1) for agents that can't parse YAML frontmatter. Use
+export_skill() to produce a single self-contained markdown file suitable
+for pasting into CLAUDE.md, system prompts, or other agent frameworks.
 """
 
+import json
 import logging
 from pathlib import Path
 
@@ -147,8 +153,12 @@ def build_skills_prompt(
     return result
 
 
-def load_skill_content(skill_path: str) -> str | None:
-    """Load the full content of a SKILL.md file."""
+def load_skill_content(skill_path: str, skill_dir: Path | None = None) -> str | None:
+    """Load the full content of a SKILL.md file.
+
+    If skill_dir is provided, substitutes {skill_dir} placeholders so reference
+    paths resolve correctly regardless of where the skill is installed.
+    """
     path = Path(skill_path)
     if not path.exists():
         return None
@@ -156,7 +166,60 @@ def load_skill_content(skill_path: str) -> str | None:
     try:
         content = path.read_text(encoding="utf-8")
         _, body = parse_frontmatter(content)
+        if skill_dir is not None:
+            body = body.replace("{skill_dir}", str(skill_dir))
         return body
     except Exception as e:
         logger.error("Failed to load skill %s: %s", skill_path, e)
+        return None
+
+
+def read_skill_json(skill_dir: Path) -> dict:
+    """Read skill.json manifest if present. Returns empty dict if missing or invalid."""
+    json_path = skill_dir / "skill.json"
+    if not json_path.exists():
+        return {}
+    try:
+        return json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        logger.debug("Failed to read skill.json in %s: %s", skill_dir, e)
+        return {}
+
+
+def export_skill(skill_dir: Path) -> str | None:
+    """Export a skill as a single self-contained markdown document.
+
+    Inlines all files from the references/ subdirectory as appendices.
+    Suitable for pasting into CLAUDE.md, system prompts, or other agents
+    that don't support the nova skill loading protocol.
+    """
+    skill_file = skill_dir / "SKILL.md"
+    if not skill_file.exists():
+        return None
+
+    try:
+        content = skill_file.read_text(encoding="utf-8")
+        _, body = parse_frontmatter(content)
+        body = body.replace("{skill_dir}", str(skill_dir))
+
+        refs_dir = skill_dir / "references"
+        if not refs_dir.exists():
+            return body
+
+        appendices = []
+        for ref_file in sorted(refs_dir.iterdir()):
+            if ref_file.suffix == ".md":
+                try:
+                    ref_content = ref_file.read_text(encoding="utf-8")
+                    appendices.append(f"### {ref_file.name}\n\n{ref_content}")
+                except Exception as e:
+                    logger.debug("Failed to read reference %s: %s", ref_file, e)
+
+        if not appendices:
+            return body
+
+        appendix = "---\n\n## Reference Examples\n\n" + "\n\n---\n\n".join(appendices)
+        return body + "\n\n" + appendix
+    except Exception as e:
+        logger.error("Failed to export skill %s: %s", skill_dir, e)
         return None

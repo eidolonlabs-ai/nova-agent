@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "python-coding",
+  "version": "1.0.0",
+  "description": "Python coding conventions, testing, type hints, ruff, mypy, and best practices.",
+  "category": "development",
+  "tags": ["python", "testing", "type-hints", "ruff", "mypy"],
+  "entrypoint": "SKILL.md"
+}

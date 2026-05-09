@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "nova-debugging",
+  "version": "1.0.0",
+  "description": "Debugging nova-agent sessions — handling loops, hallucinated tool calls, context drift, tool chain failures, and permission issues.",
+  "category": "development",
+  "tags": ["nova", "debugging", "troubleshooting", "agent"],
+  "entrypoint": "SKILL.md"
+}

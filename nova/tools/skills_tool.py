@@ -9,7 +9,13 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from nova.skills import build_skills_prompt, discover_skills, load_skill_content, parse_frontmatter
+from nova.skills import (
+    build_skills_prompt,
+    discover_skills,
+    export_skill,
+    load_skill_content,
+    parse_frontmatter,
+)
 from nova.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -33,6 +39,21 @@ SKILL_VIEW_SCHEMA = {
             "name": {
                 "type": "string",
                 "description": "The name of the skill to load.",
+            },
+        },
+        "required": ["name"],
+    },
+}
+
+SKILL_EXPORT_SCHEMA = {
+    "name": "skill_export",
+    "description": "Export a skill as a single self-contained markdown file with all reference examples inlined. Use to generate a portable version for CLAUDE.md, system prompts, or other agents that don't support the nova skill protocol.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {
+                "type": "string",
+                "description": "The name of the skill to export.",
             },
         },
         "required": ["name"],
@@ -95,9 +116,21 @@ def _skill_view(args: dict[str, Any], **kwargs) -> str:
     skills_dir = _get_skills_dir(config)
     skill_name = args.get("name", "")
 
-    skill_path = skills_dir / skill_name / "SKILL.md"
-    content = load_skill_content(str(skill_path))
+    skill_dir_path = skills_dir / skill_name
+    skill_path = skill_dir_path / "SKILL.md"
+    content = load_skill_content(str(skill_path), skill_dir=skill_dir_path)
     return content or f"Error: Skill '{skill_name}' not found at {skill_path}."
+
+
+def _skill_export(args: dict[str, Any], **kwargs) -> str:
+    """Export a skill as a single self-contained markdown file."""
+    config = kwargs.get("config", {})
+    skills_dir = _get_skills_dir(config)
+    skill_name = args.get("name", "")
+
+    skill_dir_path = skills_dir / skill_name
+    result = export_skill(skill_dir_path)
+    return result or f"Error: Skill '{skill_name}' not found at {skill_dir_path}."
 
 
 def _skill_manage(args: dict[str, Any], **kwargs) -> str:
@@ -175,6 +208,14 @@ def _skill_manage(args: dict[str, Any], **kwargs) -> str:
     else:
         return f"Error: Unknown action '{action}'. Use 'create', 'patch', or 'delete'."
 
+
+registry.register(
+    name="skill_export",
+    toolset="skills",
+    schema=SKILL_EXPORT_SCHEMA,
+    handler=_skill_export,
+    emoji="📤",
+)
 
 registry.register(
     name="skills_list",

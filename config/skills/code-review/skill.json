@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "code-review",
+  "version": "1.0.0",
+  "description": "How to review code — what to check, how to pull PR context, and how to phrase feedback.",
+  "category": "development",
+  "tags": ["code-quality", "review", "pull-requests"],
+  "entrypoint": "SKILL.md"
+}

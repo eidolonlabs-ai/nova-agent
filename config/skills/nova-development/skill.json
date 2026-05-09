@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "nova-development",
+  "version": "1.0.0",
+  "description": "Working on the nova-agent codebase — tool system, permissions, hooks, testing patterns, config, architecture, and CI.",
+  "category": "development",
+  "tags": ["nova", "development", "tools", "architecture", "testing"],
+  "entrypoint": "SKILL.md"
+}

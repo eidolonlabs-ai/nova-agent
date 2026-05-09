@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from nova.tools.skills_tool import _skill_manage, _skill_view, _skills_list
+from nova.tools.skills_tool import _skill_export, _skill_manage, _skill_view, _skills_list
 
 
 @pytest.fixture
@@ -232,6 +232,39 @@ def test_skill_manage_patch_with_list_in_frontmatter(temp_skills_dir, skills_con
     updated = skill_file.read_text()
     assert "New content" in updated
     assert "with_list" in updated
+
+
+def test_skill_view_substitutes_skill_dir(temp_skills_dir, skills_config):
+    """Test that skill_view resolves {skill_dir} placeholders."""
+    skill_dir = temp_skills_dir / "path_skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: path_skill\n---\nRef: {skill_dir}/references/file.md"
+    )
+    result = _skill_view({"name": "path_skill"}, config=skills_config)
+    assert "{skill_dir}" not in result
+    assert "references/file.md" in result
+
+
+def test_skill_export_success(temp_skills_dir, skills_config):
+    """Test exporting a skill with references inlined."""
+    skill_dir = temp_skills_dir / "export_skill"
+    refs_dir = skill_dir / "references"
+    refs_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: export_skill\n---\n# Export Skill\n\nMain content."
+    )
+    (refs_dir / "example.md").write_text("# Example\n\nRef content.")
+    result = _skill_export({"name": "export_skill"}, config=skills_config)
+    assert "Main content" in result
+    assert "Ref content" in result
+    assert "Reference Examples" in result
+
+
+def test_skill_export_not_found(temp_skills_dir, skills_config):
+    """Test exporting a nonexistent skill returns an error message."""
+    result = _skill_export({"name": "nonexistent"}, config=skills_config)
+    assert "not found" in result
 
 
 def test_skill_manage_create_default_category(temp_skills_dir, skills_config):

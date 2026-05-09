@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "file-editing",
+  "version": "1.0.0",
+  "description": "Safe file editing patterns — read before write, patch with context, verify after.",
+  "category": "development",
+  "tags": ["file-operations", "editing", "safety"],
+  "entrypoint": "SKILL.md"
+}

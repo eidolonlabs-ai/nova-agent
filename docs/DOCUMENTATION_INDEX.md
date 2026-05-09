@@ -62,7 +62,7 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | `git-workflow` | development | ✅ Active | Branching, committing, pushing, PRs |
 | `file-editing` | development | ✅ Active | Safe file editing patterns, verification steps |
 | `code-review` | development | ✅ Active | Code review conventions and checklists |
-| `documentation-template-builder` | development | ✅ Active | Generate docs in ai-companions style (README, Roadmap, Spec, ADR, etc.) |
+| `documentation-template-builder` | development | ✅ Active | Generate docs in ai-companions style — README, Roadmap, GUIDE, PRD, PERSONA, SPEC, ADR, RUN, RELEASE, STRATEGY, RESEARCH, GTM, REPORT |
 | `nova-development` | development | ✅ Active | Tool system, permissions, hooks, delegation, testing patterns, config, CI |
 | `nova-debugging` | development | ✅ Active | Loops, hallucinations, context drift, tool failures, permission issues |
 

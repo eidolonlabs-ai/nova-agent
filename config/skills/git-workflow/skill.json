@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "git-workflow",
+  "version": "1.0.0",
+  "description": "Git and GitHub workflow — conventional commits, branching, PRs, and gh CLI usage.",
+  "category": "development",
+  "tags": ["git", "version-control", "github", "pull-requests"],
+  "entrypoint": "SKILL.md"
+}

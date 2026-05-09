@@ -6,9 +6,11 @@ from pathlib import Path
 from nova.skills import (
     build_skills_prompt,
     discover_skills,
+    export_skill,
     extract_skill_description,
     load_skill_content,
     parse_frontmatter,
+    read_skill_json,
 )
 
 
@@ -260,3 +262,107 @@ def test_load_skill_content_nonexistent():
     """Test loading content from a nonexistent file."""
     result = load_skill_content("/nonexistent/path/SKILL.md")
     assert result is None
+
+
+def test_load_skill_content_substitutes_skill_dir():
+    """Test that {skill_dir} is substituted when skill_dir is provided."""
+    tmpdir = Path(tempfile.mkdtemp())
+    skill_file = tmpdir / "SKILL.md"
+    skill_file.write_text(
+        "---\nname: test\n---\nLoad: {skill_dir}/references/example.md", encoding="utf-8"
+    )
+    result = load_skill_content(str(skill_file), skill_dir=tmpdir)
+    assert result is not None
+    assert "{skill_dir}" not in result
+    assert str(tmpdir) in result
+
+
+def test_load_skill_content_no_skill_dir_preserves_placeholder():
+    """Test that {skill_dir} is left as-is when skill_dir is not provided."""
+    tmpdir = Path(tempfile.mkdtemp())
+    skill_file = tmpdir / "SKILL.md"
+    skill_file.write_text(
+        "---\nname: test\n---\nLoad: {skill_dir}/references/example.md", encoding="utf-8"
+    )
+    result = load_skill_content(str(skill_file))
+    assert result is not None
+    assert "{skill_dir}" in result
+
+
+def test_read_skill_json_exists():
+    """Test reading a valid skill.json."""
+    tmpdir = Path(tempfile.mkdtemp())
+    (tmpdir / "skill.json").write_text(
+        '{"schema": "nova-skill-v1", "name": "test", "version": "1.0.0", "tags": ["a", "b"]}',
+        encoding="utf-8",
+    )
+    result = read_skill_json(tmpdir)
+    assert result["schema"] == "nova-skill-v1"
+    assert result["name"] == "test"
+    assert result["tags"] == ["a", "b"]
+
+
+def test_read_skill_json_missing():
+    """Test that missing skill.json returns empty dict."""
+    tmpdir = Path(tempfile.mkdtemp())
+    assert read_skill_json(tmpdir) == {}
+
+
+def test_read_skill_json_invalid_json():
+    """Test that invalid JSON returns empty dict."""
+    tmpdir = Path(tempfile.mkdtemp())
+    (tmpdir / "skill.json").write_text("not valid json{", encoding="utf-8")
+    assert read_skill_json(tmpdir) == {}
+
+
+def test_export_skill_no_references():
+    """Test exporting a skill that has no references directory."""
+    tmpdir = Path(tempfile.mkdtemp())
+    skill_dir = tmpdir / "my-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: my-skill\n---\n# My Skill\n\nContent here.", encoding="utf-8"
+    )
+    result = export_skill(skill_dir)
+    assert result is not None
+    assert "Content here" in result
+    assert "Reference Examples" not in result
+
+
+def test_export_skill_inlines_references():
+    """Test that export_skill inlines all reference files as appendices."""
+    tmpdir = Path(tempfile.mkdtemp())
+    skill_dir = tmpdir / "my-skill"
+    refs_dir = skill_dir / "references"
+    refs_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: my-skill\n---\n# My Skill\n\nLoad: {skill_dir}/references/example.md",
+        encoding="utf-8",
+    )
+    (refs_dir / "example.md").write_text("# Example\n\nRef content here.", encoding="utf-8")
+    result = export_skill(skill_dir)
+    assert result is not None
+    assert "My Skill" in result
+    assert "Ref content here" in result
+    assert "Reference Examples" in result
+    assert "{skill_dir}" not in result
+
+
+def test_export_skill_not_found():
+    """Test exporting a nonexistent skill returns None."""
+    result = export_skill(Path("/nonexistent/skill-dir"))
+    assert result is None
+
+
+def test_export_skill_substitutes_skill_dir():
+    """Test that {skill_dir} placeholders are resolved in the exported output."""
+    tmpdir = Path(tempfile.mkdtemp())
+    skill_dir = tmpdir / "path-skill"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: path-skill\n---\nRef: {skill_dir}/references/file.md", encoding="utf-8"
+    )
+    result = export_skill(skill_dir)
+    assert result is not None
+    assert "{skill_dir}" not in result
+    assert str(skill_dir) in result
