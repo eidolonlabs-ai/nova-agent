@@ -60,10 +60,10 @@ COMMAND_REGISTRY: list[CommandDef] = [
     # Skills
     CommandDef(
         "skills",
-        "List or manage skills",
+        "List available skills (or use /skill-name to load)",
         "Skills",
-        subcommands=("list", "view"),
-        args_hint="[list|view] [name]",
+        subcommands=("list",),
+        args_hint="[list]",
     ),
     # Tools
     CommandDef("tools", "List available tools", "Tools"),
@@ -106,6 +106,24 @@ def get_commands_by_category() -> dict[str, list[CommandDef]]:
 class SlashCompleter(Completer):
     """Tab-completion for slash commands, matching Hermes' SlashCommandCompleter."""
 
+    def __init__(self, config: dict | None = None) -> None:
+        """Initialize completer with optional config for skill discovery."""
+        self.config = config
+        self._skill_names: set[str] | None = None
+
+    def _get_skill_names(self) -> set[str]:
+        """Lazy-load skill names from config."""
+        if self._skill_names is None:
+            self._skill_names = set()
+            if self.config:
+                try:
+                    from nova.command_handlers import get_skill_names
+
+                    self._skill_names = get_skill_names(self.config)
+                except Exception:  # pragma: no cover
+                    pass
+        return self._skill_names
+
     def get_completions(self, document, complete_event):  # type: ignore[override]
         text = document.text_before_cursor
         if not text.startswith("/"):
@@ -128,6 +146,14 @@ class SlashCompleter(Completer):
                             display=display_text,
                             display_meta=cmd.description,
                         )
+
+            for skill_name in sorted(self._get_skill_names()):
+                if skill_name.startswith(cmd_part):
+                    yield Completion(
+                        skill_name[len(cmd_part) :],
+                        display=f"/{skill_name}",
+                        display_meta="Skill",
+                    )
         else:
             # Complete subcommand
             resolved = resolve_command(cmd_part)

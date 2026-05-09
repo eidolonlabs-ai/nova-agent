@@ -201,10 +201,11 @@ class NovaTUI:
     - The event loop (main thread) is never blocked, so StdoutProxy flushes immediately.
     """
 
-    def __init__(self, model: str, context_window: int = 0):
+    def __init__(self, model: str, context_window: int = 0, config: dict | None = None):
         self.model_short = model.split("/")[-1] if "/" in model else model
         self.context_window = context_window
         self.context_tokens = 0
+        self.config = config or {}
         self.session_start = time.monotonic()
         self._agent_running = threading.Event()  # thread-safe flag
         self._interrupt_requested = threading.Event()  # Ctrl+C → cancel agent
@@ -335,7 +336,7 @@ class NovaTUI:
             wrap_lines=True,
             read_only=Condition(lambda: self._agent_running.is_set()),
             history=FileHistory(history_path),
-            completer=SlashCompleter(),
+            completer=SlashCompleter(config=self.config),
             complete_while_typing=True,
         )
 

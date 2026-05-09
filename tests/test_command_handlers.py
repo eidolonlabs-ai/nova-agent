@@ -394,3 +394,103 @@ def test_cmd_memory_default_lists_without_subcommand(agent, mock_memory_store):
     with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
         dispatch_command("memory", agent, "")
     assert any("some fact" in s for s in printed)
+
+
+# ─── cmd_skills ──────────────────────────────────────────────────────────────
+
+
+def test_cmd_skills_lists_available_skills(agent, tmp_path):
+    """Test that /skills command lists available skills."""
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    skill_dir = skills_dir / "test-skill"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text(
+        "---\nname: test-skill\ncategory: general\ndescription: Test skill\n---\n\nContent"
+    )
+
+    agent.config["skills"] = {"directory": str(skills_dir)}
+    printed = []
+    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
+        dispatch_command("skills", agent, "")
+    combined = "\n".join(printed)
+    assert "Available skills" in combined
+    assert "test-skill" in combined
+
+
+def test_cmd_skills_no_skills(agent, tmp_path):
+    """Test /skills when no skills exist."""
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    agent.config["skills"] = {"directory": str(skills_dir)}
+    printed = []
+    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
+        dispatch_command("skills", agent, "")
+    assert any("No skills found" in s for s in printed)
+
+
+# ─── Skill slash commands ─────────────────────────────────────────────────────
+
+
+def test_dispatch_skill_command_returns_true(agent, tmp_path):
+    """Test that a skill name can be dispatched as a command."""
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    skill_dir = skills_dir / "my-skill"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text(
+        "---\nname: my-skill\ncategory: general\ndescription: My skill\n---\n\nSkill content here"
+    )
+
+    agent.config["skills"] = {"directory": str(skills_dir)}
+    with patch("nova.display._cprint"):
+        result = dispatch_command("my-skill", agent, "")
+    assert result is True
+
+
+def test_dispatch_skill_command_displays_content(agent, tmp_path):
+    """Test that skill content is displayed when loaded via slash command."""
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    skill_dir = skills_dir / "test-skill"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text(
+        "---\nname: test-skill\ncategory: general\ndescription: Test\n---\n\nMy special skill content"
+    )
+
+    agent.config["skills"] = {"directory": str(skills_dir)}
+    printed = []
+    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
+        dispatch_command("test-skill", agent, "")
+    combined = "\n".join(printed)
+    assert "My special skill content" in combined
+    assert "test-skill" in combined
+
+
+def test_dispatch_nonexistent_skill_returns_false(agent, tmp_path):
+    """Test that a nonexistent skill returns False."""
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    agent.config["skills"] = {"directory": str(skills_dir)}
+    result = dispatch_command("nonexistent-skill", agent, "")
+    assert result is False
+
+
+def test_dispatch_skill_with_mixed_case_resolves(agent, tmp_path):
+    """Test that skill matching is case-insensitive."""
+    skills_dir = tmp_path / "skills"
+    skills_dir.mkdir()
+    skill_dir = skills_dir / "my-skill"
+    skill_dir.mkdir()
+    skill_file = skill_dir / "SKILL.md"
+    skill_file.write_text(
+        "---\nname: my-skill\ncategory: general\ndescription: My skill\n---\n\nContent"
+    )
+
+    agent.config["skills"] = {"directory": str(skills_dir)}
+    with patch("nova.display._cprint"):
+        result = dispatch_command("My-Skill", agent, "")
+    assert result is True

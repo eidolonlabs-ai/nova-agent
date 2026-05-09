@@ -815,7 +815,7 @@ class NovaAgent:
 
         model = self.config["openrouter"]["model"]
         context_window = get_model_context_window(model)
-        tui = NovaTUI(model=model, context_window=context_window)
+        tui = NovaTUI(model=model, context_window=context_window, config=self.config)
         self._reasoning_callback = None
 
         def on_input(user_input: str) -> None:

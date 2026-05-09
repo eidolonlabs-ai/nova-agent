@@ -66,6 +66,10 @@ def dispatch_command(name: str, agent: NovaAgent, args: str) -> bool:
     """
     handler = _HANDLERS.get(name.lower())
     if handler is None:
+        skill_match = _resolve_skill(name, agent.config)
+        if skill_match is not None:
+            _handle_skill(agent, skill_match)
+            return True
         return False
     try:
         handler(agent, args)
@@ -84,6 +88,26 @@ def get_registered_commands() -> set[str]:
     from nova.commands import COMMAND_REGISTRY
 
     return {cmd.name for cmd in COMMAND_REGISTRY}
+
+
+def get_skill_names(config: dict) -> set[str]:
+    """Get all available skill names from the configured skills directory."""
+    from pathlib import Path
+
+    from nova.skills import discover_skills
+
+    skills_dir = Path(config.get("skills", {}).get("directory", "~/.nova/skills")).expanduser()
+    skills = discover_skills(skills_dir)
+    return {skill["name"] for skill in skills}
+
+
+def _resolve_skill(name: str, config: dict) -> str | None:
+    """Match a slash-command name to a skill, case-insensitive. Returns the canonical name."""
+    target = name.lower()
+    for skill_name in get_skill_names(config):
+        if skill_name.lower() == target:
+            return skill_name
+    return None
 
 
 # ─── Built-in command handlers ───────────────────────────────────────────────
@@ -169,6 +193,37 @@ def cmd_tools(agent: NovaAgent, args: str) -> None:
         )
 
 
+@command_handler("skills")
+def cmd_skills(agent: NovaAgent, args: str) -> None:
+    from pathlib import Path
+
+    from nova.display import _CYAN, _DIM, _RST, _cprint
+    from nova.skills import discover_skills
+
+    skills_dir = Path(
+        agent.config.get("skills", {}).get("directory", "~/.nova/skills")
+    ).expanduser()
+    skills = discover_skills(skills_dir)
+
+    if not skills:
+        _cprint(f"{_DIM}No skills found. Create skills in ~/.nova/skills/.{_RST}")
+        return
+
+    _cprint(f"{_DIM}Available skills ({len(skills)}):{_RST}")
+
+    by_category: dict[str, list[dict]] = {}
+    for skill in skills:
+        by_category.setdefault(skill["category"], []).append(skill)
+
+    for category in sorted(by_category.keys()):
+        _cprint(f"{_CYAN}{category}{_RST}")
+        for skill in by_category[category]:
+            desc = skill["description"]
+            if len(desc) > 60:
+                desc = desc[:60] + "…"
+            _cprint(f"  {_DIM}/{skill['name']:<20} — {desc}{_RST}")
+
+
 @command_handler("usage")
 def cmd_usage(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
@@ -250,3 +305,29 @@ def cmd_memory(agent: NovaAgent, args: str) -> None:
             _cprint(f"{_DIM}No memories stored{_RST}")
         for e in entries:
             _cprint(f"  {_DIM}{e}{_RST}")
+
+
+def _handle_skill(agent: NovaAgent, skill_name: str) -> None:
+    """Load and display a skill via slash command."""
+    from pathlib import Path
+
+    from nova.display import _CYAN, _DIM, _RST, _cprint
+    from nova.skills import load_skill_content
+
+    skills_dir = Path(
+        agent.config.get("skills", {}).get("directory", "~/.nova/skills")
+    ).expanduser()
+    skill_dir_path = skills_dir / skill_name
+    skill_path = skill_dir_path / "SKILL.md"
+
+    content = load_skill_content(str(skill_path), skill_dir=skill_dir_path)
+    if content is None:
+        _cprint(f"{_DIM}Error: Skill '{skill_name}' not found.{_RST}")
+        return
+
+    divider = "─" * 60
+    _cprint(f"\n{_CYAN}{divider}")
+    _cprint(f"Skill: {skill_name}")
+    _cprint(f"{divider}{_RST}\n")
+    _cprint(content)
+    _cprint(f"\n{_CYAN}{divider}{_RST}\n")
