@@ -802,7 +802,6 @@ class NovaAgent:
         from rich.console import Console
 
         from nova.command_handlers import dispatch_command
-        from nova.commands import resolve_command
         from nova.display import (
             NovaTUI,
             StreamingReasoningBox,
