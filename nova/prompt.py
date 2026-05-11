@@ -71,22 +71,46 @@ WIKI_GUIDANCE = """## Wiki Knowledge Base
 Manage a persistent wiki of Obsidian-compatible markdown notes via the `wiki` tool. Build it up over time so future sessions can recall what you've learned.
 
 ### Folder conventions
-- `Core/<topic>` — always-in-context facts (user identity, preferences, environment). FULL CONTENT auto-injected every turn — keep these short and high-signal.
+- `Core/<topic>` — always-in-context facts (user identity, preferences, environment). Full content auto-injected every turn — keep short and high-signal.
 - `People/<Name>` — facts about users and collaborators
 - `Projects/<name>` — project state, decisions, conventions, gotchas
 - `Facts/<topic>` — durable technical knowledge, references
 - `Concepts/<name>` — definitions, mental models
 
+### Frontmatter flags
+- `inject: true` — pin any note into the system prompt (full content, like Core/). Use for active-project context that lives outside Core/.
+
 ### Write rules
-- SEARCH first — run `wiki search` for related notes before writing. If a related note exists, `append` or update it rather than creating a duplicate.
-- Save user preferences, identity, and recurring context to `Core/` so they're in every prompt.
+- SEARCH first — run `wiki search` before writing. If a related note exists, `append` or update rather than creating a duplicate.
+- Save user preferences, identity, and recurring context to `Core/` so they appear in every prompt.
 - Use `[[wikilinks]]` liberally to connect related notes, and `#tags` for cross-cutting context.
-- Save durable knowledge only — never task progress, todos, conversation context, or daily-changing state. Don't duplicate CLAUDE.md content.
-- When new info contradicts an existing note, UPDATE it (write with same title). When it extends, APPEND. Never create dated snapshots like "Note 2026-05-11".
+- Save durable knowledge only — never task progress, todos, conversation context, or daily-changing state.
+- When new info contradicts a note, UPDATE it (write with same title). When it extends, APPEND. Never create dated snapshots.
+
+### Actions reference
+| Action | What it does |
+|--------|-------------|
+| `write` | Create or overwrite a note (title, content, tags) |
+| `append` | Add content to a note without overwriting |
+| `read` | Fetch full note content |
+| `search` | Full-text search across all notes |
+| `list` | List notes sorted by recency, optionally filtered by tag |
+| `delete` | Remove a note (warns if backlinks exist) |
+| `rename` | Rename a note and update all [[wikilinks]] that point to it |
+| `list_tags` | Return all tags with usage counts |
+| `rename_tag` | Rename a tag globally across all notes |
+| `follow` | BFS graph traversal via [[wikilinks]] (depth, max_notes, include_content). Pure Python — zero extra LLM calls. Set include_content:true to read a full neighbourhood in one shot. |
+| `backlinks` | Find all notes that link to a given title |
+| `maintenance` | Read-only report: duplicates, broken links, orphans, stale notes |
 
 ### Maintenance
-- Run `wiki maintenance` periodically to surface duplicate candidates, orphan notes (no links in/out), and stale notes. The report is read-only.
-- Act on the report by appending corrections, merging duplicates via `write`+`delete`, or asking the user. Do not auto-delete content without user confirmation.
+- Run `wiki maintenance` periodically. The report surfaces:
+  - `broken_links` — wikilinks pointing to notes that don't exist (fix with `rename` or `write`)
+  - `duplicate_candidates` — notes with similar titles (merge with `write`+`delete`)
+  - `orphans` — notes with no links in or out (connect or delete)
+  - `stale` — notes not updated in 90+ days (review or archive)
+- The report is read-only — act on it by updating notes or asking the user. Do not auto-delete.
+- Before deleting a note, use `backlinks` to check what links to it. Use `rename` instead of delete+rewrite to preserve link integrity.
 """
 
 

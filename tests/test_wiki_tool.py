@@ -178,3 +178,231 @@ def test_write_triggers_agent_refresh(wiki: WikiMemory):
         agent=agent,
     )
     agent._refresh_system_prompt.assert_called_once()
+
+
+# --- follow action tests ---
+
+
+def test_follow_action(wiki: WikiMemory):
+    wiki.write("Python", "A language. See [[Django]].")
+    wiki.write("Django", "A web framework.")
+    result = _wiki_tool({"action": "follow", "title": "Python"}, wiki=wiki)
+    data = json.loads(result)
+    titles = {n["title"] for n in data["nodes"]}
+    assert "Python" in titles
+    assert "Django" in titles
+
+
+def test_follow_missing_title(wiki: WikiMemory):
+    result = _wiki_tool({"action": "follow"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_follow_not_found(wiki: WikiMemory):
+    result = _wiki_tool({"action": "follow", "title": "Ghost"}, wiki=wiki)
+    assert "not found" in result.lower()
+
+
+def test_follow_custom_depth_and_max(wiki: WikiMemory):
+    wiki.write("A", "Links to [[B]].")
+    wiki.write("B", "Links to [[C]].")
+    wiki.write("C", "End.")
+    result = _wiki_tool({"action": "follow", "title": "A", "depth": 1, "max_notes": 2}, wiki=wiki)
+    data = json.loads(result)
+    assert data["nodes_found"] <= 2
+    assert data["depth"] == 1
+
+
+def test_follow_does_not_refresh_prompt(wiki: WikiMemory):
+    wiki.write("Note", "Content.")
+    agent = MagicMock()
+    _wiki_tool({"action": "follow", "title": "Note"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_not_called()
+
+
+def test_follow_include_content(wiki: WikiMemory):
+    wiki.write("Root", "Full body. See [[Child]].")
+    wiki.write("Child", "Child body.")
+    result = _wiki_tool({"action": "follow", "title": "Root", "include_content": True}, wiki=wiki)
+    data = json.loads(result)
+    root = next(n for n in data["nodes"] if n["title"] == "Root")
+    assert "content" in root
+    assert "Full body" in root["content"]
+
+
+def test_follow_no_content_by_default(wiki: WikiMemory):
+    wiki.write("Root", "body")
+    result = _wiki_tool({"action": "follow", "title": "Root"}, wiki=wiki)
+    data = json.loads(result)
+    assert "content" not in data["nodes"][0]
+
+
+# --- backlinks action tests ---
+
+
+def test_backlinks_action(wiki: WikiMemory):
+    wiki.write("Python", "A language.")
+    wiki.write("Django", "Uses [[Python]].")
+    result = _wiki_tool({"action": "backlinks", "title": "Python"}, wiki=wiki)
+    data = json.loads(result)
+    assert any(r["title"] == "Django" for r in data)
+
+
+def test_backlinks_missing_title(wiki: WikiMemory):
+    result = _wiki_tool({"action": "backlinks"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_backlinks_none_found(wiki: WikiMemory):
+    wiki.write("Isolated", "No links.")
+    result = _wiki_tool({"action": "backlinks", "title": "Isolated"}, wiki=wiki)
+    data = json.loads(result)
+    assert data == []
+
+
+def test_backlinks_does_not_refresh_prompt(wiki: WikiMemory):
+    wiki.write("Target", "Content.")
+    agent = MagicMock()
+    _wiki_tool({"action": "backlinks", "title": "Target"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_not_called()
+
+
+# --- delete backlink warning ---
+
+
+def test_delete_with_backlinks_warns(wiki: WikiMemory):
+    wiki.write("Target", "content")
+    wiki.write("Linker", "See [[Target]].")
+    result = _wiki_tool({"action": "delete", "title": "Target"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "deleted"
+    assert "warning" in data
+    assert "1" in data["warning"]
+
+
+def test_delete_without_backlinks_no_warning(wiki: WikiMemory):
+    wiki.write("Isolated", "content")
+    result = _wiki_tool({"action": "delete", "title": "Isolated"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "deleted"
+    assert "warning" not in data
+
+
+# --- rename action ---
+
+
+def test_rename_action(wiki: WikiMemory):
+    wiki.write("Old", "content")
+    result = _wiki_tool({"action": "rename", "title": "Old", "new_title": "New"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "renamed"
+    assert wiki.read("New") is not None
+    assert wiki.read("Old") is None
+
+
+def test_rename_missing_title(wiki: WikiMemory):
+    result = _wiki_tool({"action": "rename", "new_title": "New"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_rename_missing_new_title(wiki: WikiMemory):
+    result = _wiki_tool({"action": "rename", "title": "Old"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_rename_not_found(wiki: WikiMemory):
+    result = _wiki_tool({"action": "rename", "title": "Ghost", "new_title": "New"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "not_found"
+
+
+def test_rename_triggers_refresh(wiki: WikiMemory):
+    wiki.write("Old", "content")
+    agent = MagicMock()
+    _wiki_tool({"action": "rename", "title": "Old", "new_title": "New"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_called_once()
+
+
+def test_rename_conflict_no_refresh(wiki: WikiMemory):
+    wiki.write("A", "content")
+    wiki.write("B", "content")
+    agent = MagicMock()
+    _wiki_tool({"action": "rename", "title": "A", "new_title": "B"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_not_called()
+
+
+# --- list_tags action ---
+
+
+def test_list_tags_action(wiki: WikiMemory):
+    wiki.write("A", "x", tags=["python", "api"])
+    wiki.write("B", "y", tags=["python"])
+    result = _wiki_tool({"action": "list_tags"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["python"] == 2
+    assert data["api"] == 1
+
+
+def test_list_tags_empty(wiki: WikiMemory):
+    wiki.write("Note", "no tags")
+    result = _wiki_tool({"action": "list_tags"}, wiki=wiki)
+    assert "No tags found" in result
+
+
+def test_list_tags_does_not_refresh(wiki: WikiMemory):
+    wiki.write("A", "x", tags=["t"])
+    agent = MagicMock()
+    _wiki_tool({"action": "list_tags"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_not_called()
+
+
+# --- rename_tag action ---
+
+
+def test_rename_tag_action(wiki: WikiMemory):
+    wiki.write("A", "x", tags=["py"])
+    wiki.write("B", "y", tags=["py"])
+    result = _wiki_tool({"action": "rename_tag", "old_tag": "py", "new_tag": "python"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "renamed"
+    assert set(data["updated_notes"]) == {"A", "B"}
+
+
+def test_rename_tag_missing_old_tag(wiki: WikiMemory):
+    result = _wiki_tool({"action": "rename_tag", "new_tag": "python"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_rename_tag_missing_new_tag(wiki: WikiMemory):
+    result = _wiki_tool({"action": "rename_tag", "old_tag": "py"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_rename_tag_triggers_refresh_when_updated(wiki: WikiMemory):
+    wiki.write("A", "x", tags=["old"])
+    agent = MagicMock()
+    _wiki_tool({"action": "rename_tag", "old_tag": "old", "new_tag": "new"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_called_once()
+
+
+def test_rename_tag_no_refresh_when_nothing_updated(wiki: WikiMemory):
+    wiki.write("A", "x", tags=["other"])
+    agent = MagicMock()
+    _wiki_tool(
+        {"action": "rename_tag", "old_tag": "missing", "new_tag": "x"}, wiki=wiki, agent=agent
+    )
+    agent._refresh_system_prompt.assert_not_called()
+
+
+# --- maintenance broken_links ---
+
+
+def test_maintenance_reports_broken_links(wiki: WikiMemory):
+    wiki.write("Real", "content")
+    wiki.write("Linker", "See [[Real]] and [[Ghost]].")
+    result = _wiki_tool({"action": "maintenance"}, wiki=wiki)
+    data = json.loads(result)
+    assert "broken_links" in data
+    broken_targets = {b["broken_link"] for b in data["broken_links"]}
+    assert "Ghost" in broken_targets
+    assert "Real" not in broken_targets

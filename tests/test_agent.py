@@ -281,6 +281,36 @@ def test_agent_refresh_system_prompt(
     assert "NYC" in info.get("system_prompt", "")
 
 
+def test_session_resume_refreshes_wiki_content(
+    minimal_config, mock_session_store, mock_http_client, mock_wiki_store
+):
+    """Session resume rebuilds the system prompt with current wiki state."""
+    minimal_config["wiki"]["enabled"] = True
+
+    # Session 1: create with initial wiki content
+    agent1 = NovaAgent(
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
+        wiki_memory_store=mock_wiki_store,
+    )
+    session_id = agent1.session_id
+    assert "NewFact" not in (agent1._system_prompt or "")
+
+    # Write a new note between sessions
+    mock_wiki_store.write("NewFact", "This fact was added between sessions.")
+
+    # Session 2: resume the same session — should see the new note
+    agent2 = NovaAgent(
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
+        session_id=session_id,
+        wiki_memory_store=mock_wiki_store,
+    )
+    assert "NewFact" in (agent2._system_prompt or "")
+
+
 def test_agent_max_iterations_limit(minimal_config, mock_session_store, mock_http_client):
     """Test that the agent stops after max_iterations."""
     minimal_config["agent"]["max_iterations"] = 2

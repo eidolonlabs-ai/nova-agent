@@ -289,6 +289,198 @@ def test_maintenance_tag_counts(vault: WikiMemory):
     assert report["tag_counts"]["api"] == 1
 
 
+def test_maintenance_reports_broken_links(vault: WikiMemory):
+    vault.write("Exists", "content")
+    vault.write("Linker", "See [[Exists]] and [[Ghost]].")
+    report = vault.maintenance()
+    broken = report["broken_links"]
+    sources = {b["source"] for b in broken}
+    targets = {b["broken_link"] for b in broken}
+    assert "Linker" in sources
+    assert "Ghost" in targets
+    assert "Exists" not in targets
+
+
+def test_maintenance_no_broken_links(vault: WikiMemory):
+    vault.write("A", "Links to [[B]].")
+    vault.write("B", "Links to [[A]].")
+    report = vault.maintenance()
+    assert report["broken_links"] == []
+
+
+def test_maintenance_broken_links_strips_alias(vault: WikiMemory):
+    vault.write("Linker", "See [[Missing|click here]].")
+    report = vault.maintenance()
+    broken = report["broken_links"]
+    assert any(b["broken_link"] == "Missing" for b in broken)
+
+
+# --- rename tests ---
+
+
+def test_rename_moves_file(vault: WikiMemory):
+    vault.write("Old Name", "content")
+    result = vault.rename("Old Name", "New Name")
+    assert result["status"] == "renamed"
+    assert vault.read("New Name") is not None
+    assert vault.read("Old Name") is None
+
+
+def test_rename_updates_frontmatter_title(vault: WikiMemory):
+    vault.write("Old", "content")
+    vault.rename("Old", "New")
+    note = vault.read("New")
+    assert note["frontmatter"]["title"] == "New"
+
+
+def test_rename_updates_backlinks(vault: WikiMemory):
+    vault.write("Target", "content")
+    vault.write("Linker", "See [[Target]] for more.")
+    vault.rename("Target", "Renamed")
+    linker = vault.read("Linker")
+    assert "[[Renamed]]" in linker["content"]
+    assert "[[Target]]" not in linker["content"]
+
+
+def test_rename_updates_alias_backlinks(vault: WikiMemory):
+    vault.write("Target", "content")
+    vault.write("Linker", "See [[Target|click here]] for more.")
+    vault.rename("Target", "Renamed")
+    linker = vault.read("Linker")
+    assert "[[Renamed|click here]]" in linker["content"]
+
+
+def test_rename_returns_updated_notes(vault: WikiMemory):
+    vault.write("Target", "content")
+    vault.write("A", "See [[Target]].")
+    vault.write("B", "Also [[Target]].")
+    result = vault.rename("Target", "New")
+    assert set(result["backlinks_updated"]) == {"A", "B"}
+
+
+def test_rename_not_found(vault: WikiMemory):
+    result = vault.rename("Ghost", "New")
+    assert result["status"] == "not_found"
+
+
+def test_rename_conflict(vault: WikiMemory):
+    vault.write("A", "content")
+    vault.write("B", "content")
+    result = vault.rename("A", "B")
+    assert result["status"] == "error"
+    assert vault.read("A") is not None
+
+
+def test_rename_with_folder_prefix(vault: WikiMemory):
+    vault.write("People/Alice", "Alice details")
+    vault.write("Ref", "See [[People/Alice]].")
+    result = vault.rename("People/Alice", "People/Alicia")
+    assert result["status"] == "renamed"
+    assert vault.read("People/Alicia") is not None
+    ref = vault.read("Ref")
+    assert "[[People/Alicia]]" in ref["content"]
+
+
+# --- list_tags tests ---
+
+
+def test_list_tags_returns_counts(vault: WikiMemory):
+    vault.write("A", "x", tags=["python", "api"])
+    vault.write("B", "y", tags=["python"])
+    tags = vault.list_tags()
+    assert tags["python"] == 2
+    assert tags["api"] == 1
+
+
+def test_list_tags_sorted_by_frequency(vault: WikiMemory):
+    vault.write("A", "x", tags=["rare"])
+    vault.write("B", "x", tags=["common"])
+    vault.write("C", "x", tags=["common"])
+    tags = vault.list_tags()
+    keys = list(tags.keys())
+    assert keys[0] == "common"
+
+
+def test_list_tags_empty_vault(vault: WikiMemory):
+    assert vault.list_tags() == {}
+
+
+def test_list_tags_no_tags(vault: WikiMemory):
+    vault.write("Note", "no tags here")
+    assert vault.list_tags() == {}
+
+
+# --- rename_tag tests ---
+
+
+def test_rename_tag_updates_all_notes(vault: WikiMemory):
+    vault.write("A", "x", tags=["py", "api"])
+    vault.write("B", "y", tags=["py"])
+    result = vault.rename_tag("py", "python")
+    assert set(result["updated_notes"]) == {"A", "B"}
+    assert "python" in vault.read("A")["frontmatter"]["tags"]
+    assert "py" not in vault.read("A")["frontmatter"]["tags"]
+
+
+def test_rename_tag_preserves_other_tags(vault: WikiMemory):
+    vault.write("A", "x", tags=["py", "api"])
+    vault.rename_tag("py", "python")
+    tags = vault.read("A")["frontmatter"]["tags"]
+    assert "api" in tags
+    assert "python" in tags
+
+
+def test_rename_tag_no_match(vault: WikiMemory):
+    vault.write("A", "x", tags=["other"])
+    result = vault.rename_tag("missing", "new")
+    assert result["updated_notes"] == []
+
+
+# --- inject:true tests ---
+
+
+def test_list_notes_includes_inject_field(vault: WikiMemory):
+    vault.write("Regular", "content")
+    notes = vault.list_notes()
+    assert all("inject" in n for n in notes)
+    assert notes[0]["inject"] is False
+
+
+def _set_inject(vault: WikiMemory, title: str) -> None:
+    """Helper: set inject:true on a note's frontmatter."""
+    path = vault.vault_path / f"{title}.md"
+    parsed = vault._parse_note(path)
+    parsed["frontmatter"]["inject"] = True
+    path.write_text(vault._format_note(parsed["frontmatter"], parsed["content"]))
+
+
+def test_format_for_prompt_includes_pinned_note(vault: WikiMemory):
+    vault.write("Active Project", "Working on something important.")
+    _set_inject(vault, "Active Project")
+    result = vault.format_for_prompt()
+    assert "<wiki_pinned>" in result
+    assert "Active Project" in result
+    assert "Working on something important" in result
+
+
+def test_format_for_prompt_pinned_excluded_from_recent_index(vault: WikiMemory):
+    vault.write("Regular", "regular content")
+    vault.write("Pinned", "pinned content")
+    _set_inject(vault, "Pinned")
+    result = vault.format_for_prompt()
+    wiki_memory_section = result.split("<wiki_memory>", 1)
+    if len(wiki_memory_section) > 1:
+        assert "[[Pinned]]" not in wiki_memory_section[1]
+    assert "pinned content" in result
+
+
+def test_format_for_prompt_core_not_in_pinned(vault: WikiMemory):
+    vault.write("Core/Facts", "some fact")
+    result = vault.format_for_prompt()
+    assert "<wiki_core>" in result
+    assert "<wiki_pinned>" not in result
+
+
 def test_title_similar_exact_match():
     assert _title_similar("Mark", "Mark")
 
@@ -303,3 +495,150 @@ def test_title_similar_word_overlap():
 
 def test_title_similar_unrelated():
     assert not _title_similar("Python", "JavaScript")
+
+
+# --- follow tests ---
+
+
+def test_follow_returns_start_node(vault: WikiMemory):
+    vault.write("Python", "A programming language.")
+    result = vault.follow("Python")
+    assert result["nodes"][0]["title"] == "Python"
+    assert result["nodes"][0]["depth"] == 0
+
+
+def test_follow_traverses_wikilinks(vault: WikiMemory):
+    vault.write("Python", "See [[Django]] and [[FastAPI]].")
+    vault.write("Django", "A web framework.")
+    vault.write("FastAPI", "A fast web framework.")
+    result = vault.follow("Python", depth=1)
+    titles = {n["title"] for n in result["nodes"]}
+    assert "Python" in titles
+    assert "Django" in titles
+    assert "FastAPI" in titles
+
+
+def test_follow_respects_depth_limit(vault: WikiMemory):
+    vault.write("A", "Links to [[B]].")
+    vault.write("B", "Links to [[C]].")
+    vault.write("C", "End node.")
+    result = vault.follow("A", depth=1)
+    titles = {n["title"] for n in result["nodes"]}
+    assert "A" in titles
+    assert "B" in titles
+    assert "C" not in titles
+
+
+def test_follow_respects_max_notes(vault: WikiMemory):
+    links = " ".join(f"[[Note{i}]]" for i in range(20))
+    vault.write("Hub", links)
+    for i in range(20):
+        vault.write(f"Note{i}", f"Content {i}")
+    result = vault.follow("Hub", depth=1, max_notes=5)
+    assert result["nodes_found"] <= 5
+
+
+def test_follow_not_found(vault: WikiMemory):
+    result = vault.follow("Nonexistent")
+    assert "error" in result
+
+
+def test_follow_skips_unresolvable_links(vault: WikiMemory):
+    vault.write("Root", "See [[Exists]] and [[DoesNotExist]].")
+    vault.write("Exists", "I'm here.")
+    result = vault.follow("Root", depth=1)
+    titles = {n["title"] for n in result["nodes"]}
+    assert "Exists" in titles
+    assert "DoesNotExist" not in titles
+
+
+def test_follow_no_cycles(vault: WikiMemory):
+    vault.write("A", "Links to [[B]].")
+    vault.write("B", "Links back to [[A]].")
+    result = vault.follow("A", depth=3)
+    titles = [n["title"] for n in result["nodes"]]
+    assert titles.count("A") == 1
+    assert titles.count("B") == 1
+
+
+def test_follow_strips_alias_from_links(vault: WikiMemory):
+    vault.write("Root", "See [[Target|click here]].")
+    vault.write("Target", "Reached.")
+    result = vault.follow("Root", depth=1)
+    titles = {n["title"] for n in result["nodes"]}
+    assert "Target" in titles
+
+
+def test_follow_links_to_field(vault: WikiMemory):
+    vault.write("Root", "Links to [[A]] and [[B]].")
+    vault.write("A", "")
+    vault.write("B", "")
+    result = vault.follow("Root", depth=0)
+    node = result["nodes"][0]
+    assert "A" in node["links_to"]
+    assert "B" in node["links_to"]
+
+
+def test_follow_include_content_embeds_full_text(vault: WikiMemory):
+    vault.write("Root", "Full body text here. See [[Child]].")
+    vault.write("Child", "Child body text.")
+    result = vault.follow("Root", depth=1, include_content=True)
+    root_node = next(n for n in result["nodes"] if n["title"] == "Root")
+    child_node = next(n for n in result["nodes"] if n["title"] == "Child")
+    assert "Full body text here" in root_node["content"]
+    assert "Child body text" in child_node["content"]
+
+
+def test_follow_no_content_by_default(vault: WikiMemory):
+    vault.write("Root", "body text")
+    result = vault.follow("Root")
+    assert "content" not in result["nodes"][0]
+
+
+# --- backlinks tests ---
+
+
+def test_backlinks_finds_referencing_notes(vault: WikiMemory):
+    vault.write("Python", "A programming language.")
+    vault.write("Django", "A web framework built with [[Python]].")
+    vault.write("FastAPI", "Another framework using [[Python]].")
+    results = vault.backlinks("Python")
+    titles = {r["title"] for r in results}
+    assert "Django" in titles
+    assert "FastAPI" in titles
+
+
+def test_backlinks_excludes_non_referencing_notes(vault: WikiMemory):
+    vault.write("Python", "A language.")
+    vault.write("Other", "No links here.")
+    results = vault.backlinks("Python")
+    titles = {r["title"] for r in results}
+    assert "Other" not in titles
+
+
+def test_backlinks_empty_when_none(vault: WikiMemory):
+    vault.write("Isolated", "No links here.")
+    assert vault.backlinks("Isolated") == []
+
+
+def test_backlinks_case_insensitive(vault: WikiMemory):
+    vault.write("Target", "Content.")
+    vault.write("Linker", "Points to [[target]].")
+    results = vault.backlinks("Target")
+    assert len(results) == 1
+    assert results[0]["title"] == "Linker"
+
+
+def test_backlinks_matches_alias_links(vault: WikiMemory):
+    vault.write("Target", "Content.")
+    vault.write("Linker", "See [[Target|click here]].")
+    results = vault.backlinks("Target")
+    assert len(results) == 1
+    assert results[0]["title"] == "Linker"
+
+
+def test_backlinks_excerpt_contains_link(vault: WikiMemory):
+    vault.write("Target", "Content.")
+    vault.write("Linker", "Some text before [[Target]] and after.")
+    results = vault.backlinks("Target")
+    assert "[[Target]]" in results[0]["excerpt"] or "target" in results[0]["excerpt"].lower()

@@ -52,7 +52,9 @@ class WikiMemory:
         return path
 
     def _parse_note(self, path: Path) -> dict:
-        text = path.read_text(encoding="utf-8")
+        return self._parse_note_text(path.read_text(encoding="utf-8"))
+
+    def _parse_note_text(self, text: str) -> dict:
         frontmatter: dict = {}
         content = text
         if text.startswith("---\n"):
@@ -158,6 +160,7 @@ class WikiMemory:
                     "tags": note_tags,
                     "modified": parsed["frontmatter"].get("modified", ""),
                     "first_line": first_line,
+                    "inject": bool(parsed["frontmatter"].get("inject", False)),
                 }
             )
         return notes
@@ -174,8 +177,8 @@ class WikiMemory:
         """Read-only analysis of the vault.
 
         Returns a report of duplicate candidates, orphan notes (no wikilinks
-        in or out), and stale notes (not modified in stale_days days). Does
-        not modify anything — the agent decides what action to take.
+        in or out), broken links (wikilinks to non-existent notes), and stale
+        notes. Does not modify anything — the agent decides what action to take.
         """
         notes_data = []
         for md_file in self.vault_path.rglob("*.md"):
@@ -203,10 +206,22 @@ class WikiMemory:
 
         duplicates = _find_title_duplicates(notes_data)
 
-        referenced: set[str] = set()
+        # Build a resolution set (title, basename, and path stem) for link checking
+        title_set: set[str] = set()
         for note in notes_data:
-            for link in note["wikilinks"]:
-                referenced.add(link.lower())
+            title_set.add(note["title"].lower())
+            title_set.add(note["title"].rsplit("/", 1)[-1].lower())
+            title_set.add(Path(note["path"]).stem.lower())
+
+        referenced: set[str] = set()
+        broken_links: list[dict] = []
+        for note in notes_data:
+            for link_raw in note["wikilinks"]:
+                link_target = link_raw.split("|")[0].strip()
+                referenced.add(link_target.lower())
+                if link_target.lower() not in title_set:
+                    broken_links.append({"source": note["title"], "broken_link": link_target})
+
         orphans = [
             {"title": n["title"], "path": n["path"]}
             for n in notes_data
@@ -232,48 +247,252 @@ class WikiMemory:
         return {
             "total_notes": len(notes_data),
             "duplicate_candidates": duplicates,
+            "broken_links": broken_links,
             "orphans": orphans,
             "stale": stale,
             "tag_counts": tag_counts,
         }
 
+    def follow(
+        self, title: str, depth: int = 2, max_notes: int = 10, include_content: bool = False
+    ) -> dict:
+        """BFS traversal from a starting note, following [[wikilinks]].
+
+        Pure Python — zero LLM calls during traversal. Reads all reachable notes
+        in a single pass and returns the full graph result.
+
+        include_content=True embeds each note's full content so the caller can
+        read the entire neighbourhood in one tool call instead of following up
+        with individual wiki read calls.
+        """
+        index = self._title_index()
+        start_key = title.lower()
+        if start_key not in index:
+            return {"error": f"Note not found: '{title}'"}
+
+        visited: dict[str, int] = {}
+        queue: list[tuple[str, int]] = [(title, 0)]
+        nodes: list[dict] = []
+
+        while queue and len(nodes) < max_notes:
+            current_title, current_depth = queue.pop(0)
+            key = current_title.lower()
+            if key in visited:
+                continue
+            visited[key] = current_depth
+
+            path = index.get(key)
+            if path is None:
+                continue
+            try:
+                parsed = self._parse_note(path)
+            except OSError:
+                continue
+
+            content = parsed["content"]
+            fm = parsed["frontmatter"]
+            actual_title = fm.get("title", path.stem)
+            tags = fm.get("tags") or []
+            first_line = content.split("\n")[0][:120] if content else ""
+            raw_links = re.findall(r"\[\[([^\]]+)\]\]", content)
+            links = [lnk.split("|")[0].strip() for lnk in raw_links]
+
+            node: dict = {
+                "title": actual_title,
+                "depth": current_depth,
+                "tags": tags,
+                "first_line": first_line,
+                "links_to": links,
+            }
+            if include_content:
+                node["content"] = content
+            nodes.append(node)
+
+            if current_depth < depth:
+                for link in links:
+                    link_key = link.lower()
+                    if link_key not in visited and link_key in index:
+                        queue.append((link, current_depth + 1))
+
+        return {"start": title, "depth": depth, "nodes_found": len(nodes), "nodes": nodes}
+
+    def backlinks(self, title: str) -> list[dict]:
+        """Find all notes that link to the given title via [[wikilinks]].
+
+        Matches [[Title]], [[Title|alias]], and is case-insensitive.
+        """
+        pattern = re.compile(r"\[\[" + re.escape(title) + r"(?:\|[^\]]+)?\]\]", re.IGNORECASE)
+        results = []
+        for md_file in sorted(self.vault_path.rglob("*.md")):
+            try:
+                text = md_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not pattern.search(text):
+                continue
+            parsed = self._parse_note_text(text)
+            results.append(
+                {
+                    "title": parsed["frontmatter"].get("title", md_file.stem),
+                    "path": str(md_file.relative_to(self.vault_path)),
+                    "excerpt": _excerpt(text, "[[" + title.lower()),
+                }
+            )
+        return results
+
+    def rename(self, old_title: str, new_title: str) -> dict:
+        """Rename a note and update all [[wikilinks]] that point to the old title.
+
+        Atomically: writes to new path, deletes old path, then rewrites backlinks
+        in all other notes. Returns not_found if the source doesn't exist, or an
+        error dict if the destination already exists.
+        """
+        old_path = self._note_path(old_title)
+        if not old_path.exists():
+            return {"status": "not_found"}
+        new_path = self._note_path(new_title)
+        if new_path.exists():
+            return {"status": "error", "reason": f"A note named '{new_title}' already exists."}
+
+        parsed = self._parse_note(old_path)
+        parsed["frontmatter"]["title"] = new_title
+        parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
+        self._write_atomic(new_path, self._format_note(parsed["frontmatter"], parsed["content"]))
+        old_path.unlink()
+
+        # Rewrite [[OldTitle]] → [[NewTitle]] (preserving any |alias suffix) in all other notes
+        pattern = re.compile(r"\[\[" + re.escape(old_title) + r"((?:\|[^\]]+)?)\]\]", re.IGNORECASE)
+        updated_notes: list[str] = []
+        for md_file in self.vault_path.rglob("*.md"):
+            if md_file == new_path:
+                continue
+            try:
+                text = md_file.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not pattern.search(text):
+                continue
+            new_text = pattern.sub(lambda m: f"[[{new_title}{m.group(1)}]]", text)
+            self._write_atomic(md_file, new_text)
+            bl_parsed = self._parse_note(md_file)
+            updated_notes.append(bl_parsed["frontmatter"].get("title", md_file.stem))
+
+        return {
+            "status": "renamed",
+            "old_title": old_title,
+            "new_title": new_title,
+            "old_path": str(old_path.relative_to(self.vault_path)),
+            "new_path": str(new_path.relative_to(self.vault_path)),
+            "backlinks_updated": updated_notes,
+        }
+
+    def list_tags(self) -> dict[str, int]:
+        """Return all tags across the vault with counts, sorted by frequency."""
+        tag_counts: dict[str, int] = {}
+        for md_file in self.vault_path.rglob("*.md"):
+            try:
+                parsed = self._parse_note(md_file)
+            except OSError:
+                continue
+            for tag in parsed["frontmatter"].get("tags") or []:
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+        return dict(sorted(tag_counts.items(), key=lambda x: (-x[1], x[0])))
+
+    def rename_tag(self, old_tag: str, new_tag: str) -> dict:
+        """Rename a tag globally across all notes in the vault."""
+        updated: list[str] = []
+        for md_file in self.vault_path.rglob("*.md"):
+            try:
+                parsed = self._parse_note(md_file)
+            except OSError:
+                continue
+            tags = parsed["frontmatter"].get("tags") or []
+            if old_tag not in tags:
+                continue
+            parsed["frontmatter"]["tags"] = [new_tag if t == old_tag else t for t in tags]
+            parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
+            self._write_atomic(md_file, self._format_note(parsed["frontmatter"], parsed["content"]))
+            updated.append(parsed["frontmatter"].get("title", md_file.stem))
+        return {
+            "status": "renamed",
+            "old_tag": old_tag,
+            "new_tag": new_tag,
+            "updated_notes": updated,
+        }
+
+    def _title_index(self) -> dict[str, Path]:
+        """Case-insensitive map of title/stem → file path for all vault notes."""
+        index: dict[str, Path] = {}
+        for md_file in self.vault_path.rglob("*.md"):
+            try:
+                parsed = self._parse_note(md_file)
+            except OSError:
+                continue
+            title = parsed["frontmatter"].get("title", md_file.stem)
+            index[title.lower()] = md_file
+            stem_lower = md_file.stem.lower()
+            if stem_lower != title.lower():
+                index[stem_lower] = md_file
+        return index
+
     def format_for_prompt(self, max_chars: int = 3000, core_max_chars: int = 2000) -> str:
         """Compose the wiki section of the system prompt.
 
-        Two parts:
-        1. Full content of notes in Core/ — always-in-context facts (user
-           preferences, identity, environment) that the agent should know
-           every turn without searching.
-        2. Compact index of recent notes elsewhere — searchable handles.
+        Three parts:
+        1. Full content of Core/ notes — always-in-context identity/preferences.
+        2. Full content of inject:true notes — agent-pinned context anywhere in vault.
+        3. Compact index of recent notes — searchable handles for everything else.
         """
-        core_block = self._format_core_notes(max_chars=core_max_chars)
-        index_block = self._format_recent_index()
+        # Single vault scan instead of three separate rglob passes.
+        core: list[tuple[Path, dict]] = []
+        pinned: list[tuple[Path, dict]] = []
+        recent: list[tuple[Path, dict]] = []
 
-        if not core_block and not index_block:
+        for md_file in self.vault_path.rglob("*.md"):
+            try:
+                parsed = self._parse_note(md_file)
+            except OSError:
+                continue
+            rel = md_file.relative_to(self.vault_path)
+            if rel.parts and rel.parts[0] == "Core":
+                core.append((md_file, parsed))
+            elif parsed["frontmatter"].get("inject"):
+                pinned.append((md_file, parsed))
+            else:
+                recent.append((md_file, parsed))
+
+        core.sort(key=lambda x: x[0])
+        pinned.sort(key=lambda x: x[0])
+        recent.sort(key=lambda x: x[0].stat().st_mtime, reverse=True)
+
+        core_block = self._format_full_block(
+            core, core_max_chars, "wiki_core", "Always-in-context facts"
+        )
+        pinned_block = self._format_full_block(
+            pinned, core_max_chars, "wiki_pinned", "Pinned notes (always in context)"
+        )
+        index_block = self._format_index_block(recent[: self.max_prompt_notes])
+
+        if not core_block and not pinned_block and not index_block:
             return ""
 
-        parts = []
-        if core_block:
-            parts.append(core_block)
-        if index_block:
-            parts.append(index_block)
+        parts = [b for b in (core_block, pinned_block, index_block) if b]
         result = "\n\n".join(parts)
         if len(result) > max_chars:
             result = result[:max_chars] + "\n[...truncated]"
         return result
 
-    def _format_core_notes(self, max_chars: int) -> str:
-        """Inject full content of notes in the Core/ folder."""
-        core_dir = self.vault_path / "Core"
-        if not core_dir.exists():
-            return ""
+    def _format_full_block(
+        self,
+        notes: list[tuple[Path, dict]],
+        max_chars: int,
+        xml_tag: str,
+        header: str,
+    ) -> str:
+        """Render a list of pre-parsed notes as a full-content XML block."""
         sections = []
         total = 0
-        for md_file in sorted(core_dir.rglob("*.md")):
-            try:
-                parsed = self._parse_note(md_file)
-            except OSError:
-                continue
+        for md_file, parsed in notes:
             title = parsed["frontmatter"].get("title", md_file.stem)
             content = parsed["content"].strip()
             if not content:
@@ -285,24 +504,24 @@ class WikiMemory:
             total += len(section)
         if not sections:
             return ""
-        return (
-            "<wiki_core>\nAlways-in-context facts:\n\n" + "\n\n".join(sections) + "\n</wiki_core>"
-        )
+        return f"<{xml_tag}>\n{header}:\n\n" + "\n\n".join(sections) + f"\n</{xml_tag}>"
 
-    def _format_recent_index(self) -> str:
-        """Compact index of recent notes (excluding Core/)."""
-        notes = [n for n in self.list_notes() if not n["path"].startswith("Core/")]
-        notes = notes[: self.max_prompt_notes]
+    def _format_index_block(self, notes: list[tuple[Path, dict]]) -> str:
+        """Render a compact index of pre-parsed notes sorted by recency."""
         if not notes:
             return ""
         lines = ["<wiki_memory>", "Recent knowledge notes (use wiki tool to read or search):"]
-        for note in notes:
-            tags_str = " ".join(f"#{t}" for t in note["tags"]) if note["tags"] else ""
-            line = f"- [[{note['title']}]]"
+        for md_file, parsed in notes:
+            fm = parsed["frontmatter"]
+            title = fm.get("title", md_file.stem)
+            note_tags = fm.get("tags") or []
+            first_line = parsed["content"].split("\n")[0][:120] if parsed["content"] else ""
+            tags_str = " ".join(f"#{t}" for t in note_tags) if note_tags else ""
+            line = f"- [[{title}]]"
             if tags_str:
                 line += f" {tags_str}"
-            if note["first_line"]:
-                line += f" — {note['first_line']}"
+            if first_line:
+                line += f" — {first_line}"
             lines.append(line)
         lines.append("</wiki_memory>")
         return "\n".join(lines)

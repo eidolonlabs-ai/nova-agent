@@ -173,8 +173,9 @@ class NovaAgent:
                 self.session_id,
                 limit=turn_limit * 4,  # ~4 msgs per turn (user+assistant+tool pairs)
             )
-            self._system_prompt = info.get("system_prompt")
-            self._cached_system_prompt = self._system_prompt
+            # Always rebuild the prompt on resume so wiki notes, skills, and
+            # context files reflect current state rather than the stale cache.
+            self._refresh_system_prompt()
         else:
             logger.warning("Session %s not found, creating new", self.session_id)
             self._create_session()
