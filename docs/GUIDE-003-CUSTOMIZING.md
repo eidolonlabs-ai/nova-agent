@@ -148,33 +148,43 @@ cp -r config/skills/* ~/.nova/skills/
 | `git-workflow` | development | Git branching, committing, pushing |
 | `file-editing` | development | Safe file editing patterns |
 
-## Memory
+## Memory (Wiki)
 
-Nova has a simple file-based memory system for persistent facts. See [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) for full details on architecture, categories, and LRU eviction.
+Nova's memory is an Obsidian-compatible wiki of markdown notes. See [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) for full details on the `Core/` auto-inject convention, maintenance, and best practices.
 
 ### Configuration
 
 ```yaml
-memory:
-  enabled: true
-  max_entries: 100          # Max memories before LRU eviction
-  file: "~/.nova/memory.json"
+wiki:
+  enabled: true                  # On by default
+  vault_path: "~/.nova/wiki"     # Or point at an existing Obsidian vault
+  max_prompt_notes: 10           # How many recent notes appear in the index
 ```
 
 ### How the Agent Uses It
 
-The agent can save and recall memories using the `memory` tool:
-- `memory(action="add", content="User prefers concise responses")`
-- `memory(action="search", query="preferences")`
-- `memory(action="delete", id="mem_0001")`
-- `memory(action="clear")`
+The agent saves and recalls knowledge using the `wiki` tool:
+- `wiki(action="write", title="Core/Preferences", content="Prefers concise responses")`
+- `wiki(action="append", title="Projects/nova", content="Added new feature X")`
+- `wiki(action="search", query="preferences")`
+- `wiki(action="read", title="People/Mark")`
+- `wiki(action="list", tag="python")`
+- `wiki(action="maintenance")` — read-only report of duplicates, orphans, stale notes
+- `wiki(action="delete", title="Old Note")`
+
+### Folder Conventions
+
+- `Core/<topic>` — full content auto-injected into every prompt (keep short!)
+- `People/<Name>`, `Projects/<name>`, `Facts/<topic>`, `Concepts/<name>` — searchable reference
 
 ### Memory Guidelines
 
 The agent is instructed to:
-- Save **durable facts** (preferences, environment details, tool quirks)
-- Write memories as **declarative facts**, not instructions
-- **Not save** task progress, session outcomes, or temporary state
+- **Search first** before writing — avoid duplicates
+- Save user preferences and identity to `Core/` for always-in-context recall
+- Use `[[wikilinks]]` and `#tags` to connect notes
+- Update existing notes when info changes; never create dated snapshots
+- Run `wiki maintenance` periodically; never auto-delete without user confirmation
 
 ## Tools
 
@@ -191,7 +201,7 @@ Nova comes with 16 built-in tools:
 | `skills_list` | skills | ✅ Active | List all available skills by category |
 | `skill_view` | skills | ✅ Active | Load a skill's full instructions |
 | `skill_manage` | skills | ✅ Active | Create, update, or delete skills |
-| `memory` | memory | ✅ Active | Add, search, delete, or clear persistent memories |
+| `wiki` | wiki | ✅ Active | Manage Obsidian-compatible wiki notes: write, append, read, search, list, delete, maintenance |
 | `delegate_task` | delegation | ✅ Active | Spawn a sub-agent for isolated tasks |
 | `task_create` | tasks | ✅ Active | Start a background shell command |
 | `task_status` | tasks | ✅ Active | Check a background task's status |
@@ -266,7 +276,12 @@ nova reset --session <session-id>
 ~/.nova/
 ├── SOUL.md              # Global agent personality
 ├── config.yaml          # Global configuration
-├── memory.json          # Persistent memories (LRU eviction)
+├── wiki/                # Obsidian-compatible wiki memory
+│   ├── Core/            # Always-in-context notes (full content injected)
+│   ├── People/          # Notes about users / collaborators
+│   ├── Projects/        # Project state, decisions, conventions
+│   ├── Facts/           # Durable technical knowledge
+│   └── Concepts/        # Definitions and mental models
 ├── nova.log             # Log file
 ├── sessions/
 │   └── sessions.db      # SQLite session storage with FTS5
@@ -422,7 +437,7 @@ retry:
 2. **Use NOVA.md for project settings** — project-specific instructions that override defaults
 3. **Use AGENTS.md for agent behaviors** — agent constraints and specific workflows
 4. **Use skills for workflows** — if you repeat a process, save it as a skill
-5. **Use memory for facts** — preferences, environment details, conventions
+5. **Use the wiki for facts** — preferences and identity go in `Core/`; reference knowledge elsewhere
 6. **Lower budgets for cheaper models** — if using a fast/cheap model, reduce context budgets
 7. **Use `permissions.mode: "ask"`** — for safer tool execution (future TUI will show approval dialogs)
 8. **Use background tasks** — for long-running commands like test suites or builds
@@ -446,5 +461,5 @@ retry:
 | [Roadmap](GUIDE-010-ROADMAP.md) | GUIDE | Project phases, timeline, and targets |
 | [Context Compression](GUIDE-011-CONTEXT_COMPRESSION.md) | GUIDE | Three-tier context management strategy |
 | [Session Management](GUIDE-012-SESSION_MANAGEMENT.md) | GUIDE | SQLite sessions, FTS5 search, slash commands |
-| [Memory System](GUIDE-013-MEMORY_SYSTEM.md) | GUIDE | File-based persistent memory, LRU eviction |
+| [Memory System](GUIDE-013-MEMORY_SYSTEM.md) | GUIDE | Obsidian-compatible wiki memory, `Core/` auto-inject, maintenance |
 | [Retry & Error Handling](GUIDE-014-RETRY_AND_ERROR_HANDLING.md) | GUIDE | Exponential backoff, error classification |

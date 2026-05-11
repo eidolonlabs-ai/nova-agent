@@ -66,18 +66,35 @@ LEAF_AGENT_GUIDANCE = (
 )
 
 # Memory guidance (minimal)
-MEMORY_GUIDANCE = (
-    "Save durable facts using the memory tool: user preferences, environment details, tool quirks. "
-    "Write memories as declarative facts, not instructions. "
-    "Do NOT save task progress or temporary state."
-)
+WIKI_GUIDANCE = """## Wiki Knowledge Base
+
+Manage a persistent wiki of Obsidian-compatible markdown notes via the `wiki` tool. Build it up over time so future sessions can recall what you've learned.
+
+### Folder conventions
+- `Core/<topic>` — always-in-context facts (user identity, preferences, environment). FULL CONTENT auto-injected every turn — keep these short and high-signal.
+- `People/<Name>` — facts about users and collaborators
+- `Projects/<name>` — project state, decisions, conventions, gotchas
+- `Facts/<topic>` — durable technical knowledge, references
+- `Concepts/<name>` — definitions, mental models
+
+### Write rules
+- SEARCH first — run `wiki search` for related notes before writing. If a related note exists, `append` or update it rather than creating a duplicate.
+- Save user preferences, identity, and recurring context to `Core/` so they're in every prompt.
+- Use `[[wikilinks]]` liberally to connect related notes, and `#tags` for cross-cutting context.
+- Save durable knowledge only — never task progress, todos, conversation context, or daily-changing state. Don't duplicate CLAUDE.md content.
+- When new info contradicts an existing note, UPDATE it (write with same title). When it extends, APPEND. Never create dated snapshots like "Note 2026-05-11".
+
+### Maintenance
+- Run `wiki maintenance` periodically to surface duplicate candidates, orphan notes (no links in/out), and stale notes. The report is read-only.
+- Act on the report by appending corrections, merging duplicates via `write`+`delete`, or asking the user. Do not auto-delete content without user confirmation.
+"""
 
 
 def build_system_prompt(
     config: dict,
     cwd: Path | None = None,
     mode: str = "full",
-    memory_content: str | None = None,
+    wiki_content: str | None = None,
 ) -> str:
     """Assemble the full system prompt from all layers.
 
@@ -120,13 +137,13 @@ def build_system_prompt(
         else:
             parts.append(LEAF_AGENT_GUIDANCE)
 
-    # 3. Memory content + guidance (adjacent so model sees guidance right before facts)
-    if memory_content:
-        if config.get("memory", {}).get("enabled"):
-            parts.append(MEMORY_GUIDANCE)
-        parts.append(memory_content)
-    elif config.get("memory", {}).get("enabled"):
-        parts.append(MEMORY_GUIDANCE)
+    # 3. Wiki memory index (guidance + content adjacent so model sees rules before notes)
+    if wiki_content:
+        if config.get("wiki", {}).get("enabled"):
+            parts.append(WIKI_GUIDANCE)
+        parts.append(wiki_content)
+    elif config.get("wiki", {}).get("enabled"):
+        parts.append(WIKI_GUIDANCE)
 
     # 5. Skills index (full mode only)
     if mode == "full" and config.get("skills", {}).get("enabled"):

@@ -283,30 +283,6 @@ def cmd_copy(agent: NovaAgent, args: str) -> None:
     _cprint(f"{_DIM}No response to copy{_RST}")
 
 
-@command_handler("memory")
-def cmd_memory(agent: NovaAgent, args: str) -> None:
-    from nova.display import _DIM, _RST, _cprint
-
-    sub = args.split(None, 1)[0].lower() if args else "list"
-    query = args.split(None, 1)[1] if len(args.split(None, 1)) > 1 else ""
-    if not agent.memory:
-        _cprint(f"{_DIM}Memory is disabled{_RST}")
-        return
-    if sub == "clear":
-        agent.memory.clear()
-        _cprint(f"{_DIM}Memory cleared{_RST}")
-    elif sub == "search" and query:
-        results = agent.memory.search(query)
-        for r in results:
-            _cprint(f"  {_DIM}{r}{_RST}")
-    else:
-        entries = agent.memory.get_all()
-        if not entries:
-            _cprint(f"{_DIM}No memories stored{_RST}")
-        for e in entries:
-            _cprint(f"  {_DIM}{e}{_RST}")
-
-
 def _handle_skill(agent: NovaAgent, skill_name: str) -> None:
     """Load and display a skill via slash command."""
     from pathlib import Path

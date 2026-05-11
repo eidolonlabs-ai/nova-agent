@@ -38,7 +38,7 @@ def test_agent_creation_with_injected_deps(minimal_config, mock_session_store, m
 
     assert agent.session_store is mock_session_store
     assert agent.client is mock_http_client
-    assert agent.memory is None  # memory disabled in config
+    assert agent.wiki is None  # wiki disabled in minimal_config
     assert agent.session_id is not None
 
 
@@ -240,48 +240,43 @@ def test_agent_execute_tool_call_unknown_tool(minimal_config, mock_session_store
     assert "Error" in result
 
 
-def test_agent_build_system_prompt_with_memory(
-    minimal_config, mock_session_store, mock_http_client, mock_memory_store
+def test_agent_build_system_prompt_with_wiki(
+    minimal_config, mock_session_store, mock_http_client, mock_wiki_store
 ):
-    """Test that system prompt includes memory content when memory is enabled."""
-    minimal_config["memory"]["enabled"] = True
-
-    # Add a memory entry
-    mock_memory_store.add("User prefers dark mode")
+    """Test that system prompt includes wiki content when wiki is enabled."""
+    minimal_config["wiki"]["enabled"] = True
+    mock_wiki_store.write("Preferences", "User prefers dark mode")
 
     agent = NovaAgent(
         config=minimal_config,
         http_client=mock_http_client,
         session_store=mock_session_store,
-        memory_store=mock_memory_store,
+        wiki_memory_store=mock_wiki_store,
     )
 
-    assert agent.memory is not None
+    assert agent.wiki is not None
     assert agent._system_prompt is not None
-    assert "dark mode" in agent._system_prompt
+    assert "Preferences" in agent._system_prompt
 
 
 def test_agent_refresh_system_prompt(
-    minimal_config, mock_session_store, mock_http_client, mock_memory_store
+    minimal_config, mock_session_store, mock_http_client, mock_wiki_store
 ):
     """Test that _refresh_system_prompt updates the prompt and session."""
-    minimal_config["memory"]["enabled"] = True
+    minimal_config["wiki"]["enabled"] = True
 
     agent = NovaAgent(
         config=minimal_config,
         http_client=mock_http_client,
         session_store=mock_session_store,
-        memory_store=mock_memory_store,
+        wiki_memory_store=mock_wiki_store,
     )
 
     initial_prompt = agent._system_prompt
-
-    # Add a memory and refresh
-    mock_memory_store.add("New fact: user lives in NYC")
+    mock_wiki_store.write("NYC Note", "user lives in NYC")
     agent._refresh_system_prompt()
 
     assert agent._system_prompt != initial_prompt or "NYC" in agent._system_prompt
-    # Verify session was updated
     info = mock_session_store.get_session_info(agent.session_id)
     assert "NYC" in info.get("system_prompt", "")
 

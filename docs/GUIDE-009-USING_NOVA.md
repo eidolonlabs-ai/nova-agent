@@ -15,7 +15,7 @@
 | Get specific output | Include file paths, function names, and constraints in the task |
 | Long multi-step task | Break into checkpoints — verify each before continuing |
 | Repeated workflow | Save it to a skill or `NOVA.md` |
-| Preserve important facts | Save to memory |
+| Preserve important facts | Save to the wiki (`Core/` for always-context, elsewhere for reference) |
 | Confused or drifting session | `/compact` or `/new` |
 | Sensitive environment | Set `permissions.mode: "ask"` |
 
@@ -91,31 +91,30 @@ Don't change behavior. Don't touch anything outside that function."
 
 ---
 
-## Memory Hygiene
+## Memory Hygiene (Wiki)
 
-Memory persists across all sessions. Keep it useful by being selective.
+Wiki memory persists across all sessions. The vault lives at `~/.nova/wiki/` and is openable in Obsidian. See [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) for the full reference.
 
-### Save to memory
+### Where to save
 
-- Personal preferences: `"I prefer seeing the full diff before summaries"`
-- Environment facts: `"This machine uses Python 3.13, venv is at ~/.venvs/nova"`
-- Project conventions not in `NOVA.md`: `"We never squash commits on this repo"`
-- Discovered tool quirks: `"ruff format converts single to double quotes here"`
+- **`Core/<topic>`** — always-in-context. Use sparingly; every line costs tokens every turn.
+  - Personal preferences: `"I prefer seeing the full diff before summaries"`
+  - Identity / environment: `"User: Mark, macOS, Python 3.13"`
+- **`People/`, `Projects/`, `Facts/`, `Concepts/`** — searchable reference.
+  - Project conventions not in `NOVA.md`
+  - Discovered tool quirks
+  - Domain knowledge worth keeping
 
-### Don't save to memory
+### Don't save
 
-- Task progress (`"I was working on feature X"`) — use sessions for this
+- Task progress (`"I was working on feature X"`) — sessions track this
 - Temporary state (`"Current branch is feat/thing"`) — will be stale next session
 - Anything already in `NOVA.md` or `AGENTS.md` — redundant
 - Facts with implicit timestamps that will become incorrect
 
-### Review memory periodically
+### Browse and maintain
 
-```
-/memory list
-```
-
-Remove stale entries before they mislead future sessions.
+Open `~/.nova/wiki/` in Obsidian for graph view, link navigation, and inline editing. Periodically ask the agent to run `wiki maintenance` — it returns a report of duplicates, orphans, and stale notes to review.
 
 ---
 

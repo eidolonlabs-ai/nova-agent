@@ -21,7 +21,7 @@ def _minimal_config() -> dict:
             "context_file_max_chars": 10000,
             "context_total_max_chars": 50000,
         },
-        "memory": {"enabled": False},
+        "wiki": {"enabled": False},
         "skills": {"enabled": False},
         "context_files": [],
     }
@@ -62,52 +62,52 @@ def test_prompt_mode_full():
     assert "Model: test-model" in result
 
 
-def test_prompt_includes_memory_guidance_when_enabled():
-    """Test that memory guidance is included when memory is enabled."""
+def test_prompt_includes_wiki_guidance_when_enabled():
+    """Test that wiki guidance is included when wiki is enabled."""
     config = _minimal_config()
-    config["memory"]["enabled"] = True
+    config["wiki"]["enabled"] = True
     discover_builtin_tools()
 
     result = build_system_prompt(config, mode="minimal")
-    assert "Save durable facts" in result or "memory" in result.lower()
+    assert "Wiki Knowledge Base" in result or "wiki" in result.lower()
 
 
-def test_prompt_includes_memory_content():
-    """Test that prefetched memory content is included."""
+def test_prompt_includes_wiki_content():
+    """Test that prefetched wiki content is included."""
     config = _minimal_config()
-    config["memory"]["enabled"] = True
+    config["wiki"]["enabled"] = True
     discover_builtin_tools()
 
-    memory_content = "## Memories\n- User prefers Python"
-    result = build_system_prompt(config, mode="minimal", memory_content=memory_content)
-    assert "User prefers Python" in result
+    wiki_content = "<wiki_memory>\n- [[People/Mark]]\n</wiki_memory>"
+    result = build_system_prompt(config, mode="minimal", wiki_content=wiki_content)
+    assert "People/Mark" in result
 
 
-def test_prompt_excludes_memory_guidance_when_disabled():
-    """Test that memory guidance is excluded when memory is disabled."""
+def test_prompt_excludes_wiki_guidance_when_disabled():
+    """Test that wiki guidance is excluded when wiki is disabled."""
     config = _minimal_config()
-    config["memory"]["enabled"] = False
+    config["wiki"]["enabled"] = False
     discover_builtin_tools()
 
     result = build_system_prompt(config, mode="minimal")
-    assert "Save durable facts" not in result
+    assert "Wiki Knowledge Base" not in result
 
 
 def test_prompt_budget_enforcement():
     """Test that prompt is truncated when exceeding token budget."""
     config = _minimal_config()
     config["budgets"]["system_prompt_max"] = 50  # Very small budget
-    config["memory"]["enabled"] = True
+    config["wiki"]["enabled"] = True
     discover_builtin_tools()
 
-    # Add a lot of memory content
-    memory_content = "## Memories\n" + "\n".join(
-        f"- Fact number {i}: This is a detailed fact about something." for i in range(100)
+    wiki_content = (
+        "<wiki_memory>\n"
+        + "\n".join(f"- [[Note {i}]] some details" for i in range(100))
+        + "\n</wiki_memory>"
     )
 
-    result = build_system_prompt(config, mode="minimal", memory_content=memory_content)
-    # Should be truncated
-    assert "truncated" in result.lower() or len(result) < len(memory_content) + 500
+    result = build_system_prompt(config, mode="minimal", wiki_content=wiki_content)
+    assert "truncated" in result.lower() or len(result) < len(wiki_content) + 500
 
 
 def test_prompt_default_identity():

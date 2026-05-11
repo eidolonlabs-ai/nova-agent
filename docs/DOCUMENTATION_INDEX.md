@@ -13,7 +13,7 @@
 | Document | Purpose |
 |----------|---------|
 | **[README](../README.md)** | Project overview, features, quick start, installation |
-| **[GUIDE-003-CUSTOMIZING](GUIDE-003-CUSTOMIZING.md)** | Config, SOUL.md, models, budgets, skills, memory — the full guide |
+| **[GUIDE-003-CUSTOMIZING](GUIDE-003-CUSTOMIZING.md)** | Config, SOUL.md, models, budgets, skills, wiki memory — the full guide |
 | **[CONTRIBUTING](../CONTRIBUTING.md)** | Development setup, code standards, PR workflow |
 
 ---
@@ -30,11 +30,11 @@
 | [GUIDE-006-HOOKS](GUIDE-006-HOOKS.md) | ✅ Active | Lifecycle callbacks: pre/post tool call, LLM call, session |
 | [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md) | ✅ Active | Connect stdio, HTTP, and SSE Model Context Protocol servers |
 | [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) | ✅ Active | Defense-in-depth cascade, allow/deny lists, path rules, opinionated profiles |
-| [GUIDE-009-USING_NOVA](GUIDE-009-USING_NOVA.md) | ✅ Active | Effective use patterns: task descriptions, sessions, memory, tools |
+| [GUIDE-009-USING_NOVA](GUIDE-009-USING_NOVA.md) | ✅ Active | Effective use patterns: task descriptions, sessions, wiki memory, tools |
 | [GUIDE-010-ROADMAP](GUIDE-010-ROADMAP.md) | ✅ Active | Project phases, timeline, completed and planned work |
 | [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) | ✅ Active | Three-tier context management: microcompact, LLM compress, session reset |
 | [GUIDE-012-SESSION_MANAGEMENT](GUIDE-012-SESSION_MANAGEMENT.md) | ✅ Active | SQLite session storage, FTS5 search, commands, lifecycle |
-| [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) | ✅ Active | File-based persistent memory across sessions, LRU eviction |
+| [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) | ✅ Active | Obsidian-compatible wiki memory: markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance |
 | [GUIDE-014-RETRY_AND_ERROR_HANDLING](GUIDE-014-RETRY_AND_ERROR_HANDLING.md) | ✅ Active | Exponential backoff, error classification, retry configuration |
 
 ---

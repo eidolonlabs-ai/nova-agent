@@ -73,7 +73,7 @@ _MUTATING_TOOLS: frozenset[str] = frozenset(
         "patch_file",
         "terminal",
         "skill_manage",
-        "memory",
+        "wiki",
         "delegate_task",
     }
 )

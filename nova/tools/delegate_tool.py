@@ -193,7 +193,7 @@ def _run_subagent(
                 config=subagent_config,
                 http_client=subagent_http_client,
                 session_store=parent_agent.session_store,
-                memory_store=parent_agent.memory,
+                wiki_memory_store=parent_agent.wiki,
             )
 
             # Inject prefill messages if forking

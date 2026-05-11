@@ -88,7 +88,7 @@ Tools are automatically classified as **read-only** or **mutating** for the perm
 
 **Mutating tools** (require confirmation in `ask` mode):
 - `write_file`, `patch_file`, `terminal`
-- `skill_manage`, `memory`, `delegate_task`
+- `skill_manage`, `wiki`, `delegate_task`
 
 To mark your custom tool as read-only:
 
@@ -142,7 +142,8 @@ The agent passes these keyword arguments to every tool handler:
 | Key | Type | Description |
 |-----|------|-------------|
 | `config` | `dict` | Full agent config (budgets, model, etc.) |
-| `memory` | `MemoryStore \| None` | Memory store (None if memory disabled) |
+| `wiki` | `WikiMemory \| None` | Wiki memory store (None if wiki disabled) |
+| `session_store` | `SessionStore` | SQLite session storage |
 | `agent` | `NovaAgent` | The agent instance itself |
 
 Access them like this:
@@ -150,7 +151,7 @@ Access them like this:
 ```python
 def _my_tool(args: dict, **kwargs) -> str:
     config = kwargs.get("config", {})
-    memory = kwargs.get("memory")
+    wiki   = kwargs.get("wiki")
     agent  = kwargs.get("agent")
     ...
 ```
@@ -434,24 +435,29 @@ DEFAULT_CONFIG = {
 
 ---
 
-## Using Memory in a Tool
+## Using Wiki Memory in a Tool
 
-Access the memory store via `kwargs.get("memory")`:
+Access the wiki memory store via `kwargs.get("wiki")`:
 
 ```python
 def _my_tool(args: dict, **kwargs) -> str:
-    memory = kwargs.get("memory")
-    if memory is None:
-        return "Memory is disabled."
+    wiki = kwargs.get("wiki")
+    if wiki is None:
+        return "Wiki memory is disabled."
 
-    # Search for relevant memories
-    results = memory.search("user preferences")
+    # Search for relevant notes
+    results = wiki.search("user preferences")
 
-    # Add a new memory
-    memory.add("User prefers JSON output", category="preferences")
+    # Write a new note
+    wiki.write("Core/Preferences", "User prefers JSON output", tags=["preferences"])
+
+    # Append to an existing note
+    wiki.append("Projects/nova", "Added new feature X")
 
     ...
 ```
+
+See `nova/wiki_memory.py` for the full `WikiMemory` API.
 
 ---
 
@@ -499,7 +505,7 @@ def discover_builtin_tools(config: dict | None = None):
         "nova.tools.search_files",
         "nova.tools.web",
         "nova.tools.skills_tool",
-        "nova.tools.memory_tool",
+        "nova.tools.wiki_tool",
         "nova.tools.my_tool",   # ← add your module here
     ]
     ...
@@ -509,7 +515,7 @@ def discover_builtin_tools(config: dict | None = None):
 
 ## Writing Tests
 
-Follow the pattern in `tests/test_tools.py`. Use dependency injection — pass mock `config`, `memory`, and `agent` via kwargs:
+Follow the pattern in `tests/test_tools.py`. Use dependency injection — pass mock `config`, `wiki`, and `agent` via kwargs:
 
 ```python
 # tests/test_tools.py (add to existing file) or tests/test_my_tool.py
@@ -518,18 +524,18 @@ from nova.tools.my_tool import _my_tool
 
 
 def test_my_tool_basic():
-    result = _my_tool({"arg": "hello"}, config={}, memory=None, agent=None)
+    result = _my_tool({"arg": "hello"}, config={}, wiki=None, agent=None)
     assert "hello" in result
 
 
 def test_my_tool_missing_required_arg():
-    result = _my_tool({}, config={}, memory=None, agent=None)
+    result = _my_tool({}, config={}, wiki=None, agent=None)
     assert "Error" in result
 
 
 def test_my_tool_reads_config():
     config = {"my_tool": {"max_results": 5}}
-    result = _my_tool({"arg": "test"}, config=config, memory=None, agent=None)
+    result = _my_tool({"arg": "test"}, config=config, wiki=None, agent=None)
     assert result is not None
 ```
 

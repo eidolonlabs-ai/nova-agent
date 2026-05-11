@@ -1,10 +1,10 @@
-# GUIDE-013: Memory System
+# GUIDE-013: Memory System (Obsidian-Compatible Wiki)
 
-**Status:** ✅ Active  
-**Last Updated:** May 2026  
+**Status:** ✅ Active
+**Last Updated:** May 2026
 **Type:** GUIDE (Developer & User Reference)
 
-> Nova Agent includes a file-based memory system for storing durable facts across sessions. Unlike conversation history (which gets compressed and truncated), memory persists indefinitely.
+> Nova's memory is a persistent wiki of Obsidian-compatible markdown notes. Notes survive across sessions, link to each other with `[[wikilinks]]`, and can be browsed directly in Obsidian.
 
 ---
 
@@ -13,137 +13,193 @@
 ### For Users (in chat)
 
 ```
-User: Remember that I prefer Python 3.12 for projects
-Assistant: [calls memory tool with action="add", content="Prefers Python 3.12 for projects", category="general"]
-Assistant: Got it — remembering that you prefer Python 3.12.
+User: Remember that I prefer Python 3.12 for projects.
+Assistant: [wiki(action="write", title="Core/Preferences", content="Prefers Python 3.12 for projects")]
+Assistant: Saved to Core/Preferences — this will be in every prompt going forward.
 
 User: What do you know about my preferences?
-Assistant: [calls memory tool with action="search", query="preferences"]
-Assistant: I remember:
-- You prefer Python 3.12 for projects
+Assistant: [wiki(action="search", query="preferences")]
+Assistant: Found Core/Preferences: "Prefers Python 3.12 for projects."
 ```
 
 ### For Developers (programmatic)
 
 ```python
-from nova.memory import MemoryStore
 from pathlib import Path
+from nova.wiki_memory import WikiMemory
 
-store = MemoryStore(Path("~/.nova/memory.json"), max_entries=100)
+wiki = WikiMemory(Path("~/.nova/wiki").expanduser(), max_prompt_notes=10)
 
-# Add a fact
-store.add("User prefers async/await over callbacks", category="preferences")
+# Write a note (creates Projects/nova.md with YAML frontmatter)
+wiki.write("Projects/nova", "Agent framework for personal use.", tags=["agent"])
 
-# Search
-results = store.search("python")
-# Returns: [{"content": "User prefers Python 3.12...", "category": "preferences", ...}]
+# Append to an existing note
+wiki.append("Projects/nova", "Uses OpenRouter for LLM calls.")
 
-# Delete
-store.delete(entry_id)
+# Read a note
+note = wiki.read("Projects/nova")
+# {"frontmatter": {...}, "content": "..."}
 
-# Clear all
-store.clear()
+# Full-text search
+results = wiki.search("OpenRouter")
+
+# List notes (optionally filter by tag)
+notes = wiki.list_notes(tag="agent")
+
+# Maintenance — read-only analysis report
+report = wiki.maintenance(stale_days=90)
 ```
 
 ---
 
 ## How Memory Works
 
-Memory is Nova's long-term learning system. Unlike conversation history, which is subject to token budgets and compression, memory entries persist across sessions and restarts.
+The vault lives at `~/.nova/wiki/` by default and is a regular Obsidian vault — open it in Obsidian directly to browse, edit, and visualize the link graph.
 
-### Architecture
+### Vault layout
 
 ```
-MemoryStore (Python class)
-    └── memory.json (file on disk)
-        ├── { "content": "...", "category": "...", "created_at": "..." }
-        ├── { "content": "...", "category": "...", "created_at": "..." }
-        └── ...
+~/.nova/wiki/
+  Core/                    # Always-in-context (full content auto-injected)
+    Preferences.md
+    Identity.md
+  People/
+    Mark.md
+  Projects/
+    nova-agent.md
+  Facts/
+    python-tooling.md
+  Concepts/
+    react-hooks.md
 ```
 
-**Storage:** Single JSON file — no database, no external dependencies.
+### Note format
 
-**Operations:**
-- **Add** — Append a new entry
-- **Search** — Full-text scan of all entries
-- **Delete** — Remove by entry ID
-- **Clear** — Wipe all entries
+Each note is a markdown file with YAML frontmatter:
 
-### Categories
+```markdown
+---
+title: Projects/nova
+tags: [agent, python]
+created: 2026-05-11T10:00:00
+modified: 2026-05-11T14:32:00
+---
 
-Entries are tagged with categories for organization:
+Nova is a personal AI agent framework.
+Built on [[OpenRouter]] for model access.
+Related: [[Projects/skills-system]], [[Facts/python-tooling]]
+```
 
-| Category | Use Case | Example |
-|----------|----------|---------|
-| `general` | Default, no special meaning | "User's name is Mark" |
-| `preferences` | User preferences | "Prefers Python 3.12" |
-| `project` | Project-specific facts | "Database is PostgreSQL" |
-| `environment` | System/environment details | "Running on macOS Sonoma" |
-| `context` | Session-specific context | "Working on feature X" |
+- **`[[wikilinks]]`** connect notes (Obsidian resolves by basename)
+- **`#tags`** add cross-cutting context
+- **Folder prefix in title** organizes notes (e.g., `People/Mark` → `~/.nova/wiki/People/Mark.md`)
 
 ---
 
-## LRU Eviction
+## The `Core/` Convention
 
-When the store reaches `max_entries` (default: 100), the **oldest** entries are evicted first. This is a simple LRU policy — no sophistication, no scoring, no ML. Just "oldest out."
+Notes in `Core/` are **special**: their **full content** is injected into every system prompt, no tool call required. Notes elsewhere only appear as an index (title + first line + tags).
 
+| Folder | Injection | Use for |
+|---|---|---|
+| `Core/` | Full content, every prompt | Identity, preferences, environment, constants |
+| Everything else | Title-only index of 10 most recent | Reference knowledge, project state, people |
+
+**Keep `Core/` short.** Every line there costs tokens on every turn. Use it for facts the agent should *always* know without searching.
+
+---
+
+## Operations
+
+| Action | Description |
+|---|---|
+| `write` | Create or overwrite a note (preserves `created` date if file exists) |
+| `append` | Add content to an existing note (or create if absent) |
+| `read` | Fetch a note's content |
+| `search` | Case-insensitive full-text search across the vault |
+| `list` | List notes by most recent, optionally filtered by tag |
+| `delete` | Remove a note |
+| `maintenance` | Read-only report: duplicate candidates, orphans, stale notes |
+
+All operations are exposed through a single `wiki` tool — see [Built-in Tools](#built-in-tools).
+
+---
+
+## Maintenance
+
+Memory rots if nobody prunes it. The `wiki maintenance` action returns a read-only report so the agent (or you) can decide what to act on:
+
+```python
+report = wiki.maintenance(stale_days=90)
+# {
+#   "total_notes": 42,
+#   "duplicate_candidates": [
+#     {"titles": ["People/Mark", "Projects/Mark"], "paths": [...]}
+#   ],
+#   "orphans": [{"title": "Lonely Note", "path": "..."}],
+#   "stale":   [{"title": "Old Project", "days_old": 184, "path": "..."}],
+#   "tag_counts": {"python": 12, "api": 5, ...}
+# }
 ```
-Entry 1 (Jan 2026)  → Evicted (oldest)
-Entry 2 (Feb 2026)  → Evicted
-...
-Entry 100 (May 2026) → Retained (newest)
-```
 
-**Trade-offs:**
-- ✅ Simple, predictable, no tuning needed
-- ❌ No notion of "importance" — a critical fact from 3 months ago gets evicted the same as a throwaway
-- ❌ No deduplication — same fact stored twice counts as two entries
+**Detection heuristics:**
+- **Duplicate candidates** — same basename (`People/Mark` vs `Projects/Mark`), one title contains the other, or ≥60% word overlap
+- **Orphans** — notes with no `[[wikilinks]]` pointing in and none pointing out
+- **Stale** — modified date older than `stale_days` (default 90)
+- **Tag counts** — surfaces typos / near-duplicate tags (`python` vs `Python`)
+
+**Policy: maintenance is suggest-only.** No automatic deletion. The agent appends corrections, merges via explicit `write`+`delete`, or asks the user.
 
 ---
 
 ## Memory vs. Context vs. Skills
 
-It's easy to confuse these three. Here's how they differ:
-
 | System | Purpose | Lifetime | Source |
-|--------|---------|----------|--------|
+|---|---|---|---|
 | **Context** | Current conversation state | Single session (compressed over time) | Conversation flow |
-| **Memory** | Cross-session facts | Indefinite (until evicted) | Explicit user input |
-| **Skills** | Domain knowledge | Indefinite | SKILL.md files |
+| **Wiki memory** | Cross-session knowledge | Indefinite | Agent's `wiki` tool calls |
+| **Skills** | Domain instructions | Indefinite | SKILL.md files |
 
 ### When to use each
 
-- **Context** — "Let's debug this function together" → everything stays in context
-- **Memory** — "Remember that I use a MacBook Pro" → persists across sessions
-- **Skills** — "Write Python following PEP 8" → always available, loaded on demand
+- **Context** — "Let's debug this function together" → ephemeral, stays in the conversation
+- **Wiki** — "Remember that I use a MacBook Pro" → persists across sessions
+- **Skills** — "Write Python following PEP 8" → reusable instructions loaded on demand
 
 ---
 
 ## Configuration
 
-Memory settings live in `config.yaml`:
-
 ```yaml
-memory:
-  max_entries: 100    # number of entries before LRU eviction starts
-  file_path: "~/.nova/memory.json"  # where to store the file
+wiki:
+  enabled: true              # On by default
+  vault_path: "~/.nova/wiki" # Or point at an existing Obsidian vault
+  max_prompt_notes: 10       # How many recent notes appear in the index
 ```
 
-### End Users
+### End users
 
-Memory is enabled by default. No config needed.
+Enabled out of the box at `~/.nova/wiki/`. No config needed.
+
+### Pointing at an existing Obsidian vault
+
+```yaml
+wiki:
+  vault_path: "~/Documents/ObsidianVault/Nova"
+```
+
+Nova will write its notes into a subfolder structure (`Core/`, `People/`, etc.) inside that vault.
 
 ### Developers
 
 ```python
-from nova.memory import MemoryStore
+from pathlib import Path
+from nova.wiki_memory import WikiMemory
 
-# Custom path and size
-store = MemoryStore(
-    Path("/tmp/my-memory.json"),
-    max_entries=50
-)
+wiki = WikiMemory(Path("/tmp/test-vault"), max_prompt_notes=5)
 ```
+
+The `WikiMemory` instance is injectable into `NovaAgent` via `wiki_memory_store=` for testing.
 
 ---
 
@@ -151,37 +207,39 @@ store = MemoryStore(
 
 ### For Users
 
-1. **Be specific** — "User prefers Python 3.12" is better than "User likes Python"
-2. **Use categories** — Group related facts so searches are more targeted
-3. **Don't over-save** — Only store facts you'll actually need later
-4. **Review periodically** — Use `/sessions` to see what you've saved; delete stale entries
+1. **Curate `Core/`** — every line lives in every prompt. Keep it tight.
+2. **Folder taxonomy** — `Core/`, `People/`, `Projects/`, `Facts/`, `Concepts/` cover most cases. Don't sprawl new folders.
+3. **Link aggressively** — use `[[wikilinks]]`. The graph is your map.
+4. **Run `wiki maintenance`** periodically to surface dedup and orphan candidates.
+5. **Open it in Obsidian** — the graph view is genuinely useful.
 
 ### For Developers
 
-1. **Atomic writes** — MemoryStore uses `os.replace()` for atomic writes (safe against crashes)
-2. **Graceful loading** — Corrupted JSON files are logged and reset to empty (no crash)
-3. **Thread safety** — MemoryStore is NOT thread-safe. Wrap with a lock if accessing from multiple threads
-4. **Search is linear** — With 100 entries, linear scan is fine. If you need 10K+ entries, consider a proper index
+1. **Atomic writes** — `WikiMemory` uses `mkstemp` + `os.replace` for crash-safe writes
+2. **Path traversal protection** — titles with `..` or absolute paths are rejected
+3. **YAML safety** — corrupt frontmatter degrades to empty dict, never crashes
+4. **Search is linear** — fine for thousands of notes. If you need millions, add an index.
+5. **Concurrency** — `WikiMemory` is not thread-safe. Wrap with a lock for multi-threaded use.
 
 ---
 
 ## Troubleshooting
 
 | Problem | Cause | Solution |
-|---------|-------|----------|
-| Memory not persisting | File path doesn't exist or isn't writable | Check `memory.file_path` in config; ensure directory exists |
-| Too many entries lost | LRU eviction kicked in | Increase `max_entries` or prune old entries |
-| Memory seems "forgotten" | Category mismatch in search | Search with the right category keyword |
-| JSON file is corrupted | Crash during write | MemoryStore handles this gracefully — reloads as empty |
-| Memory is slow | Too many entries (>500) | Increase `max_entries` threshold or prune |
+|---|---|---|
+| Notes not appearing in prompt | Wiki disabled | Set `wiki.enabled: true` in `~/.nova/config.yaml` |
+| Core notes not auto-injected | Note isn't under `Core/` folder | Use title prefix `Core/<name>` when writing |
+| "path traversal" error | Title contains `..` or absolute path | Use a relative title without `..` |
+| Vault not visible in Obsidian | Obsidian needs to "open vault" on the directory | File → Open vault → select `~/.nova/wiki/` |
+| Maintenance reports too many duplicates | Heuristic is permissive by design | Treat as candidates to review, not certainties |
 
 ---
 
 ## Related Documentation
 
 | Document | Purpose |
-|----------|---------|
-| [GUIDE-003 Customizing](GUIDE-003-CUSTOMIZING.md) | Config options |
+|---|---|
+| [GUIDE-003 Customizing](GUIDE-003-CUSTOMIZING.md) | Config options including wiki |
 | [GUIDE-011 Context Compression](GUIDE-011-CONTEXT_COMPRESSION.md) | How context differs from memory |
 | [GUIDE-012 Session Management](GUIDE-012-SESSION_MANAGEMENT.md) | Session storage (separate from memory) |
-| [GUIDE-009 Using Nova](GUIDE-009-USING_NOVA.md) | Memory tool usage in chat |
+| [GUIDE-009 Using Nova](GUIDE-009-USING_NOVA.md) | Wiki tool usage in chat |

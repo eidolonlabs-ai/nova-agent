@@ -10,8 +10,8 @@ import httpx
 import pytest
 
 from nova.agent import NovaAgent
-from nova.memory import MemoryStore
 from nova.session import SessionStore
+from nova.wiki_memory import WikiMemory
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +40,7 @@ def minimal_config() -> dict:
             "tool_result_max_chars": 8000,
             "system_prompt_max": 8000,
         },
-        "memory": {"enabled": False},
+        "wiki": {"enabled": False},
         "session": {"directory": str(tempfile.mkdtemp())},
         "skills": {"enabled": False},
         "compression": {"enabled": False, "threshold_percent": 0.40},
@@ -72,22 +72,21 @@ def mock_http_client() -> MagicMock:
 
 
 @pytest.fixture
-def mock_memory_store() -> MemoryStore:
-    tmpdir = tempfile.mkdtemp()
-    return MemoryStore(Path(tmpdir) / "memory.json", max_entries=100)
+def mock_wiki_store(tmp_path) -> WikiMemory:
+    return WikiMemory(tmp_path / "wiki")
 
 
 @pytest.fixture
 def make_agent(minimal_config, mock_session_store, mock_http_client):
     """Factory fixture: call make_agent() or make_agent(config=...) to create a NovaAgent."""
 
-    def _factory(config=None, session_id=None, memory_store=None):
+    def _factory(config=None, session_id=None, wiki_memory_store=None):
         return NovaAgent(
             config=config or minimal_config,
             http_client=mock_http_client,
             session_store=mock_session_store,
             session_id=session_id,
-            memory_store=memory_store,
+            wiki_memory_store=wiki_memory_store,
         )
 
     return _factory

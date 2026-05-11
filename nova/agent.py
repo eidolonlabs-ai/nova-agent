@@ -25,7 +25,6 @@ from nova.hooks import (
     EVENT_SESSION_START,
     hooks,
 )
-from nova.memory import MemoryStore
 from nova.microcompact import microcompact_messages
 from nova.model_metadata import get_model_context_window
 from nova.permissions import PermissionChecker, build_permission_checker
@@ -39,6 +38,7 @@ from nova.tokens import (
     estimate_total_request_tokens,
 )
 from nova.tools.registry import discover_builtin_tools, registry
+from nova.wiki_memory import WikiMemory
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +63,7 @@ class NovaAgent:
         session_id: str | None = None,
         http_client: httpx.Client | None = None,
         session_store: SessionStore | None = None,
-        memory_store: MemoryStore | None = None,
+        wiki_memory_store: WikiMemory | None = None,
     ):
         self.config = config or load_config()
         self.session_id = session_id
@@ -84,17 +84,17 @@ class NovaAgent:
             session_dir = Path(self.config["session"]["directory"]).expanduser()
             self.session_store = SessionStore(session_dir / "sessions.db")
 
-        # Memory store (injectable for testing)
-        if memory_store is not None:
-            self.memory: MemoryStore | None = memory_store
-        elif self.config["memory"]["enabled"]:
-            memory_file = Path(self.config["memory"]["file"]).expanduser()
-            self.memory = MemoryStore(
-                memory_file,
-                max_entries=self.config["memory"]["max_entries"],
+        # Wiki memory store (injectable for testing)
+        if wiki_memory_store is not None:
+            self.wiki: WikiMemory | None = wiki_memory_store
+        elif self.config.get("wiki", {}).get("enabled"):
+            vault_path = Path(self.config["wiki"]["vault_path"]).expanduser()
+            self.wiki = WikiMemory(
+                vault_path,
+                max_prompt_notes=self.config["wiki"].get("max_prompt_notes", 10),
             )
         else:
-            self.memory = None
+            self.wiki = None
 
         # HTTP client (injectable for testing)
         self._owns_client = http_client is None
@@ -188,14 +188,15 @@ class NovaAgent:
         3. ``"full"`` — default for root agents
         """
         resolved_mode = mode or self.config.get("_prompt_mode", "full")
-        memory_content = None
-        if self.memory:
-            memory_content = self.memory.format_for_prompt()
+
+        wiki_content = None
+        if self.wiki:
+            wiki_content = self.wiki.format_for_prompt()
 
         self._system_prompt = build_system_prompt(
             config=self.config,
             mode=resolved_mode,
-            memory_content=memory_content,
+            wiki_content=wiki_content,
         )
         self._cached_system_prompt = self._system_prompt
 
@@ -436,12 +437,12 @@ class NovaAgent:
         # Execute with automatic retry on transient errors
         max_retries = max(0, self.config.get("agent", {}).get("tool_retry_max_attempts", 2))
         for attempt in range(max_retries + 1):
-            # Pass config, memory, and agent reference to tool handlers via kwargs
+            # Pass config, wiki, and agent reference to tool handlers via kwargs
             result = registry.dispatch(
                 name,
                 arguments,
                 config=self.config,
-                memory=self.memory,
+                wiki=self.wiki,
                 session_store=self.session_store,
                 agent=self,
             )

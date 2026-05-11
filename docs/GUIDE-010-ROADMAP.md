@@ -32,7 +32,7 @@ Made Nova safe to run and extensible for real-world use.
 - ✅ Automatic retry (exponential backoff + jitter)
 - ✅ Prompt mode gating (full for main agent, minimal for sub-agents)
 - ✅ Web search via Bing RSS (zero dependencies, zero API key)
-- ✅ File-based memory with LRU eviction
+- ✅ Obsidian-compatible wiki memory (markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance)
 
 ## Phase 3: Reliability & Scale 🟡 In Progress (Jun–Aug 2026)
 

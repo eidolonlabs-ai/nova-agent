@@ -36,7 +36,7 @@ def minimal_config():
             "tool_result_max_chars": 8000,
             "system_prompt_max": 8000,
         },
-        "memory": {"enabled": False},
+        "wiki": {"enabled": False},
         "session": {"directory": str(tempfile.mkdtemp())},
         "skills": {"enabled": False},
         "compression": {"enabled": False},

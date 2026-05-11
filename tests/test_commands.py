@@ -127,11 +127,11 @@ def test_slash_completer_subcommand_completion():
         def __init__(self, text):
             self.text_before_cursor = text
 
-    # /memory search should offer search, clear, list
-    completions = list(completer.get_completions(MockDocument("/memory s"), None))
+    # /reasoning s should offer 'show'
+    completions = list(completer.get_completions(MockDocument("/reasoning s"), None))
     completion_texts = [c.text for c in completions]
     assert len(completions) > 0
-    assert any("earch" in text for text in completion_texts)
+    assert any("how" in text for text in completion_texts)
 
 
 def test_slash_completer_subcommand_clear_and_list():
@@ -141,9 +141,9 @@ def test_slash_completer_subcommand_clear_and_list():
         def __init__(self, text):
             self.text_before_cursor = text
 
-    # /memory should offer all subcommands
-    completions = list(completer.get_completions(MockDocument("/memory "), None))
-    assert len(completions) >= 2  # at least 2 subcommands
+    # /reasoning should offer 'show' and 'hide'
+    completions = list(completer.get_completions(MockDocument("/reasoning "), None))
+    assert len(completions) >= 2
 
 
 def test_slash_completer_no_subcommand_for_command_without_subcommands():

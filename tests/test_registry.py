@@ -8,6 +8,7 @@ def test_discover_builtin_tools():
     assert "terminal" in registry.all_tool_names
     assert "read_file" in registry.all_tool_names
     assert "write_file" in registry.all_tool_names
+    assert "wiki" in registry.all_tool_names
 
 
 def test_get_definitions():

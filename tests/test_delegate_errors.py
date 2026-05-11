@@ -55,7 +55,7 @@ def test_delegate_timeout_triggered():
         "budgets": {"system_prompt_max": 8000},
         "compression": {"enabled": False},
         "microcompact": {"enabled": True},
-        "memory": {"enabled": False},
+        "wiki": {"enabled": False},
         "session": {"directory": "/tmp"},
     }
     mock_agent.session_store = MagicMock()

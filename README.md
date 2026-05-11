@@ -43,7 +43,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | Prompt mode gating | ✅ Active | Full mode for main agent, minimal for sub-agents |
 | OpenRouter API | ✅ Active | 100+ models via OpenRouter |
 | Streaming responses | ✅ Active | Rich terminal UI |
-| File-based memory | ✅ Active | Persistent memory with LRU eviction |
+| Wiki memory (Obsidian-compatible) | ✅ Active | Persistent markdown notes with `[[wikilinks]]`, tags, `Core/` auto-inject |
 | Web search | ✅ Active | Bing RSS — zero dependencies, zero API key |
 
 ## Built-in Tools
@@ -59,7 +59,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `skills_list` | List all available skills by category |
 | `skill_view` | Load a skill's full instructions |
 | `skill_manage` | Create, update, or delete skills |
-| `memory` | Add, search, delete, or clear persistent memories |
+| `wiki` | Manage Obsidian-compatible wiki notes: write, append, read, search, list, delete, maintenance |
 | `delegate_task` | Spawn a sub-agent to handle an isolated task (opt-in) |
 | `task_create` | Start a background shell command |
 | `task_status` | Check a background task's status |
@@ -240,7 +240,6 @@ While chatting, use slash commands to control the session. Press `/` to see the 
 | `/model [name]` | | Show or switch model |
 | `/tools` | | List available tools |
 | `/skills [list\|view]` | | List or view skills |
-| `/memory [search\|clear\|list]` | | Search or manage memory |
 | `/undo` | | Remove the last exchange |
 | `/compact` | | Compress context to last 4 messages |
 | `/copy` | | Copy last response to clipboard |
@@ -268,7 +267,7 @@ nova/
   cost_tracker.py   # Dollar cost tracking with per-model pricing
   hooks.py          # Lifecycle hook/callback system
   mcp_client.py     # MCP (Model Context Protocol) — stdio, HTTP, SSE
-  memory.py         # File-based memory with LRU eviction
+  wiki_memory.py    # Obsidian-compatible wiki memory (markdown notes, [[wikilinks]], Core/ auto-inject)
   microcompact.py   # Cheap context compaction (no LLM call)
   model_metadata.py # Model context window sizes for 20+ models
   permissions.py    # Permission system with defense-in-depth cascade
@@ -287,7 +286,7 @@ nova/
     search_files.py # Grep/regex search across project files
     web.py          # Bing RSS web search
     skills_tool.py  # skills_list, skill_view, skill_manage
-    memory_tool.py  # memory tool (add/search/delete/clear)
+    wiki_tool.py    # wiki tool (write/append/read/search/list/delete/maintenance)
     delegate_tool.py # delegate_task sub-agent spawning (opt-in)
     task_tools.py   # Background task tools (create/status/output/stop/list)
 config/
@@ -309,7 +308,7 @@ docs/
   GUIDE-010-ROADMAP.md               # Project phases, timeline, and targets
   GUIDE-011-CONTEXT_COMPRESSION.md   # Three-tier context management strategy
   GUIDE-012-SESSION_MANAGEMENT.md    # SQLite sessions, FTS5 search, commands
-  GUIDE-013-MEMORY_SYSTEM.md         # File-based persistent memory
+  GUIDE-013-MEMORY_SYSTEM.md         # Obsidian-compatible wiki memory
   GUIDE-014-RETRY_AND_ERROR_HANDLING.md  # Retry logic and error classification
 ```
 
@@ -322,7 +321,7 @@ pip install -e ".[dev]"
 # Run all checks
 ruff check .          # Lint
 mypy nova/            # Type check
-pytest                # Tests (596 passing)
+pytest                # Tests (768 passing)
 
 # Full CI check
 ruff check . && mypy nova/ && pytest
@@ -334,7 +333,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 
 | Document | Type | Status | Purpose |
 |----------|------|--------|---------|
-| [Customizing Nova](docs/GUIDE-003-CUSTOMIZING.md) | GUIDE | ✅ Active | Config, SOUL.md, context files, memory, sessions |
+| [Customizing Nova](docs/GUIDE-003-CUSTOMIZING.md) | GUIDE | ✅ Active | Config, SOUL.md, context files, wiki memory, sessions |
 | [Creating Tools](docs/GUIDE-001-CREATING_TOOLS.md) | GUIDE | ✅ Active | Build custom tools with schemas, handlers, and tests |
 | [Creating Skills](docs/GUIDE-002-CREATING_SKILLS.md) | GUIDE | ✅ Active | Write effective SKILL.md files for specialized knowledge |
 | [Permissions](docs/GUIDE-008-PERMISSIONS.md) | GUIDE | ✅ Active | Permission system, defense-in-depth, config reference |
@@ -345,7 +344,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 | [Roadmap](docs/GUIDE-010-ROADMAP.md) | GUIDE | ✅ Active | Project phases, timeline, and targets |
 | [Context Compression](docs/GUIDE-011-CONTEXT_COMPRESSION.md) | GUIDE | ✅ Active | Three-tier context management: microcompact, LLM compress, reset |
 | [Session Management](docs/GUIDE-012-SESSION_MANAGEMENT.md) | GUIDE | ✅ Active | SQLite sessions, FTS5 search, slash commands |
-| [Memory System](docs/GUIDE-013-MEMORY_SYSTEM.md) | GUIDE | ✅ Active | File-based persistent memory, LRU eviction |
+| [Memory System](docs/GUIDE-013-MEMORY_SYSTEM.md) | GUIDE | ✅ Active | Obsidian-compatible wiki memory: markdown notes, wikilinks, `Core/` auto-inject, maintenance |
 | [Retry & Error Handling](docs/GUIDE-014-RETRY_AND_ERROR_HANDLING.md) | GUIDE | ✅ Active | Exponential backoff, error classification, retries |
 | [Documentation Index](docs/DOCUMENTATION_INDEX.md) | INDEX | ✅ Active | Full inventory of all docs |
 

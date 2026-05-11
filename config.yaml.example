@@ -36,11 +36,14 @@ context_files:
   - "NOVA.md"
   - "AGENTS.md"
 
-# Memory
-memory:
+# Wiki memory (Obsidian-compatible vault)
+# - Notes in Core/ get full content auto-injected into every prompt
+# - All other notes appear as a compact recent-notes index
+# - Vault path is openable directly in Obsidian
+wiki:
   enabled: true
-  max_entries: 100
-  file: "~/.nova/memory.json"
+  vault_path: "~/.nova/wiki"
+  max_prompt_notes: 10
 
 # Skills
 skills:

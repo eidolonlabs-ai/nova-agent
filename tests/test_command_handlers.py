@@ -39,7 +39,6 @@ def test_all_expected_commands_are_registered():
         "undo",
         "compact",
         "copy",
-        "memory",
     }
     for cmd in expected:
         assert cmd in _HANDLERS, f"Command '{cmd}' missing from registry"
@@ -342,58 +341,6 @@ def test_cmd_copy_skips_empty_assistant_content(agent):
 
 
 # ─── cmd_memory ──────────────────────────────────────────────────────────────
-
-
-def test_cmd_memory_disabled(agent):
-    agent.memory = None
-    printed = []
-    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
-        dispatch_command("memory", agent, "")
-    assert any("disabled" in s for s in printed)
-
-
-def test_cmd_memory_list_empty(agent, mock_memory_store):
-    agent.memory = mock_memory_store
-    printed = []
-    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
-        dispatch_command("memory", agent, "list")
-    assert any("No memories" in s for s in printed)
-
-
-def test_cmd_memory_list_shows_entries(agent, mock_memory_store):
-    mock_memory_store.add("User prefers dark mode")
-    agent.memory = mock_memory_store
-    printed = []
-    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
-        dispatch_command("memory", agent, "list")
-    assert any("dark mode" in s for s in printed)
-
-
-def test_cmd_memory_clear(agent, mock_memory_store):
-    mock_memory_store.add("something to forget")
-    agent.memory = mock_memory_store
-    with patch("nova.display._cprint"):
-        dispatch_command("memory", agent, "clear")
-    assert mock_memory_store.get_all() == []
-
-
-def test_cmd_memory_search(agent, mock_memory_store):
-    mock_memory_store.add("User likes Python")
-    mock_memory_store.add("User dislikes Java")
-    agent.memory = mock_memory_store
-    printed = []
-    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
-        dispatch_command("memory", agent, "search Python")
-    assert any("Python" in s for s in printed)
-
-
-def test_cmd_memory_default_lists_without_subcommand(agent, mock_memory_store):
-    mock_memory_store.add("some fact")
-    agent.memory = mock_memory_store
-    printed = []
-    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
-        dispatch_command("memory", agent, "")
-    assert any("some fact" in s for s in printed)
 
 
 # ─── cmd_skills ──────────────────────────────────────────────────────────────

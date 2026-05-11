@@ -79,7 +79,7 @@ Tools are classified as read-only or mutating:
 
 **Mutating** (require confirmation in `ask` mode):
 - `write_file`, `patch_file`, `terminal`
-- `skill_manage`, `memory`, `delegate_task`
+- `skill_manage`, `wiki`, `delegate_task`
 
 ## Tool-Level Permission Checking
 
@@ -170,7 +170,7 @@ permissions:
     - "write_file"
     - "patch_file"
     - "skill_manage"
-    - "memory"
+    - "wiki"
     - "delegate_task"
     - "task_create"
     - "task_stop"

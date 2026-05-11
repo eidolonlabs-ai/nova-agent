@@ -49,14 +49,6 @@ COMMAND_REGISTRY: list[CommandDef] = [
         subcommands=("show", "hide"),
         args_hint="[show|hide]",
     ),
-    # Memory
-    CommandDef(
-        "memory",
-        "Search or clear memory",
-        "Memory",
-        subcommands=("search", "clear", "list"),
-        args_hint="[search|clear|list] [query]",
-    ),
     # Skills
     CommandDef(
         "skills",

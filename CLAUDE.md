@@ -15,7 +15,7 @@ Nova Agent is a minimalist personal AI agent with explicit token budgets and sma
 - `cli.py` — CLI entry point (chat, ask, sessions, reset commands)
 - `config.py` — YAML config loading with env var resolution, deep merge
 - `context.py` — Context file discovery with budgets, head/tail truncation, injection scanning
-- `memory.py` — File-based memory store with LRU eviction
+- `wiki_memory.py` — Obsidian-compatible wiki memory (markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance reporting)
 - `model_metadata.py` — Model context window sizes for 20+ OpenRouter models
 - `prompt.py` — System prompt assembly with mode gating (full/minimal/none)
 - `session.py` — SQLite session storage with FTS5 full-text search
@@ -28,7 +28,7 @@ Nova Agent is a minimalist personal AI agent with explicit token budgets and sma
   - `search_files.py` — Grep/regex search across project files
   - `web.py` — Bing RSS web search (zero dependencies, zero API key)
   - `skills_tool.py` — skills_list, skill_view, skill_manage tools
-  - `memory_tool.py` — memory tool (add/search/delete/clear)
+  - `wiki_tool.py` — wiki tool (write/append/read/search/list/delete/maintenance)
 
 ## Key Design Principles
 
@@ -88,9 +88,9 @@ nova reset                # Reset session state
 
 **Linting:** Code must pass `ruff check .` with no errors.
 
-**Tests:** All 596 tests must pass.
+**Tests:** All 768 tests must pass.
 - Test coverage baseline: CLI 82%, sessions/file_ops 91–100%
-- Use dependency injection: pass mock `http_client`, `session_store`, and `memory_store` to `NovaAgent`
+- Use dependency injection: pass mock `http_client`, `session_store`, and `wiki_memory_store` to `NovaAgent`
 - Test files live in `tests/` with names matching source modules (e.g., `tests/test_agent.py` for `nova/agent.py`)
 - New features should include tests
 
@@ -110,18 +110,18 @@ nova reset                # Reset session state
 ## Testing Notes
 
 - Tests use `pytest` with fixtures in `conftest.py`
-- Mock HTTP client, session store, and memory store for isolation
+- Mock HTTP client, session store, and wiki memory store for isolation
 - Full CI check: `ruff check . && ruff format --check . && mypy nova/ && pytest`
 - Coverage minimum: 70% (enforced by CI); target 80%+ for new code
 
 ## Current Status
 
-✅ All 596 tests passing  
+✅ All 768 tests passing  
 ✅ Linting clean (ruff)  
 ✅ Type checking clean (mypy)  
 ✅ Coverage: 75.69% (exceeds 70% minimum)
 ✅ CLI functional (chat, ask, sessions, reset)  
-✅ 10+ tools available (terminal, read_file, write_file, patch_file, search_files, web_search, skills_list, skill_view, skill_manage, memory, git, http_client, etc.)
+✅ 10+ tools available (terminal, read_file, write_file, patch_file, search_files, web_search, skills_list, skill_view, skill_manage, wiki, git, http_client, etc.)
 
 ## Commit Message Convention
 

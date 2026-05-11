@@ -42,10 +42,10 @@ DEFAULT_CONFIG = {
         "reserve_tokens": 15000,
     },
     "context_files": ["NOVA.md", "AGENTS.md"],
-    "memory": {
+    "wiki": {
         "enabled": True,
-        "max_entries": 100,
-        "file": "~/.nova/memory.json",
+        "vault_path": "~/.nova/wiki",
+        "max_prompt_notes": 10,
     },
     "skills": {
         "enabled": True,
