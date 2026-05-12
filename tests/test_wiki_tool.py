@@ -450,3 +450,124 @@ def test_patch_no_refresh_on_no_match(wiki: WikiMemory):
     agent = MagicMock()
     _wiki_tool({"action": "patch", "title": "Note", "old_text": "xyz", "new_text": "abc"}, wiki=wiki, agent=agent)
     agent._refresh_system_prompt.assert_not_called()
+
+
+# --- replace action ---
+
+
+def test_replace_vault_wide(wiki: WikiMemory):
+    wiki.write("A", "see [[Hasu]]")
+    wiki.write("B", "also [[Hasu]]")
+    result = _wiki_tool({"action": "replace", "old_text": "[[Hasu]]", "new_text": ""}, wiki=wiki)
+    data = json.loads(result)
+    assert data["total_replacements"] == 2
+    assert len(data["patched_notes"]) == 2
+
+
+def test_replace_missing_old_text(wiki: WikiMemory):
+    result = _wiki_tool({"action": "replace", "new_text": "x"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_replace_triggers_refresh(wiki: WikiMemory):
+    wiki.write("A", "foo")
+    agent = MagicMock()
+    _wiki_tool({"action": "replace", "old_text": "foo", "new_text": "bar"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_called_once()
+
+
+def test_replace_no_refresh_when_no_matches(wiki: WikiMemory):
+    agent = MagicMock()
+    _wiki_tool({"action": "replace", "old_text": "xyz", "new_text": "abc"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_not_called()
+
+
+# --- add_tag / remove_tag actions ---
+
+
+def test_add_tag_action(wiki: WikiMemory):
+    wiki.write("Note", "content", tags=[])
+    result = _wiki_tool({"action": "add_tag", "title": "Note", "tag": "newtag"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "added"
+    assert "newtag" in wiki.read("Note")["frontmatter"]["tags"]
+
+
+def test_add_tag_missing_tag_param(wiki: WikiMemory):
+    wiki.write("Note", "content")
+    result = _wiki_tool({"action": "add_tag", "title": "Note"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_remove_tag_action(wiki: WikiMemory):
+    wiki.write("Note", "content", tags=["a", "b"])
+    result = _wiki_tool({"action": "remove_tag", "title": "Note", "tag": "a"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "removed"
+    assert "a" not in wiki.read("Note")["frontmatter"]["tags"]
+
+
+def test_remove_tag_missing_tag_param(wiki: WikiMemory):
+    wiki.write("Note", "content")
+    result = _wiki_tool({"action": "remove_tag", "title": "Note"}, wiki=wiki)
+    assert "Error" in result
+
+
+# --- pin / unpin actions ---
+
+
+def test_pin_action(wiki: WikiMemory):
+    wiki.write("Note", "content")
+    result = _wiki_tool({"action": "pin", "title": "Note"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "pinned"
+    assert wiki.read("Note")["frontmatter"].get("inject") is True
+
+
+def test_unpin_action(wiki: WikiMemory):
+    wiki.write("Note", "content")
+    wiki.pin("Note")
+    result = _wiki_tool({"action": "unpin", "title": "Note"}, wiki=wiki)
+    data = json.loads(result)
+    assert data["status"] == "unpinned"
+    assert not wiki.read("Note")["frontmatter"].get("inject")
+
+
+def test_pin_triggers_refresh(wiki: WikiMemory):
+    wiki.write("Note", "content")
+    agent = MagicMock()
+    _wiki_tool({"action": "pin", "title": "Note"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_called_once()
+
+
+def test_unpin_triggers_refresh(wiki: WikiMemory):
+    wiki.write("Note", "content")
+    wiki.pin("Note")
+    agent = MagicMock()
+    _wiki_tool({"action": "unpin", "title": "Note"}, wiki=wiki, agent=agent)
+    agent._refresh_system_prompt.assert_called_once()
+
+
+def test_replace_missing_new_text(wiki: WikiMemory):
+    result = _wiki_tool({"action": "replace", "old_text": "x"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_add_tag_missing_title(wiki: WikiMemory):
+    result = _wiki_tool({"action": "add_tag", "tag": "foo"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_remove_tag_missing_title(wiki: WikiMemory):
+    result = _wiki_tool({"action": "remove_tag", "tag": "foo"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_pin_missing_title(wiki: WikiMemory):
+    result = _wiki_tool({"action": "pin"}, wiki=wiki)
+    assert "Error" in result
+
+
+def test_unpin_missing_title(wiki: WikiMemory):
+    result = _wiki_tool({"action": "unpin"}, wiki=wiki)
+    assert "Error" in result

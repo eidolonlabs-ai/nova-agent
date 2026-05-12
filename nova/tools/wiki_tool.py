@@ -14,9 +14,12 @@ WIKI_TOOL_SCHEMA = {
         "Manage wiki knowledge notes in an Obsidian-compatible vault. "
         "Actions: write (create/update note), append (add to note), "
         "patch (surgical find-and-replace within a note — prefer over full rewrite), "
+        "replace (vault-wide find-and-replace across all notes), "
         "read (fetch note), search (full-text), list (all notes), delete (remove), "
         "rename (rename note + update all backlinks), "
-        "list_tags (all tags with counts), rename_tag (rename tag globally), "
+        "add_tag / remove_tag (add or remove a tag on a single note), "
+        "list_tags (all tags with counts), rename_tag (rename or delete tag globally — pass empty new_tag to delete), "
+        "pin / unpin (toggle inject:true to include note in every prompt), "
         "maintenance (read-only report: duplicates, broken links, orphans, stale), "
         "follow (BFS graph traversal via [[wikilinks]]), "
         "backlinks (find notes that link to a title). "
@@ -33,13 +36,18 @@ WIKI_TOOL_SCHEMA = {
                     "write",
                     "append",
                     "patch",
+                    "replace",
                     "read",
                     "search",
                     "list",
                     "delete",
                     "rename",
+                    "add_tag",
+                    "remove_tag",
                     "list_tags",
                     "rename_tag",
+                    "pin",
+                    "unpin",
                     "maintenance",
                     "follow",
                     "backlinks",
@@ -68,7 +76,7 @@ WIKI_TOOL_SCHEMA = {
             },
             "tag": {
                 "type": "string",
-                "description": "Filter notes by tag (list only).",
+                "description": "Tag value. Used to filter notes by tag (list), or as the tag to add/remove (add_tag, remove_tag).",
             },
             "stale_days": {
                 "type": "integer",
@@ -92,15 +100,15 @@ WIKI_TOOL_SCHEMA = {
             },
             "old_text": {
                 "type": "string",
-                "description": "Exact text to find and replace (patch only).",
+                "description": "Exact text to find and replace (patch and replace actions).",
             },
             "new_text": {
                 "type": "string",
-                "description": "Replacement text; use empty string to delete (patch only).",
+                "description": "Replacement text; use empty string to delete (patch and replace actions).",
             },
             "count": {
                 "type": "integer",
-                "description": "Max replacements to make (patch only). 0 = replace all (default).",
+                "description": "Max replacements per note (patch/replace). 0 = replace all (default).",
             },
             "new_title": {
                 "type": "string",
@@ -170,6 +178,61 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         count = args.get("count", 0)
         result = wiki.patch(title, old_text, new_text, count=count)
         if result.get("status") == "patched":
+            _refresh(kwargs)
+        return json.dumps(result)
+
+    elif action == "replace":
+        old_text = args.get("old_text")
+        new_text = args.get("new_text")
+        if old_text is None:
+            return "Error: 'old_text' is required for replace."
+        if new_text is None:
+            return "Error: 'new_text' is required for replace."
+        count = args.get("count", 0)
+        result = wiki.vault_replace(old_text, new_text, count=count)
+        if result["patched_notes"]:
+            _refresh(kwargs)
+        return json.dumps(result)
+
+    elif action == "add_tag":
+        title = args.get("title", "").strip()
+        tag = (args.get("tag") or "").strip()
+        if not title:
+            return "Error: 'title' is required for add_tag."
+        if not tag:
+            return "Error: 'tag' is required for add_tag."
+        result = wiki.add_tag(title, tag)
+        if result.get("status") == "added":
+            _refresh(kwargs)
+        return json.dumps(result)
+
+    elif action == "remove_tag":
+        title = args.get("title", "").strip()
+        tag = (args.get("tag") or "").strip()
+        if not title:
+            return "Error: 'title' is required for remove_tag."
+        if not tag:
+            return "Error: 'tag' is required for remove_tag."
+        result = wiki.remove_tag(title, tag)
+        if result.get("status") == "removed":
+            _refresh(kwargs)
+        return json.dumps(result)
+
+    elif action == "pin":
+        title = args.get("title", "").strip()
+        if not title:
+            return "Error: 'title' is required for pin."
+        result = wiki.pin(title)
+        if result.get("status") == "pinned":
+            _refresh(kwargs)
+        return json.dumps(result)
+
+    elif action == "unpin":
+        title = args.get("title", "").strip()
+        if not title:
+            return "Error: 'title' is required for unpin."
+        result = wiki.unpin(title)
+        if result.get("status") == "unpinned":
             _refresh(kwargs)
         return json.dumps(result)
 
@@ -283,8 +346,8 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
 
     return (
         f"Error: Unknown action '{action}'. "
-        "Use write, append, patch, read, search, list, delete, rename, list_tags, rename_tag, "
-        "maintenance, follow, or backlinks."
+        "Use write, append, patch, replace, read, search, list, delete, rename, "
+        "add_tag, remove_tag, list_tags, rename_tag, pin, unpin, maintenance, follow, or backlinks."
     )
 
 

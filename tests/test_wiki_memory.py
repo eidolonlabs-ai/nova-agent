@@ -91,6 +91,122 @@ def test_patch_no_match(vault: WikiMemory):
     assert result["status"] == "no_match"
 
 
+def test_vault_replace_across_notes(vault: WikiMemory):
+    vault.write("A", "see [[Hasu]] here")
+    vault.write("B", "also [[Hasu]] again")
+    vault.write("C", "no link here")
+    result = vault.vault_replace("[[Hasu]]", "[[Archive/Hasu]]")
+    assert result["total_replacements"] == 2
+    assert len(result["patched_notes"]) == 2
+    assert "[[Archive/Hasu]]" in vault.read("A")["content"]
+    assert "[[Archive/Hasu]]" in vault.read("B")["content"]
+    assert vault.read("C")["content"] == "no link here"
+
+
+def test_vault_replace_delete_text(vault: WikiMemory):
+    vault.write("A", "foo bar")
+    vault.write("B", "foo baz")
+    result = vault.vault_replace("foo ", "")
+    assert result["total_replacements"] == 2
+    assert vault.read("A")["content"] == "bar"
+    assert vault.read("B")["content"] == "baz"
+
+
+def test_vault_replace_no_matches(vault: WikiMemory):
+    vault.write("A", "hello")
+    result = vault.vault_replace("xyz", "abc")
+    assert result["patched_notes"] == []
+    assert result["total_replacements"] == 0
+
+
+def test_add_tag_to_note(vault: WikiMemory):
+    vault.write("Note", "content", tags=["existing"])
+    result = vault.add_tag("Note", "new")
+    assert result["status"] == "added"
+    note = vault.read("Note")
+    assert "new" in note["frontmatter"]["tags"]
+    assert "existing" in note["frontmatter"]["tags"]
+
+
+def test_add_tag_already_present(vault: WikiMemory):
+    vault.write("Note", "content", tags=["foo"])
+    result = vault.add_tag("Note", "foo")
+    assert result["status"] == "already_present"
+
+
+def test_add_tag_note_not_found(vault: WikiMemory):
+    result = vault.add_tag("Ghost", "tag")
+    assert result["status"] == "not_found"
+
+
+def test_remove_tag_from_note(vault: WikiMemory):
+    vault.write("Note", "content", tags=["keep", "remove"])
+    result = vault.remove_tag("Note", "remove")
+    assert result["status"] == "removed"
+    note = vault.read("Note")
+    assert "remove" not in note["frontmatter"]["tags"]
+    assert "keep" in note["frontmatter"]["tags"]
+
+
+def test_remove_tag_not_present(vault: WikiMemory):
+    vault.write("Note", "content", tags=["foo"])
+    result = vault.remove_tag("Note", "bar")
+    assert result["status"] == "not_present"
+
+
+def test_remove_tag_note_not_found(vault: WikiMemory):
+    result = vault.remove_tag("Ghost", "tag")
+    assert result["status"] == "not_found"
+
+
+def test_rename_tag_empty_new_tag_deletes_globally(vault: WikiMemory):
+    vault.write("A", "x", tags=["old", "keep"])
+    vault.write("B", "y", tags=["old"])
+    result = vault.rename_tag("old", "")
+    assert len(result["updated_notes"]) == 2
+    assert "old" not in vault.read("A")["frontmatter"]["tags"]
+    assert "keep" in vault.read("A")["frontmatter"]["tags"]
+    assert vault.read("B")["frontmatter"]["tags"] == []
+
+
+def test_pin_sets_inject(vault: WikiMemory):
+    vault.write("Note", "content")
+    result = vault.pin("Note")
+    assert result["status"] == "pinned"
+    assert vault.read("Note")["frontmatter"].get("inject") is True
+
+
+def test_pin_already_pinned(vault: WikiMemory):
+    vault.write("Note", "content")
+    vault.pin("Note")
+    result = vault.pin("Note")
+    assert result["status"] == "already_pinned"
+
+
+def test_pin_note_not_found(vault: WikiMemory):
+    result = vault.pin("Ghost")
+    assert result["status"] == "not_found"
+
+
+def test_unpin_removes_inject(vault: WikiMemory):
+    vault.write("Note", "content")
+    vault.pin("Note")
+    result = vault.unpin("Note")
+    assert result["status"] == "unpinned"
+    assert not vault.read("Note")["frontmatter"].get("inject")
+
+
+def test_unpin_not_pinned(vault: WikiMemory):
+    vault.write("Note", "content")
+    result = vault.unpin("Note")
+    assert result["status"] == "not_pinned"
+
+
+def test_unpin_note_not_found(vault: WikiMemory):
+    result = vault.unpin("Ghost")
+    assert result["status"] == "not_found"
+
+
 def test_read_returns_none_for_missing(vault: WikiMemory):
     assert vault.read("Nonexistent") is None
 

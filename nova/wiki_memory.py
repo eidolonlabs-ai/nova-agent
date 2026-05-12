@@ -135,6 +135,89 @@ class WikiMemory:
             "replacements": replacements,
         }
 
+    def vault_replace(self, old_text: str, new_text: str, count: int = 0) -> dict:
+        """Replace old_text with new_text across every note in the vault.
+
+        count=0 replaces all occurrences per note; count=N replaces first N per note.
+        Returns {"patched_notes": [...titles], "total_replacements": N}.
+        """
+        patched: list[str] = []
+        total = 0
+        for md_file in sorted(self.vault_path.rglob("*.md")):
+            try:
+                parsed = self._parse_note(md_file)
+            except OSError:
+                continue
+            original = parsed["content"]
+            if old_text not in original:
+                continue
+            if count > 0:
+                new_content = original.replace(old_text, new_text, count)
+                n = min(original.count(old_text), count)
+            else:
+                new_content = original.replace(old_text, new_text)
+                n = original.count(old_text)
+            parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
+            self._write_atomic(md_file, self._format_note(parsed["frontmatter"], new_content))
+            patched.append(parsed["frontmatter"].get("title", md_file.stem))
+            total += n
+        return {"patched_notes": patched, "total_replacements": total}
+
+    def add_tag(self, title: str, tag: str) -> dict:
+        """Add a tag to a note's frontmatter. No-op if the tag already exists."""
+        path = self._note_path(title)
+        if not path.exists():
+            return {"status": "not_found", "error": f"Note not found: '{title}'"}
+        parsed = self._parse_note(path)
+        tags: list[str] = list(parsed["frontmatter"].get("tags") or [])
+        if tag in tags:
+            return {"status": "already_present", "tag": tag}
+        tags.append(tag)
+        parsed["frontmatter"]["tags"] = tags
+        parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
+        self._write_atomic(path, self._format_note(parsed["frontmatter"], parsed["content"]))
+        return {"status": "added", "tag": tag, "path": str(path.relative_to(self.vault_path))}
+
+    def remove_tag(self, title: str, tag: str) -> dict:
+        """Remove a tag from a note's frontmatter. No-op if the tag is absent."""
+        path = self._note_path(title)
+        if not path.exists():
+            return {"status": "not_found", "error": f"Note not found: '{title}'"}
+        parsed = self._parse_note(path)
+        tags: list[str] = list(parsed["frontmatter"].get("tags") or [])
+        if tag not in tags:
+            return {"status": "not_present", "tag": tag}
+        parsed["frontmatter"]["tags"] = [t for t in tags if t != tag]
+        parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
+        self._write_atomic(path, self._format_note(parsed["frontmatter"], parsed["content"]))
+        return {"status": "removed", "tag": tag, "path": str(path.relative_to(self.vault_path))}
+
+    def pin(self, title: str) -> dict:
+        """Set inject:true on a note so its full content appears in every system prompt."""
+        path = self._note_path(title)
+        if not path.exists():
+            return {"status": "not_found", "error": f"Note not found: '{title}'"}
+        parsed = self._parse_note(path)
+        if parsed["frontmatter"].get("inject"):
+            return {"status": "already_pinned"}
+        parsed["frontmatter"]["inject"] = True
+        parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
+        self._write_atomic(path, self._format_note(parsed["frontmatter"], parsed["content"]))
+        return {"status": "pinned", "path": str(path.relative_to(self.vault_path))}
+
+    def unpin(self, title: str) -> dict:
+        """Remove inject:true from a note's frontmatter."""
+        path = self._note_path(title)
+        if not path.exists():
+            return {"status": "not_found", "error": f"Note not found: '{title}'"}
+        parsed = self._parse_note(path)
+        if not parsed["frontmatter"].get("inject"):
+            return {"status": "not_pinned"}
+        parsed["frontmatter"].pop("inject", None)
+        parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
+        self._write_atomic(path, self._format_note(parsed["frontmatter"], parsed["content"]))
+        return {"status": "unpinned", "path": str(path.relative_to(self.vault_path))}
+
     def read(self, title: str) -> dict | None:
         """Return parsed note or None if not found."""
         path = self._note_path(title)
@@ -426,7 +509,7 @@ class WikiMemory:
         return dict(sorted(tag_counts.items(), key=lambda x: (-x[1], x[0])))
 
     def rename_tag(self, old_tag: str, new_tag: str) -> dict:
-        """Rename a tag globally across all notes in the vault."""
+        """Rename (or delete when new_tag is empty) a tag globally across all notes."""
         updated: list[str] = []
         for md_file in self.vault_path.rglob("*.md"):
             try:
@@ -436,7 +519,10 @@ class WikiMemory:
             tags = parsed["frontmatter"].get("tags") or []
             if old_tag not in tags:
                 continue
-            parsed["frontmatter"]["tags"] = [new_tag if t == old_tag else t for t in tags]
+            if new_tag:
+                parsed["frontmatter"]["tags"] = [new_tag if t == old_tag else t for t in tags]
+            else:
+                parsed["frontmatter"]["tags"] = [t for t in tags if t != old_tag]
             parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
             self._write_atomic(md_file, self._format_note(parsed["frontmatter"], parsed["content"]))
             updated.append(parsed["frontmatter"].get("title", md_file.stem))

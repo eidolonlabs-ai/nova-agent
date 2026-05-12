@@ -92,15 +92,20 @@ Manage a persistent wiki of Obsidian-compatible markdown notes via the `wiki` to
 |--------|-------------|
 | `write` | Create or overwrite a note (title, content, tags) |
 | `append` | Add content to a note without overwriting |
-| `patch` | Surgical find-and-replace within a note (old_text, new_text, optional count). Prefer over full rewrite for edits. |
+| `patch` | Surgical find-and-replace within a note (old_text, new_text, count). Prefer over full rewrite for edits. |
+| `replace` | Vault-wide find-and-replace across every note (old_text, new_text, count). Use to clean up renamed/deleted links in bulk. |
 | `read` | Fetch full note content |
 | `search` | Full-text search across all notes |
 | `list` | List notes sorted by recency, optionally filtered by tag |
 | `delete` | Remove a note (warns if backlinks exist) |
 | `rename` | Rename a note and update all [[wikilinks]] that point to it |
+| `add_tag` | Add a tag to a single note's frontmatter (title, tag) |
+| `remove_tag` | Remove a tag from a single note's frontmatter (title, tag) |
 | `list_tags` | Return all tags with usage counts |
-| `rename_tag` | Rename a tag globally across all notes |
-| `follow` | BFS graph traversal via [[wikilinks]] (depth, max_notes, include_content). Pure Python — zero extra LLM calls. Set include_content:true to read a full neighbourhood in one shot. |
+| `rename_tag` | Rename a tag globally; pass empty new_tag to delete it across all notes |
+| `pin` | Set inject:true on a note so its full content appears in every prompt |
+| `unpin` | Remove inject:true from a note |
+| `follow` | BFS graph traversal via [[wikilinks]] (depth, max_notes, include_content). Set include_content:true to read a full neighbourhood in one shot. |
 | `backlinks` | Find all notes that link to a given title |
 | `maintenance` | Read-only report: duplicates, broken links, orphans, stale notes |
 
