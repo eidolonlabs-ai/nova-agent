@@ -413,7 +413,9 @@ def test_maintenance_reports_broken_links(wiki: WikiMemory):
 
 def test_patch_replaces_text(wiki: WikiMemory):
     wiki.write("Note", "foo bar foo")
-    result = _wiki_tool({"action": "patch", "title": "Note", "old_text": "foo", "new_text": "qux"}, wiki=wiki)
+    result = _wiki_tool(
+        {"action": "patch", "title": "Note", "old_text": "foo", "new_text": "qux"}, wiki=wiki
+    )
     data = json.loads(result)
     assert data["status"] == "patched"
     assert data["replacements"] == 2
@@ -433,7 +435,9 @@ def test_patch_missing_new_text_param(wiki: WikiMemory):
 
 def test_patch_no_match_returns_no_match_status(wiki: WikiMemory):
     wiki.write("Note", "hello")
-    result = _wiki_tool({"action": "patch", "title": "Note", "old_text": "xyz", "new_text": ""}, wiki=wiki)
+    result = _wiki_tool(
+        {"action": "patch", "title": "Note", "old_text": "xyz", "new_text": ""}, wiki=wiki
+    )
     data = json.loads(result)
     assert data["status"] == "no_match"
 
@@ -441,14 +445,22 @@ def test_patch_no_match_returns_no_match_status(wiki: WikiMemory):
 def test_patch_triggers_refresh(wiki: WikiMemory):
     wiki.write("Note", "old text")
     agent = MagicMock()
-    _wiki_tool({"action": "patch", "title": "Note", "old_text": "old", "new_text": "new"}, wiki=wiki, agent=agent)
+    _wiki_tool(
+        {"action": "patch", "title": "Note", "old_text": "old", "new_text": "new"},
+        wiki=wiki,
+        agent=agent,
+    )
     agent._refresh_system_prompt.assert_called_once()
 
 
 def test_patch_no_refresh_on_no_match(wiki: WikiMemory):
     wiki.write("Note", "hello")
     agent = MagicMock()
-    _wiki_tool({"action": "patch", "title": "Note", "old_text": "xyz", "new_text": "abc"}, wiki=wiki, agent=agent)
+    _wiki_tool(
+        {"action": "patch", "title": "Note", "old_text": "xyz", "new_text": "abc"},
+        wiki=wiki,
+        agent=agent,
+    )
     agent._refresh_system_prompt.assert_not_called()
 
 
