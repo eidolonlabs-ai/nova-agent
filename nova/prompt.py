@@ -114,6 +114,17 @@ Manage a persistent wiki of Obsidian-compatible markdown notes via the `wiki` to
 """
 
 
+def _build_wiki_guidance(config: dict) -> str:
+    """Return WIKI_GUIDANCE with the vault path injected."""
+    vault_path = config.get("wiki", {}).get("vault_path", "~/.nova/wiki")
+    vault_abs = str(Path(vault_path).expanduser())
+    return (
+        WIKI_GUIDANCE
+        + f"\n**Vault location:** `{vault_abs}` — "
+        "always use the `wiki` tool to read/write notes (not `read_file`/`write_file`).\n"
+    )
+
+
 def build_system_prompt(
     config: dict,
     cwd: Path | None = None,
@@ -164,10 +175,10 @@ def build_system_prompt(
     # 3. Wiki memory index (guidance + content adjacent so model sees rules before notes)
     if wiki_content:
         if config.get("wiki", {}).get("enabled"):
-            parts.append(WIKI_GUIDANCE)
+            parts.append(_build_wiki_guidance(config))
         parts.append(wiki_content)
     elif config.get("wiki", {}).get("enabled"):
-        parts.append(WIKI_GUIDANCE)
+        parts.append(_build_wiki_guidance(config))
 
     # 5. Skills index (full mode only)
     if mode == "full" and config.get("skills", {}).get("enabled"):
