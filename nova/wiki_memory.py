@@ -108,6 +108,33 @@ class WikiMemory:
         self._write_atomic(path, self._format_note(parsed["frontmatter"], new_content))
         return {"status": "appended", "path": str(path.relative_to(self.vault_path))}
 
+    def patch(self, title: str, old_text: str, new_text: str, count: int = 0) -> dict:
+        """Replace occurrences of old_text with new_text in a note's content.
+
+        count=0 replaces all occurrences; count=N replaces the first N.
+        Returns {"status": "patched", "replacements": N} or an error dict.
+        """
+        path = self._note_path(title)
+        if not path.exists():
+            return {"status": "not_found", "error": f"Note not found: '{title}'"}
+        parsed = self._parse_note(path)
+        original = parsed["content"]
+        if old_text not in original:
+            return {"status": "no_match", "error": f"Text not found in '{title}'"}
+        if count > 0:
+            new_content = original.replace(old_text, new_text, count)
+            replacements = min(original.count(old_text), count)
+        else:
+            new_content = original.replace(old_text, new_text)
+            replacements = original.count(old_text)
+        parsed["frontmatter"]["modified"] = datetime.now().isoformat(timespec="seconds")
+        self._write_atomic(path, self._format_note(parsed["frontmatter"], new_content))
+        return {
+            "status": "patched",
+            "path": str(path.relative_to(self.vault_path)),
+            "replacements": replacements,
+        }
+
     def read(self, title: str) -> dict | None:
         """Return parsed note or None if not found."""
         path = self._note_path(title)

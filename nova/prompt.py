@@ -92,6 +92,7 @@ Manage a persistent wiki of Obsidian-compatible markdown notes via the `wiki` to
 |--------|-------------|
 | `write` | Create or overwrite a note (title, content, tags) |
 | `append` | Add content to a note without overwriting |
+| `patch` | Surgical find-and-replace within a note (old_text, new_text, optional count). Prefer over full rewrite for edits. |
 | `read` | Fetch full note content |
 | `search` | Full-text search across all notes |
 | `list` | List notes sorted by recency, optionally filtered by tag |

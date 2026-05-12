@@ -13,6 +13,7 @@ WIKI_TOOL_SCHEMA = {
     "description": (
         "Manage wiki knowledge notes in an Obsidian-compatible vault. "
         "Actions: write (create/update note), append (add to note), "
+        "patch (surgical find-and-replace within a note — prefer over full rewrite), "
         "read (fetch note), search (full-text), list (all notes), delete (remove), "
         "rename (rename note + update all backlinks), "
         "list_tags (all tags with counts), rename_tag (rename tag globally), "
@@ -31,6 +32,7 @@ WIKI_TOOL_SCHEMA = {
                 "enum": [
                     "write",
                     "append",
+                    "patch",
                     "read",
                     "search",
                     "list",
@@ -88,6 +90,18 @@ WIKI_TOOL_SCHEMA = {
                     "instead of following up with separate wiki read calls."
                 ),
             },
+            "old_text": {
+                "type": "string",
+                "description": "Exact text to find and replace (patch only).",
+            },
+            "new_text": {
+                "type": "string",
+                "description": "Replacement text; use empty string to delete (patch only).",
+            },
+            "count": {
+                "type": "integer",
+                "description": "Max replacements to make (patch only). 0 = replace all (default).",
+            },
             "new_title": {
                 "type": "string",
                 "description": "New note title (rename only).",
@@ -141,6 +155,22 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
             return "Error: 'content' is required for append."
         result = wiki.append(title, content)
         _refresh(kwargs)
+        return json.dumps(result)
+
+    elif action == "patch":
+        title = args.get("title", "").strip()
+        old_text = args.get("old_text")
+        new_text = args.get("new_text")
+        if not title:
+            return "Error: 'title' is required for patch."
+        if old_text is None:
+            return "Error: 'old_text' is required for patch."
+        if new_text is None:
+            return "Error: 'new_text' is required for patch."
+        count = args.get("count", 0)
+        result = wiki.patch(title, old_text, new_text, count=count)
+        if result.get("status") == "patched":
+            _refresh(kwargs)
         return json.dumps(result)
 
     elif action == "read":
@@ -253,7 +283,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
 
     return (
         f"Error: Unknown action '{action}'. "
-        "Use write, append, read, search, list, delete, rename, list_tags, rename_tag, "
+        "Use write, append, patch, read, search, list, delete, rename, list_tags, rename_tag, "
         "maintenance, follow, or backlinks."
     )
 

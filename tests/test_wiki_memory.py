@@ -58,6 +58,39 @@ def test_append_creates_note_if_missing(vault: WikiMemory):
     assert vault.read("New Note") is not None
 
 
+def test_patch_replaces_text(vault: WikiMemory):
+    vault.write("Note", "foo bar foo baz")
+    result = vault.patch("Note", "foo", "qux")
+    assert result["status"] == "patched"
+    assert result["replacements"] == 2
+    assert vault.read("Note")["content"] == "qux bar qux baz"
+
+
+def test_patch_replaces_count(vault: WikiMemory):
+    vault.write("Note", "a a a")
+    result = vault.patch("Note", "a", "b", count=2)
+    assert result["replacements"] == 2
+    assert vault.read("Note")["content"] == "b b a"
+
+
+def test_patch_delete_text(vault: WikiMemory):
+    vault.write("Note", "keep [[Projects/Hasu]] keep")
+    result = vault.patch("Note", " [[Projects/Hasu]]", "")
+    assert result["status"] == "patched"
+    assert "Hasu" not in vault.read("Note")["content"]
+
+
+def test_patch_not_found_note(vault: WikiMemory):
+    result = vault.patch("Ghost", "x", "y")
+    assert result["status"] == "not_found"
+
+
+def test_patch_no_match(vault: WikiMemory):
+    vault.write("Note", "hello world")
+    result = vault.patch("Note", "xyz", "abc")
+    assert result["status"] == "no_match"
+
+
 def test_read_returns_none_for_missing(vault: WikiMemory):
     assert vault.read("Nonexistent") is None
 
