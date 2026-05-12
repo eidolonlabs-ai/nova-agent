@@ -747,9 +747,13 @@ class NovaAgent:
             content = message.get("content")
             tool_calls = message.get("tool_calls")
 
-            # Add assistant message to history
+            # Add assistant message to history.
+            # When content arrives alongside tool_calls, drop the content from
+            # the stored message — the streaming already showed it to the user.
+            # Keeping it causes models (especially qwen) to repeat it verbatim
+            # after the tool result is returned.
             assistant_msg = {"role": "assistant"}
-            if content:
+            if content and not tool_calls:
                 assistant_msg["content"] = content
             if tool_calls:
                 assistant_msg["tool_calls"] = tool_calls
@@ -758,7 +762,7 @@ class NovaAgent:
             self.session_store.add_message(
                 self.session_id or "",
                 "assistant",
-                content or "",
+                content or "" if not tool_calls else "",
                 tool_calls=tool_calls,
             )
             api_messages.append(assistant_msg)
