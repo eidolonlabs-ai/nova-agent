@@ -12,20 +12,9 @@ WIKI_TOOL_SCHEMA = {
     "name": "wiki",
     "description": (
         "Manage wiki knowledge notes in an Obsidian-compatible vault. "
-        "Actions: write (create/update note), append (add to note), "
-        "patch (surgical find-and-replace within a note — prefer over full rewrite), "
-        "replace (vault-wide find-and-replace across all notes), "
-        "read (fetch note), search (full-text), list (all notes), delete (remove), "
-        "rename (rename note + update all backlinks), "
-        "add_tag / remove_tag (add or remove a tag on a single note), "
-        "list_tags (all tags with counts), rename_tag (rename or delete tag globally — pass empty new_tag to delete), "
-        "pin / unpin (toggle inject:true to include note in every prompt), "
-        "maintenance (read-only report: duplicates, broken links, orphans, stale), "
-        "follow (BFS graph traversal via [[wikilinks]]), "
-        "backlinks (find notes that link to a title). "
-        "Titles support path prefixes: 'People/Mark', 'Projects/nova'. "
-        "Use [[wikilinks]] and #tags in content. "
-        "Set inject:true in frontmatter to pin a note into every system prompt."
+        "Pick an action from the enum below; behavioral rules live in the system prompt. "
+        "Titles support path prefixes ('People/Mark', 'Projects/nova'). "
+        "Use [[wikilinks]] and #tags in note content."
     ),
     "parameters": {
         "type": "object",

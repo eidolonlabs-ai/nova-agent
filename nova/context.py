@@ -89,14 +89,18 @@ _HEAD_RATIO = 0.70
 _TAIL_RATIO = 0.20
 
 
-def load_global_personality() -> str | None:
-    """Load global personality from ~/.nova/SOUL.md.
+def load_global_personality(soul_path: Path | None = None) -> str | None:
+    """Load global personality from SOUL.md.
+
+    Defaults to <nova_home>/SOUL.md (typically ~/.nova/SOUL.md). Pass an explicit
+    path to override (e.g. for tests or alternate nova_home locations).
 
     Returns content if file exists and passes injection scanning, None otherwise.
-    This is loaded separately as agent identity and should not be included
-    in project context files.
     """
-    soul_path = Path.home() / ".nova" / "SOUL.md"
+    if soul_path is None:
+        from nova.config import get_nova_home
+
+        soul_path = get_nova_home() / "SOUL.md"
     if not soul_path.exists():
         return None
 
@@ -153,11 +157,46 @@ def scan_context_content(content: str, filename: str) -> str | None:
     return content
 
 
+def _snap_head_to_boundary(content: str, target: int) -> int:
+    """Snap the head cutoff backwards to the nearest markdown boundary.
+
+    Tries in order: heading start (\\n#), paragraph break (\\n\\n), single newline.
+    Falls back to the raw target if nothing is found within a reasonable window
+    (25% of target). Prevents truncating mid-line or mid-code-block.
+    """
+    if target >= len(content):
+        return len(content)
+    window = max(target // 4, 80)
+    floor = max(target - window, 0)
+    for needle in ("\n#", "\n\n", "\n"):
+        idx = content.rfind(needle, floor, target)
+        if idx != -1:
+            return idx
+    return target
+
+
+def _snap_tail_to_boundary(content: str, target_start: int) -> int:
+    """Snap the tail start forwards to the nearest markdown boundary.
+
+    Mirror of _snap_head_to_boundary: looks for a heading or paragraph break
+    within a small forward window so the tail begins on a clean line.
+    """
+    if target_start <= 0:
+        return 0
+    window = max((len(content) - target_start) // 4, 80)
+    ceiling = min(target_start + window, len(content))
+    for needle in ("\n#", "\n\n", "\n"):
+        idx = content.find(needle, target_start, ceiling)
+        if idx != -1:
+            return idx + len(needle)
+    return target_start
+
+
 def truncate_with_head_tail(content: str, max_chars: int) -> str:
     """Truncate content preserving head (70%) and tail (20%) with a marker in between.
 
-    This preserves the beginning (usually important setup/intro) and end
-    (usually recent updates/current state) while dropping the middle.
+    Snaps cut points to the nearest markdown heading or paragraph boundary so
+    a fenced code block or markdown structure isn't split mid-token.
     """
     if len(content) <= max_chars:
         return content
@@ -170,10 +209,18 @@ def truncate_with_head_tail(content: str, max_chars: int) -> str:
         # Fallback: just take the head
         return content[:max_chars] + "\n\n[...truncated...]"
 
-    head = content[:head_chars]
-    tail = content[-tail_chars:]
+    head_end = _snap_head_to_boundary(content, head_chars)
+    tail_start = _snap_tail_to_boundary(content, len(content) - tail_chars)
+    # Guard against the snaps overlapping or inverting on small inputs
+    if tail_start <= head_end:
+        head = content[:head_chars]
+        tail = content[-tail_chars:]
+        truncated_len = len(content) - head_chars - tail_chars
+    else:
+        head = content[:head_end]
+        tail = content[tail_start:]
+        truncated_len = tail_start - head_end
 
-    truncated_len = len(content) - head_chars - tail_chars
     marker = f"[...{truncated_len:,} chars truncated, read file for full content...]"
     return f"{head}\n\n{marker}\n\n{tail}"
 
@@ -190,6 +237,46 @@ def _find_git_root(start: Path) -> Path | None:
         if (parent / ".git").exists():
             return parent
     return None
+
+
+def _search_dirs_for(cwd: Path, git_root: Path | None) -> list[Path]:
+    """Return search order: cwd, then parents up to and including git_root."""
+    dirs = [cwd]
+    if git_root and git_root != cwd:
+        for parent in cwd.parents:
+            dirs.append(parent)
+            if parent == git_root:
+                break
+    return dirs
+
+
+def _find_context_file(search_dirs: list[Path], filename: str) -> Path | None:
+    """Return the highest-priority existing file with this name, or None."""
+    for search_dir in search_dirs:
+        candidate = search_dir / filename
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _load_context_file(
+    path: Path, filename: str, per_file_budget: int, remaining_budget: int
+) -> str | None:
+    """Read, scan, and truncate a context file. Returns None on read failure or empty."""
+    try:
+        content = path.read_text(encoding="utf-8").strip()
+    except Exception as e:
+        logger.debug("Could not read %s: %s", path, e)
+        return None
+    if not content:
+        return None
+
+    scanned = scan_context_content(content, filename) or ""
+    if scanned.startswith("[BLOCKED:"):
+        return scanned
+
+    budget = min(per_file_budget, remaining_budget)
+    return truncate_with_head_tail(scanned, budget)
 
 
 def discover_context_files(
@@ -212,8 +299,8 @@ def discover_context_files(
         file_names = ["NOVA.md", "AGENTS.md"]
 
     cwd = cwd.resolve()
-    git_root = _find_git_root(cwd)
-    results = []
+    search_dirs = _search_dirs_for(cwd, _find_git_root(cwd))
+    results: list[tuple[str, str]] = []
     total_chars = 0
 
     for filename in file_names:
@@ -221,48 +308,19 @@ def discover_context_files(
             logger.info("Context file budget exhausted (%d/%d chars)", total_chars, max_total_chars)
             break
 
-        # Search from cwd up to git root (inclusive)
-        search_dirs = [cwd]
-        if git_root and git_root != cwd:
-            for parent in cwd.parents:
-                search_dirs.append(parent)
-                if parent == git_root:
-                    break
-
-        found = False
-        for search_dir in search_dirs:
-            candidate = search_dir / filename
-            if candidate.exists() and candidate.is_file():
-                try:
-                    content = candidate.read_text(encoding="utf-8").strip()
-                    if not content:
-                        continue
-
-                    # Scan for injection
-                    content = scan_context_content(content, filename) or ""
-                    if content.startswith("[BLOCKED:"):
-                        results.append((filename, content))
-                        found = True
-                        break
-
-                    # Truncate to per-file budget
-                    content = truncate_with_head_tail(content, max_chars_per_file)
-
-                    # Check total budget
-                    remaining = max_total_chars - total_chars
-                    if len(content) > remaining:
-                        content = truncate_with_head_tail(content, remaining)
-
-                    results.append((filename, content))
-                    total_chars += len(content)
-                    found = True
-                    break
-                except Exception as e:
-                    logger.debug("Could not read %s: %s", candidate, e)
-
-        if found:
-            # Only load the first match (priority-based)
+        path = _find_context_file(search_dirs, filename)
+        if path is None:
             continue
+
+        content = _load_context_file(
+            path, filename, max_chars_per_file, max_total_chars - total_chars
+        )
+        if content is None:
+            continue
+
+        results.append((filename, content))
+        if not content.startswith("[BLOCKED:"):
+            total_chars += len(content)
 
     return results
 

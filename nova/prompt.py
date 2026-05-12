@@ -33,14 +33,14 @@ TOOL_USE_GUIDANCE = (
     "(b) deliver a final result. Responses that only describe intentions are not acceptable."
 )
 
-# Model-specific enforcement for models known to describe instead of act
-_TOOL_ENFORCEMENT_MODELS = ("gpt", "codex", "gemini", "gemma", "grok", "o1", "o3", "o4")
+# Models that don't need extra execution discipline (already reliable at tool use)
+_WELL_BEHAVED_MODEL_MARKERS = ("claude", "anthropic", "sonnet", "opus", "haiku")
 
 EXECUTION_DISCIPLINE = (
     "## Execution Discipline\n"
     "- Do not stop early when another tool call would improve the result.\n"
     "- If a tool returns empty or partial results, retry with a different query.\n"
-    "- Before finalizing: verify correctness, check that all requirements are met.\n"
+    "- Before finalizing, verify correctness and check that all requirements are met.\n"
     "- If required context is missing, use a lookup tool — do not guess or hallucinate.\n"
     "- For math, hashes, dates, file contents, or system state: always use a tool, never compute from memory."
 )
@@ -49,9 +49,8 @@ EXECUTION_DISCIPLINE = (
 DELEGATION_GUIDANCE = (
     "## Task Delegation\n"
     "Use delegate_task to hand off isolated or parallelizable work to a focused sub-agent.\n"
-    "Good candidates: tasks that are independent, can run in parallel, or need a clean context.\n"
-    "Bad candidates: tasks that require back-and-forth with the user or depend on prior tool results.\n"
-    "Tips:\n"
+    "- Good candidates: tasks that are independent, can run in parallel, or need a clean context.\n"
+    "- Bad candidates: tasks that require back-and-forth with the user or depend on prior tool results.\n"
     "- Write a clear, self-contained task description — the sub-agent has no other context by default.\n"
     "- Use context_mode='fork' only when the sub-agent needs the full conversation history.\n"
     "- Use model= to pick a cheaper model for simple sub-tasks.\n"
@@ -65,10 +64,27 @@ LEAF_AGENT_GUIDANCE = (
     "Do not attempt to delegate — handle everything yourself."
 )
 
+
+def _needs_execution_discipline(model: str, config: dict) -> bool:
+    """Decide whether to append EXECUTION_DISCIPLINE to the prompt.
+
+    Config override (`agent.execution_discipline`) takes precedence:
+    - true/false → force on/off
+    - "auto" or unset → apply to any model that doesn't look like a Claude/Anthropic model
+    """
+    override = config.get("agent", {}).get("execution_discipline", "auto")
+    if isinstance(override, bool):
+        return override
+    if isinstance(override, str) and override.lower() != "auto":
+        return override.lower() in ("true", "yes", "on", "1")
+    model_lc = model.lower()
+    return not any(marker in model_lc for marker in _WELL_BEHAVED_MODEL_MARKERS)
+
+
 # Memory guidance (minimal)
 WIKI_GUIDANCE = """## Wiki Knowledge Base
 
-Manage a persistent wiki of Obsidian-compatible markdown notes via the `wiki` tool. Build it up over time so future sessions can recall what you've learned.
+You have a persistent wiki via the `wiki` tool. Treat it as your long-term memory — anything you learn about the user, their projects, or their environment that would be useful in a future session should be saved here without being asked.
 
 ### Folder conventions
 - `Core/<topic>` — always-in-context facts (user identity, preferences, environment). Full content auto-injected every turn — keep short and high-signal.
@@ -80,43 +96,40 @@ Manage a persistent wiki of Obsidian-compatible markdown notes via the `wiki` to
 ### Frontmatter flags
 - `inject: true` — pin any note into the system prompt (full content, like Core/). Use for active-project context that lives outside Core/.
 
+### When to write (proactive triggers — act without being asked)
+- **User reveals identity or preference** (name, role, tools, coding style, timezone, communication preference) → save to `Core/`.
+- **Project decision made** (chose a framework, settled a convention, resolved a design question, identified a gotcha) → save to `Projects/<name>`.
+- **User mentions a person with context** (teammate's role, who owns what) → save to `People/<Name>`.
+- **You look something up and it'll be useful again** (API quirk, config trick, non-obvious fix) → save to `Facts/<topic>`.
+- Save quietly. Don't ask permission before saving obvious facts — just save and move on.
+
+### When NOT to write
+- Task progress, todos, in-flight conversation context, daily-changing state.
+- Things the user said they'd handle themselves or explicitly told you not to remember.
+- Anything you're not confident is correct — ask first or skip.
+
 ### Write rules
 - SEARCH first — run `wiki search` before writing. If a related note exists, `append` or update rather than creating a duplicate.
-- Save user preferences, identity, and recurring context to `Core/` so they appear in every prompt.
-- Use `[[wikilinks]]` liberally to connect related notes, and `#tags` for cross-cutting context.
-- Save durable knowledge only — never task progress, todos, conversation context, or daily-changing state.
 - When new info contradicts a note, UPDATE it (write with same title). When it extends, APPEND. Never create dated snapshots.
+- Use `[[wikilinks]]` liberally to connect related notes, and `#tags` for cross-cutting context.
 
-### Actions reference
-| Action | What it does |
-|--------|-------------|
-| `write` | Create or overwrite a note (title, content, tags) |
-| `append` | Add content to a note without overwriting |
-| `patch` | Surgical find-and-replace within a note (old_text, new_text, count). Prefer over full rewrite for edits. |
-| `replace` | Vault-wide find-and-replace across every note (old_text, new_text, count). Use to clean up renamed/deleted links in bulk. |
-| `read` | Fetch full note content |
-| `search` | Full-text search across all notes |
-| `list` | List notes sorted by recency, optionally filtered by tag |
-| `delete` | Remove a note (warns if backlinks exist) |
-| `rename` | Rename a note and update all [[wikilinks]] that point to it |
-| `add_tag` | Add a tag to a single note's frontmatter (title, tag) |
-| `remove_tag` | Remove a tag from a single note's frontmatter (title, tag) |
-| `list_tags` | Return all tags with usage counts |
-| `rename_tag` | Rename a tag globally; pass empty new_tag to delete it across all notes |
-| `pin` | Set inject:true on a note so its full content appears in every prompt |
-| `unpin` | Remove inject:true from a note |
-| `follow` | BFS graph traversal via [[wikilinks]] (depth, max_notes, include_content). Set include_content:true to read a full neighbourhood in one shot. |
-| `backlinks` | Find all notes that link to a given title |
-| `maintenance` | Read-only report: duplicates, broken links, orphans, stale notes |
+### Non-obvious actions (see the `wiki` tool schema for the full list)
+- `patch` — surgical find-and-replace within a note. Prefer over `write` for small edits.
+- `replace` — vault-wide find-and-replace. Use to clean up renamed/deleted links in bulk.
+- `rename` — renames a note AND updates every `[[wikilink]]` that points to it. Use this instead of delete+rewrite to preserve link integrity.
+- `follow` — BFS graph traversal via wikilinks. Set `include_content:true` to read a whole neighbourhood in one call.
+- `backlinks` — check before deleting a note to see what links to it.
+- `pin`/`unpin` — toggle `inject:true` so a note's full content appears in every prompt.
+- `maintenance` — read-only report of duplicates, broken links, orphans, stale notes.
 
 ### Maintenance
-- Run `wiki maintenance` periodically. The report surfaces:
+- Run `wiki maintenance` at the start of a new session if the vault hasn't been checked recently, or after any session where you added/renamed several notes. After acting on findings, briefly summarize what you cleaned up.
+- The report surfaces:
   - `broken_links` — wikilinks pointing to notes that don't exist (fix with `rename` or `write`)
   - `duplicate_candidates` — notes with similar titles (merge with `write`+`delete`)
   - `orphans` — notes with no links in or out (connect or delete)
   - `stale` — notes not updated in 90+ days (review or archive)
 - The report is read-only — act on it by updating notes or asking the user. Do not auto-delete.
-- Before deleting a note, use `backlinks` to check what links to it. Use `rename` instead of delete+rewrite to preserve link integrity.
 """
 
 
@@ -125,8 +138,7 @@ def _build_wiki_guidance(config: dict) -> str:
     vault_path = config.get("wiki", {}).get("vault_path", "~/.nova/wiki")
     vault_abs = str(Path(vault_path).expanduser())
     return (
-        WIKI_GUIDANCE
-        + f"\n**Vault location:** `{vault_abs}` — "
+        WIKI_GUIDANCE + f"\n**Vault location:** `{vault_abs}` — "
         "always use the `wiki` tool to read/write notes (not `read_file`/`write_file`).\n"
     )
 
@@ -163,12 +175,12 @@ def build_system_prompt(
         parts.append(f"## Available Tools\n{tool_summary}")
         parts.append(TOOL_USE_GUIDANCE)
 
-    # 2b. Model-specific execution discipline for models prone to describing vs acting
-    model = config.get("openrouter", {}).get("model", "").lower()
-    if any(m in model for m in _TOOL_ENFORCEMENT_MODELS):
+    # Execution discipline — for models that need stronger nudges toward tool use
+    model = config.get("openrouter", {}).get("model", "")
+    if _needs_execution_discipline(model, config):
         parts.append(EXECUTION_DISCIPLINE)
 
-    # 2c. Delegation guidance — orchestrators get how-to, leaves get a reminder
+    # Delegation guidance — orchestrators get how-to, leaves get a reminder
     depth = config.get("_subagent_depth", 0)
     max_spawn_depth = config.get("delegation", {}).get("max_spawn_depth", 2)
     delegation_enabled = config.get("delegation", {}).get("enabled", False)
@@ -178,7 +190,7 @@ def build_system_prompt(
         else:
             parts.append(LEAF_AGENT_GUIDANCE)
 
-    # 3. Wiki memory index (guidance + content adjacent so model sees rules before notes)
+    # Wiki memory — guidance + content adjacent so model sees rules before notes
     if wiki_content:
         if config.get("wiki", {}).get("enabled"):
             parts.append(_build_wiki_guidance(config))
@@ -186,7 +198,7 @@ def build_system_prompt(
     elif config.get("wiki", {}).get("enabled"):
         parts.append(_build_wiki_guidance(config))
 
-    # 5. Skills index (full mode only)
+    # Skills index (full mode only)
     if mode == "full" and config.get("skills", {}).get("enabled"):
         skills_dir = Path(config["skills"]["directory"]).expanduser()
         skills = discover_skills(
@@ -200,7 +212,7 @@ def build_system_prompt(
         if skills_prompt:
             parts.append(skills_prompt)
 
-    # 6. Context files (full mode only)
+    # Context files (full mode only)
     if mode == "full":
         context_prompt = build_context_prompt(
             cwd=cwd,
@@ -211,12 +223,10 @@ def build_system_prompt(
         if context_prompt:
             parts.append(context_prompt)
 
-    # 7. Current date (ISO format — unambiguous and token-efficient)
+    # Date and model info
     from datetime import date
 
     parts.append(f"Today: {date.today().isoformat()}")
-
-    # 8. Model info
     current_model = config.get("openrouter", {}).get("model", "unknown")
     parts.append(f"Model: {current_model}")
 

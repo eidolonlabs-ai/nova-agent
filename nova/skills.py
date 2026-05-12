@@ -130,10 +130,15 @@ def build_skills_prompt(
 
     lines = ["<skills>"]
     lines.append(
-        "Before replying, check if any skill is directly relevant to the task. "
-        "If so, load it with skill_view(name) and follow its instructions. "
-        "Skills contain project-specific conventions and patterns that take precedence over general approaches. "
-        "Only load a skill when it clearly applies \u2014 do not load skills speculatively."
+        "Skills contain project-specific conventions and patterns that take precedence "
+        "over general approaches. Load a relevant skill with skill_view(name) and follow its instructions.\n"
+        "Load a skill when:\n"
+        "- The user types `/skill-name` or names a skill explicitly.\n"
+        "- The user's request topic clearly matches a skill description below.\n"
+        "- You're about to do something a skill exists for (e.g., writing a PR description, "
+        "running a code review) and that skill is listed below.\n"
+        'Do NOT load a skill speculatively, in parallel "just in case", or when only tangentially related. '
+        "One skill per task is the norm; load more only if the first explicitly references another."
     )
 
     for category in sorted(by_category.keys()):
