@@ -4,8 +4,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import httpx
 import pytest
+from openai import OpenAI
 
 from nova.agent import NovaAgent
 from nova.session import SessionStore
@@ -48,10 +48,10 @@ def mock_session_store():
 
 def test_estimate_messages_tokens_cache_eviction(minimal_config, mock_session_store):
     """Test that token cache evicts oldest entries when it exceeds max size."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -66,10 +66,10 @@ def test_estimate_messages_tokens_cache_eviction(minimal_config, mock_session_st
 
 def test_estimate_messages_tokens_empty_messages(minimal_config, mock_session_store):
     """Test token estimation with empty messages list."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -80,10 +80,10 @@ def test_estimate_messages_tokens_empty_messages(minimal_config, mock_session_st
 
 def test_estimate_messages_tokens_single_message(minimal_config, mock_session_store):
     """Test token estimation for single message."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -146,10 +146,10 @@ def test_truncate_to_token_budget_preserves_head(minimal_config, mock_session_st
 
 def test_estimate_messages_tokens_with_tool_calls(minimal_config, mock_session_store):
     """Test token estimation for messages with tool calls."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -174,10 +174,10 @@ def test_estimate_messages_tokens_with_tool_calls(minimal_config, mock_session_s
 
 def test_estimate_messages_tokens_caching(minimal_config, mock_session_store):
     """Test that token estimation is cached."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 

@@ -13,7 +13,7 @@ system-level message.
 import logging
 from typing import Any
 
-import httpx
+from openai import OpenAI
 
 from nova.tokens import estimate_messages_tokens
 
@@ -38,10 +38,8 @@ _COMPACT_SYSTEM_PROMPT = (
 
 def compress_conversation(
     messages: list[dict[str, Any]],
-    http_client: httpx.Client,
+    openai_client: OpenAI,
     model: str,
-    base_url: str,
-    api_key: str,
     preserve_recent: int = _DEFAULT_PRESERVE_RECENT,
     temperature: float = 0.0,
 ) -> list[dict[str, Any]] | None:
@@ -49,10 +47,8 @@ def compress_conversation(
 
     Args:
         messages: Full message list (system + conversation).
-        http_client: HTTP client for API calls.
+        openai_client: OpenAI client for API calls.
         model: Model to use for summarization.
-        base_url: API base URL.
-        api_key: API key for authentication.
         preserve_recent: Number of recent messages to preserve fully.
         temperature: Temperature for summarization (0.0 = deterministic).
 
@@ -85,19 +81,13 @@ def compress_conversation(
     ]
 
     try:
-        response = http_client.post(
-            f"{base_url}/chat/completions",
-            json={
-                "model": model,
-                "messages": summary_messages,
-                "temperature": temperature,
-                "max_tokens": 2000,
-            },
-            timeout=60.0,
+        response = openai_client.chat.completions.create(  # type: ignore[call-overload]
+            model=model,
+            messages=summary_messages,  # type: ignore[arg-type]
+            temperature=temperature,
+            max_tokens=2000,
         )
-        response.raise_for_status()
-        data = response.json()
-        summary = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        summary = response.choices[0].message.content or ""
 
         if not summary:
             logger.warning("Compression returned empty summary — falling back to microcompact")

@@ -4,8 +4,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import httpx
 import pytest
+from openai import OpenAI
 
 from nova.agent import NovaAgent
 from nova.session import SessionStore
@@ -50,10 +50,10 @@ def mock_session_store():
 
 def test_execute_tool_calls_parallel_read_only_success(minimal_config, mock_session_store):
     """Test parallel execution of multiple read-only tool calls."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -82,10 +82,10 @@ def test_execute_tool_calls_parallel_read_only_success(minimal_config, mock_sess
 
 def test_execute_tool_calls_parallel_with_write_sequential(minimal_config, mock_session_store):
     """Test that write operations are executed sequentially."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -118,10 +118,10 @@ def test_execute_tool_calls_parallel_with_write_sequential(minimal_config, mock_
 
 def test_execute_tool_calls_invalid_json(minimal_config, mock_session_store):
     """Test handling of invalid JSON in tool arguments."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -143,10 +143,10 @@ def test_execute_tool_calls_invalid_json(minimal_config, mock_session_store):
 
 def test_execute_tool_call_unknown_tool(minimal_config, mock_session_store):
     """Test handling of unknown tool names."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -164,10 +164,10 @@ def test_execute_tool_call_unknown_tool(minimal_config, mock_session_store):
 
 def test_execute_tool_calls_parallel_empty_list(minimal_config, mock_session_store):
     """Test parallel execution with empty tool calls list."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
@@ -177,10 +177,10 @@ def test_execute_tool_calls_parallel_empty_list(minimal_config, mock_session_sto
 
 def test_execute_tool_calls_parallel_callback_invoked(minimal_config, mock_session_store):
     """Test that tool callback is invoked for each tool."""
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 

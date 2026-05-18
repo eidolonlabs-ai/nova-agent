@@ -6,8 +6,8 @@ from pathlib import Path
 from unittest import mock
 from unittest.mock import MagicMock
 
-import httpx
 import pytest
+from openai import OpenAI
 
 from nova.agent import NovaAgent
 from nova.session import SessionStore
@@ -67,8 +67,8 @@ def mock_session_store() -> SessionStore:
 
 
 @pytest.fixture
-def mock_http_client() -> MagicMock:
-    return MagicMock(spec=httpx.Client)
+def mock_openai_client() -> MagicMock:
+    return MagicMock(spec=OpenAI)
 
 
 @pytest.fixture
@@ -77,13 +77,13 @@ def mock_wiki_store(tmp_path) -> WikiMemory:
 
 
 @pytest.fixture
-def make_agent(minimal_config, mock_session_store, mock_http_client):
+def make_agent(minimal_config, mock_session_store, mock_openai_client):
     """Factory fixture: call make_agent() or make_agent(config=...) to create a NovaAgent."""
 
     def _factory(config=None, session_id=None, wiki_memory_store=None):
         return NovaAgent(
             config=config or minimal_config,
-            http_client=mock_http_client,
+            openai_client=mock_openai_client,
             session_store=mock_session_store,
             session_id=session_id,
             wiki_memory_store=wiki_memory_store,
@@ -98,28 +98,35 @@ def agent(make_agent) -> NovaAgent:
     return make_agent()
 
 
-def mock_llm_response(status_code: int = 200, content: str = "OK", tool_calls=None) -> MagicMock:
-    """Build a mock httpx.Response for an LLM API call."""
-    message: dict = {"role": "assistant", "content": content}
-    if tool_calls:
-        message["tool_calls"] = tool_calls
-    data = {"choices": [{"message": message}]}
-    resp = MagicMock(spec=httpx.Response)
-    resp.status_code = status_code
-    resp.json.return_value = data
-    resp.text = json.dumps(data)
+def make_openai_response(content: str = "OK", tool_calls=None) -> MagicMock:
+    """Build a mock OpenAI ChatCompletion response."""
+    msg = MagicMock()
+    msg.content = content
+    msg.tool_calls = tool_calls
+    msg.model_extra = {}
+    resp = MagicMock()
+    resp.choices = [MagicMock()]
+    resp.choices[0].message = msg
+    resp.usage = MagicMock()
+    resp.usage.model_dump.return_value = {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15,
+    }
     return resp
+
+
+def mock_llm_response(content: str = "OK", tool_calls=None) -> MagicMock:
+    """Build a mock OpenAI ChatCompletion response (alias for make_openai_response)."""
+    return make_openai_response(content=content, tool_calls=tool_calls)
 
 
 def make_tool_call_response(tool_name: str, arguments: dict, call_id: str = "call_1") -> MagicMock:
     """Build a mock response where the LLM requests a tool call."""
-    return mock_llm_response(
-        content=None,
-        tool_calls=[
-            {
-                "id": call_id,
-                "type": "function",
-                "function": {"name": tool_name, "arguments": json.dumps(arguments)},
-            }
-        ],
-    )
+    tc_mock = MagicMock()
+    tc_mock.model_dump.return_value = {
+        "id": call_id,
+        "type": "function",
+        "function": {"name": tool_name, "arguments": json.dumps(arguments)},
+    }
+    return make_openai_response(content=None, tool_calls=[tc_mock])

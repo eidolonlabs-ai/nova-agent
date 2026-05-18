@@ -19,7 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from typing import Any
 
-import httpx
+from openai import OpenAI
 
 from nova.tools.registry import registry
 
@@ -170,22 +170,17 @@ def _run_subagent(
         logger.debug("%s using isolated context", log_prefix)
 
     try:
-        # Create a new HTTP client for the sub-agent — httpx.Client is not
-        # thread-safe for concurrent use, so we cannot share the parent's client.
         llm_cfg = subagent_config["llm"]
-        subagent_http_client = httpx.Client(
+        subagent_openai_client = OpenAI(
+            api_key=llm_cfg["api_key"],
             base_url=llm_cfg["base_url"],
-            headers={
-                "Authorization": f"Bearer {llm_cfg['api_key']}",
-                "Content-Type": "application/json",
-            },
             timeout=120.0,
+            max_retries=0,
         )
-        # Use context manager so the HTTP client is always closed on exit
-        with subagent_http_client:
+        with subagent_openai_client:
             subagent = NovaAgent(
                 config=subagent_config,
-                http_client=subagent_http_client,
+                openai_client=subagent_openai_client,
                 session_store=parent_agent.session_store,
                 wiki_memory_store=parent_agent.wiki,
                 prompt_mode="minimal",

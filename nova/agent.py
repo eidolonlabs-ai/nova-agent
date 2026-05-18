@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-import httpx
+from openai import NOT_GIVEN, OpenAI
 
 from nova.compression import compress_conversation
 from nova.config import ensure_nova_home, load_config
@@ -43,17 +43,6 @@ from nova.wiki_memory import WikiMemory
 logger = logging.getLogger(__name__)
 
 
-def _log_api_400_error(payload: dict, response_text: str) -> None:
-    """Log API 400 error with safe payload inspection (no secrets)."""
-    safe_payload = {
-        "model": payload.get("model"),
-        "message_count": len(payload.get("messages", [])),
-        "has_tools": "tools" in payload,
-    }
-    logger.error("API 400 error. Request: %s", json.dumps(safe_payload))
-    logger.error("Response: %s", response_text[:1000])
-
-
 class NovaAgent:
     """Main agent class with explicit token budgets and smart context management."""
 
@@ -61,7 +50,7 @@ class NovaAgent:
         self,
         config: dict | None = None,
         session_id: str | None = None,
-        http_client: httpx.Client | None = None,
+        openai_client: OpenAI | None = None,
         session_store: SessionStore | None = None,
         wiki_memory_store: WikiMemory | None = None,
         prompt_mode: str = "full",
@@ -97,19 +86,17 @@ class NovaAgent:
         else:
             self.wiki = None
 
-        # HTTP client (injectable for testing)
-        self._owns_client = http_client is None
-        if http_client is not None:
-            self.client = http_client
+        # OpenAI client (injectable for testing)
+        self._owns_client = openai_client is None
+        if openai_client is not None:
+            self.client = openai_client
         else:
             llm_config = self.config["llm"]
-            self.client = httpx.Client(
+            self.client = OpenAI(
+                api_key=llm_config["api_key"],
                 base_url=llm_config["base_url"],
-                headers={
-                    "Authorization": f"Bearer {llm_config['api_key']}",
-                    "Content-Type": "application/json",
-                },
                 timeout=120.0,
+                max_retries=0,
             )
 
         # Discover tools (pass config so delegation tool can be gated)
@@ -267,11 +254,34 @@ class NovaAgent:
         else:
 
             def _do_post() -> dict:
-                http_response = self.client.post("/chat/completions", json=payload)
-                if http_response.status_code == 400:
-                    _log_api_400_error(payload, http_response.text)
-                http_response.raise_for_status()
-                return http_response.json()
+                resp = self.client.chat.completions.create(  # type: ignore[call-overload]
+                    model=payload["model"],
+                    messages=payload["messages"],
+                    temperature=payload.get("temperature", 0.7),
+                    top_p=payload.get("top_p", 1.0),
+                    tools=payload["tools"] if payload.get("tools") else NOT_GIVEN,
+                    tool_choice="auto" if payload.get("tools") else NOT_GIVEN,
+                )
+                message = resp.choices[0].message
+                return {
+                    "choices": [
+                        {
+                            "message": {
+                                "role": "assistant",
+                                "content": message.content,
+                                "tool_calls": (
+                                    [tc.model_dump() for tc in message.tool_calls]
+                                    if message.tool_calls
+                                    else None
+                                ),
+                                "reasoning_content": (message.model_extra or {}).get(
+                                    "reasoning_content"
+                                ),
+                            }
+                        }
+                    ],
+                    "usage": resp.usage.model_dump() if resp.usage else None,
+                }
 
             response_data = retry_with_backoff(
                 _do_post,
@@ -297,90 +307,61 @@ class NovaAgent:
         reasoning_callback: Callable[[str], None] | None = None,
     ) -> dict:
         """Stream a response from the API."""
-        payload["stream"] = True
-
         full_content = ""
         full_reasoning = ""
         tool_calls: list[dict[str, Any]] = []
 
-        with self.client.stream("POST", "/chat/completions", json=payload) as response:
-            if response.status_code == 400:
-                body = response.read().decode()
-                _log_api_400_error(payload, body)
-                raise httpx.HTTPStatusError(
-                    f"Bad Request: {body[:500]}",
-                    request=response.request,
-                    response=response,
-                )
-            response.raise_for_status()
-            _last_delta_time = time.monotonic()
-            _watchdog_timeout = 30.0  # seconds with no delta before giving up
-            for line in response.iter_lines():
-                # Streaming watchdog: bail if no data for 30s
-                if time.monotonic() - _last_delta_time > _watchdog_timeout:
-                    logger.warning(
-                        "Stream watchdog: no data for %.0fs, aborting", _watchdog_timeout
-                    )
-                    break
+        with self.client.chat.completions.create(  # type: ignore[call-overload]
+            model=payload["model"],
+            messages=payload["messages"],
+            temperature=payload.get("temperature", 0.7),
+            top_p=payload.get("top_p", 1.0),
+            tools=payload["tools"] if payload.get("tools") else NOT_GIVEN,
+            tool_choice="auto" if payload.get("tools") else NOT_GIVEN,
+            stream=True,
+        ) as stream:
+            for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
 
-                # Interrupt check: Ctrl+C was pressed
                 _ic = getattr(self, "_interrupt_check", None)
                 if _ic is not None and _ic():
                     logger.info("Stream interrupted by user")
                     break
 
-                if not line.startswith("data: "):
-                    continue
-                data_str = line[6:]
-                if data_str == "[DONE]":
-                    break
+                if delta.content:
+                    full_content += delta.content
+                    if callback:
+                        callback(delta.content)
 
-                try:
-                    data = json.loads(data_str)
-                except json.JSONDecodeError:
-                    continue
+                if delta.tool_calls:
+                    for tc in delta.tool_calls:
+                        index = tc.index
+                        while index >= len(tool_calls):
+                            tool_calls.append(
+                                {
+                                    "id": "",
+                                    "type": "function",
+                                    "function": {"name": "", "arguments": ""},
+                                }
+                            )
+                        if tc.id:
+                            tool_calls[index]["id"] = tc.id
+                        if tc.function:
+                            if tc.function.name:
+                                tool_calls[index]["function"]["name"] = tc.function.name
+                            if tc.function.arguments:
+                                tool_calls[index]["function"]["arguments"] += tc.function.arguments
 
-                _last_delta_time = time.monotonic()  # reset watchdog on each valid chunk
-                delta = data.get("choices", [{}])[0].get("delta", {})
-
-                # Handle reasoning content (OpenRouter sends this separately)
-                # Accumulate it so it can be echoed back to DeepSeek on the next turn
-                reasoning = delta.get("reasoning")
+                extra = delta.model_extra or {}
+                reasoning = extra.get("reasoning")
                 if reasoning:
                     full_reasoning += reasoning
                     if reasoning_callback:
                         reasoning_callback(reasoning)
 
-                # Handle text content
-                content = delta.get("content")
-                if content:
-                    full_content += content
-                    if callback:
-                        callback(content)
-
-                # Handle tool calls
-                if delta.get("tool_calls"):
-                    for tc in delta["tool_calls"]:
-                        index = tc.get("index", 0)
-                        if index >= len(tool_calls):
-                            tool_calls.append(
-                                {
-                                    "id": tc.get("id", ""),
-                                    "type": "function",
-                                    "function": {"name": "", "arguments": ""},
-                                }
-                            )
-                        if tc.get("function", {}).get("name"):
-                            tool_calls[index]["function"]["name"] = tc["function"]["name"]
-                        if tc.get("function", {}).get("arguments"):
-                            tool_calls[index]["function"]["arguments"] += tc["function"][
-                                "arguments"
-                            ]
-
-        # For reasoning_content: if the model generated any reasoning (full_reasoning is non-empty),
-        # include it. Also include empty string if tool_calls are present (DeepSeek thinking models
-        # require reasoning_content in ALL assistant messages when in thinking mode, even if empty).
-        reasoning_content_value = full_reasoning if full_reasoning else None
+        reasoning_content_value: str | None = full_reasoning if full_reasoning else None
         if not reasoning_content_value and tool_calls:
             reasoning_content_value = ""
 
@@ -728,10 +709,8 @@ class NovaAgent:
                     tokens_before_t2 = total_tokens
                     compressed = compress_conversation(
                         messages=api_messages,
-                        http_client=self.client,
+                        openai_client=self.client,
                         model=summary_model,
-                        base_url=self.config["llm"]["base_url"],
-                        api_key=self.config["llm"]["api_key"],
                         preserve_recent=preserve_recent,
                     )
                     if compressed:
@@ -787,9 +766,7 @@ class NovaAgent:
                 assistant_msg["content"] = content
             if tool_calls:
                 assistant_msg["tool_calls"] = tool_calls
-            # Always include reasoning_content when present (even if empty string),
-            # since it's now guaranteed to be non-None for tool_calls in thinking mode.
-            if reasoning_content is not None:
+            if reasoning_content:
                 assistant_msg["reasoning_content"] = reasoning_content
 
             self.messages.append(assistant_msg)

@@ -1,16 +1,15 @@
 """Tests for agent streaming response handling.
 
-Covers watchdog timeout, interrupt checks, malformed JSON, tool call accumulation,
-and callback invocation during streaming.
+Covers interrupt checks, tool call accumulation, and callback invocation
+during streaming with the OpenAI SDK.
 """
 
 import tempfile
-from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
-import httpx
 import pytest
+from openai import BadRequestError
 
 from nova.agent import NovaAgent
 from nova.session import SessionStore
@@ -51,143 +50,122 @@ def mock_session_store():
     return SessionStore(Path(tmpdir) / "test.db")
 
 
-def make_mock_stream_response(lines):
-    """Create a context manager mock for streaming response."""
+def make_mock_stream(*chunks):
+    """Create a mock stream context manager that yields the given chunks."""
 
-    @contextmanager
-    def stream_context(*args, **kwargs):
-        response = MagicMock(spec=httpx.Response)
-        response.status_code = 200
-        response.iter_lines.return_value = iter(lines)
-        response.raise_for_status = MagicMock()
-        yield response
+    class MockStream:
+        def __iter__(self):
+            return iter(chunks)
 
-    return stream_context
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    return MockStream()
 
 
-def test_stream_response_watchdog_timeout(minimal_config, mock_session_store):
-    """Test that streaming watchdog timeout is enforced."""
-    mock_client = MagicMock(spec=httpx.Client)
+def make_text_chunk(content: str) -> MagicMock:
+    chunk = MagicMock()
+    chunk.choices = [MagicMock()]
+    chunk.choices[0].delta.content = content
+    chunk.choices[0].delta.tool_calls = None
+    chunk.choices[0].delta.model_extra = {}
+    return chunk
 
-    # Create mock lines that simulate timeout scenario
-    lines = [
-        'data: {"choices": [{"delta": {"content": "Hello"}}]}',
-    ]
-    mock_client.stream = make_mock_stream_response(lines)
 
-    agent = NovaAgent(
-        config=minimal_config,
-        http_client=mock_client,
-        session_store=mock_session_store,
-    )
+def make_tool_chunk(index: int, id: str = "", name: str = "", arguments: str = "") -> MagicMock:
+    tc = MagicMock()
+    tc.index = index
+    tc.id = id
+    tc.function.name = name
+    tc.function.arguments = arguments
+    chunk = MagicMock()
+    chunk.choices = [MagicMock()]
+    chunk.choices[0].delta.content = None
+    chunk.choices[0].delta.tool_calls = [tc]
+    chunk.choices[0].delta.model_extra = {}
+    return chunk
 
-    # Patch time.monotonic to simulate timeout
-    with patch("nova.agent.time.monotonic") as mock_time:
-        # Simulate initial time and then timeout (>30s no data)
-        mock_time.side_effect = [0.0, 31.0]
-        result = agent._stream_response({"messages": []})
 
-    # Should return a result (possibly truncated due to timeout)
-    assert "choices" in result
-    assert len(result["choices"]) > 0
+def make_reasoning_chunk(reasoning: str) -> MagicMock:
+    chunk = MagicMock()
+    chunk.choices = [MagicMock()]
+    chunk.choices[0].delta.content = None
+    chunk.choices[0].delta.tool_calls = None
+    chunk.choices[0].delta.model_extra = {"reasoning": reasoning}
+    return chunk
 
 
 def test_stream_response_interrupt_during_stream(minimal_config, mock_session_store):
     """Test that interrupt check stops streaming."""
-    mock_client = MagicMock(spec=httpx.Client)
+    from openai import OpenAI
+
+    mock_client = MagicMock(spec=OpenAI)
 
     def interrupt_check():
-        """Return True to interrupt."""
         return True
 
-    lines = [
-        'data: {"choices": [{"delta": {"content": "Hello"}}]}',
-        'data: {"choices": [{"delta": {"content": " world"}}]}',
-    ]
-    mock_client.stream = make_mock_stream_response(lines)
+    stream = make_mock_stream(
+        make_text_chunk("Hello"),
+        make_text_chunk(" world"),
+    )
+    mock_client.chat.completions.create.return_value = stream
 
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
-
     agent._interrupt_check = interrupt_check
 
-    result = agent._stream_response({"messages": []})
+    result = agent._stream_response({"model": "test-model", "messages": []})
 
-    # Should have interrupted
     assert "choices" in result
-
-
-def test_stream_response_malformed_json_recovers(minimal_config, mock_session_store):
-    """Test that malformed JSON in stream lines is handled gracefully."""
-    mock_client = MagicMock(spec=httpx.Client)
-
-    lines = [
-        'data: {"choices": [{"delta": {"content": "OK"}}]}',
-        "data: {invalid json",  # Malformed, should be skipped
-        'data: {"choices": [{"delta": {"content": " done"}}]}',
-        "data: [DONE]",
-    ]
-    mock_client.stream = make_mock_stream_response(lines)
-
-    agent = NovaAgent(
-        config=minimal_config,
-        http_client=mock_client,
-        session_store=mock_session_store,
-    )
-
-    # Should recover from malformed JSON and continue
-    result = agent._stream_response({"messages": []})
-
-    # Should have recovered and continued
-    assert result["choices"][0]["message"]["content"] == "OK done"
 
 
 def test_stream_response_empty_content(minimal_config, mock_session_store):
     """Test streaming response with no content blocks."""
-    mock_client = MagicMock(spec=httpx.Client)
+    from openai import OpenAI
 
-    lines = [
-        "data: [DONE]",
-    ]
-    mock_client.stream = make_mock_stream_response(lines)
+    mock_client = MagicMock(spec=OpenAI)
+    stream = make_mock_stream()
+    mock_client.chat.completions.create.return_value = stream
 
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
-    result = agent._stream_response({"messages": []})
+    result = agent._stream_response({"model": "test-model", "messages": []})
 
-    # Should return empty content
     assert result["choices"][0]["message"]["content"] is None
 
 
 def test_stream_response_multiple_tool_calls(minimal_config, mock_session_store):
     """Test streaming accumulates multiple tool calls correctly."""
-    mock_client = MagicMock(spec=httpx.Client)
+    from openai import OpenAI
 
-    lines = [
-        'data: {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "c1", "function": {"name": "terminal"}}]}}]}',
-        'data: {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "{\\"cmd"}}]}}]}',
-        'data: {"choices": [{"delta": {"tool_calls": [{"index": 0, "function": {"arguments": "\\":\\"ls\\"}"}}]}}]}',
-        'data: {"choices": [{"delta": {"tool_calls": [{"index": 1, "id": "c2", "function": {"name": "file_ops"}}]}}]}',
-        "data: [DONE]",
-    ]
-    mock_client.stream = make_mock_stream_response(lines)
+    mock_client = MagicMock(spec=OpenAI)
+
+    stream = make_mock_stream(
+        make_tool_chunk(0, id="c1", name="terminal"),
+        make_tool_chunk(0, arguments='{"cmd'),
+        make_tool_chunk(0, arguments='":"ls"}'),
+        make_tool_chunk(1, id="c2", name="file_ops"),
+    )
+    mock_client.chat.completions.create.return_value = stream
 
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
-    result = agent._stream_response({"messages": []})
+    result = agent._stream_response({"model": "test-model", "messages": []})
 
-    # Should have accumulated tool calls
     tool_calls = result["choices"][0]["message"]["tool_calls"]
     assert tool_calls is not None
     assert len(tool_calls) >= 1
@@ -195,53 +173,55 @@ def test_stream_response_multiple_tool_calls(minimal_config, mock_session_store)
 
 def test_stream_response_reasoning_callback(minimal_config, mock_session_store):
     """Test that reasoning content triggers callback."""
-    mock_client = MagicMock(spec=httpx.Client)
+    from openai import OpenAI
 
+    mock_client = MagicMock(spec=OpenAI)
     callback_invoked = []
 
     def reasoning_callback(text):
         callback_invoked.append(text)
 
-    lines = [
-        'data: {"choices": [{"delta": {"reasoning": "Let me"}}]}',
-        'data: {"choices": [{"delta": {"reasoning": " think"}}]}',
-        "data: [DONE]",
-    ]
-    mock_client.stream = make_mock_stream_response(lines)
+    stream = make_mock_stream(
+        make_reasoning_chunk("Let me"),
+        make_reasoning_chunk(" think"),
+    )
+    mock_client.chat.completions.create.return_value = stream
 
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
-    agent._stream_response({"messages": []}, reasoning_callback=reasoning_callback)
+    agent._stream_response(
+        {"model": "test-model", "messages": []}, reasoning_callback=reasoning_callback
+    )
 
-    # Callback should have been invoked
     assert len(callback_invoked) == 2
     assert callback_invoked[0] == "Let me"
     assert callback_invoked[1] == " think"
 
 
 def test_stream_response_reasoning_content_in_result(minimal_config, mock_session_store):
-    """reasoning_content must be returned in the message dict so it can be echoed back (DeepSeek requirement)."""
-    mock_client = MagicMock(spec=httpx.Client)
+    """reasoning_content must be returned in the message dict (DeepSeek requirement)."""
+    from openai import OpenAI
 
-    lines = [
-        'data: {"choices": [{"delta": {"reasoning": "Let me"}}]}',
-        'data: {"choices": [{"delta": {"reasoning": " think"}}]}',
-        'data: {"choices": [{"delta": {"content": "Answer"}}]}',
-        "data: [DONE]",
-    ]
-    mock_client.stream = make_mock_stream_response(lines)
+    mock_client = MagicMock(spec=OpenAI)
+
+    stream = make_mock_stream(
+        make_reasoning_chunk("Let me"),
+        make_reasoning_chunk(" think"),
+        make_text_chunk("Answer"),
+    )
+    mock_client.chat.completions.create.return_value = stream
 
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
-    result = agent._stream_response({"messages": []})
+    result = agent._stream_response({"model": "test-model", "messages": []})
     msg = result["choices"][0]["message"]
     assert msg["reasoning_content"] == "Let me think"
     assert msg["content"] == "Answer"
@@ -249,29 +229,28 @@ def test_stream_response_reasoning_content_in_result(minimal_config, mock_sessio
 
 def test_stream_response_text_callback(minimal_config, mock_session_store):
     """Test that text content triggers callback."""
-    mock_client = MagicMock(spec=httpx.Client)
+    from openai import OpenAI
 
+    mock_client = MagicMock(spec=OpenAI)
     callback_invoked = []
 
     def text_callback(text):
         callback_invoked.append(text)
 
-    lines = [
-        'data: {"choices": [{"delta": {"content": "Hello"}}]}',
-        'data: {"choices": [{"delta": {"content": " world"}}]}',
-        "data: [DONE]",
-    ]
-    mock_client.stream = make_mock_stream_response(lines)
+    stream = make_mock_stream(
+        make_text_chunk("Hello"),
+        make_text_chunk(" world"),
+    )
+    mock_client.chat.completions.create.return_value = stream
 
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
-    result = agent._stream_response({"messages": []}, callback=text_callback)
+    result = agent._stream_response({"model": "test-model", "messages": []}, callback=text_callback)
 
-    # Callback should have been invoked
     assert len(callback_invoked) == 2
     assert callback_invoked[0] == "Hello"
     assert callback_invoked[1] == " world"
@@ -279,26 +258,24 @@ def test_stream_response_text_callback(minimal_config, mock_session_store):
 
 
 def test_stream_response_400_error(minimal_config, mock_session_store):
-    """Test handling of 400 errors during streaming."""
-    mock_client = MagicMock(spec=httpx.Client)
+    """Test that BadRequestError from the SDK propagates."""
+    from openai import OpenAI
 
-    response = MagicMock(spec=httpx.Response)
-    response.status_code = 400
-    response.read.return_value = b'{"error": "Bad request"}'
-    response.request = MagicMock()
+    mock_client = MagicMock(spec=OpenAI)
 
-    @contextmanager
-    def error_stream(*args, **kwargs):
-        yield response
-
-    mock_client.stream = error_stream
+    mock_response = MagicMock()
+    mock_response.status_code = 400
+    mock_client.chat.completions.create.side_effect = BadRequestError(
+        message="Bad request",
+        response=mock_response,
+        body={"error": "Bad request"},
+    )
 
     agent = NovaAgent(
         config=minimal_config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=mock_session_store,
     )
 
-    # Should raise HTTPStatusError on 400
-    with pytest.raises(httpx.HTTPStatusError):
-        agent._stream_response({"messages": []})
+    with pytest.raises(BadRequestError):
+        agent._stream_response({"model": "test-model", "messages": []})

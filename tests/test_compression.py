@@ -1,6 +1,6 @@
 """Tests for the context compression module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 from nova.compression import (
     _prepare_for_summary,
@@ -111,15 +111,12 @@ def test_compress_too_few_messages():
         messages,
         mock_client,
         "test-model",
-        "https://api.test",
-        "key",
         preserve_recent=6,
     )
     assert result is None
 
 
-@patch("nova.compression.httpx.Client")
-def test_compress_returns_none_on_api_error(mock_client_cls):
+def test_compress_returns_none_on_api_error():
     """Should return None when the API call fails."""
     messages = [
         {"role": "system", "content": "You are a test agent."},
@@ -145,14 +142,12 @@ def test_compress_returns_none_on_api_error(mock_client_cls):
         {"role": "assistant", "content": "done 7"},
     ]
     mock_client = MagicMock()
-    mock_client.post.side_effect = Exception("API error")
+    mock_client.chat.completions.create.side_effect = Exception("API error")
 
     result = compress_conversation(
         messages,
         mock_client,
         "test-model",
-        "https://api.test",
-        "key",
         preserve_recent=6,
     )
     assert result is None
@@ -185,24 +180,18 @@ def test_compress_system_prompt_included():
     ]
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.json.return_value = {
-        "choices": [{"message": {"content": "Summary of tasks 1-7"}}],
-    }
-    mock_response.raise_for_status = MagicMock()
-    mock_client.post.return_value = mock_response
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Summary of tasks 1-7"
+    mock_client.chat.completions.create.return_value = mock_response
 
     result = compress_conversation(
         messages,
         mock_client,
         "test-model",
-        "https://api.test",
-        "key",
         preserve_recent=6,
     )
 
     assert result is not None
-    # Should have system prompt + summary + recent messages
     assert any(m.get("content") == "You are a test agent." for m in result)
     assert any("Summary of tasks 1-7" in m.get("content", "") for m in result)
-    # Recent messages should be preserved
     assert result[-1]["content"] == "done 7"

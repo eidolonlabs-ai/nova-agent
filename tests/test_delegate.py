@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import httpx
+from openai import OpenAI
 
 from nova.agent import NovaAgent
 from nova.session import SessionStore
@@ -73,11 +73,11 @@ def _mock_session_store() -> SessionStore:
 
 
 def _make_agent(config: dict | None = None) -> NovaAgent:
-    """Create a NovaAgent with mocked HTTP client and session store."""
+    """Create a NovaAgent with mocked OpenAI client and session store."""
     cfg = config or _minimal_config(delegation_enabled=True)
-    mock_client = MagicMock(spec=httpx.Client)
+    mock_client = MagicMock(spec=OpenAI)
     session_store = _mock_session_store()
-    return NovaAgent(config=cfg, http_client=mock_client, session_store=session_store)
+    return NovaAgent(config=cfg, openai_client=mock_client, session_store=session_store)
 
 
 # ---------------------------------------------------------------------------
@@ -487,7 +487,7 @@ def test_run_subagent_happy_path():
     mock_http_ctx.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.tools.delegate_tool.OpenAI", return_value=mock_http_ctx),
         patch("nova.agent.NovaAgent", return_value=mock_subagent),
     ):
         result = _run_subagent(
@@ -517,7 +517,7 @@ def test_run_subagent_exception_returns_error_dict():
     mock_http_ctx.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.tools.delegate_tool.OpenAI", return_value=mock_http_ctx),
         patch("nova.agent.NovaAgent", side_effect=RuntimeError("connection refused")),
     ):
         result = _run_subagent(
@@ -554,7 +554,7 @@ def test_run_subagent_fork_mode_prefills_messages():
     mock_http_ctx.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.tools.delegate_tool.OpenAI", return_value=mock_http_ctx),
         patch("nova.agent.NovaAgent", return_value=mock_subagent),
     ):
         result = _run_subagent(
@@ -586,7 +586,7 @@ def test_run_subagent_isolated_mode_no_prefill():
     mock_http_ctx.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.tools.delegate_tool.OpenAI", return_value=mock_http_ctx),
         patch("nova.agent.NovaAgent", return_value=mock_subagent),
     ):
         result = _run_subagent(
@@ -617,7 +617,7 @@ def test_run_subagent_depth_incremented():
     mock_http_ctx.__exit__ = MagicMock(return_value=False)
 
     with (
-        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.tools.delegate_tool.OpenAI", return_value=mock_http_ctx),
         patch("nova.agent.NovaAgent", return_value=mock_subagent),
     ):
         result = _run_subagent(
@@ -651,7 +651,7 @@ def test_run_subagent_custom_model_passed_to_config():
         return mock_subagent
 
     with (
-        patch("nova.tools.delegate_tool.httpx.Client", return_value=mock_http_ctx),
+        patch("nova.tools.delegate_tool.OpenAI", return_value=mock_http_ctx),
         patch("nova.agent.NovaAgent", side_effect=capture_config),
     ):
         _run_subagent(
