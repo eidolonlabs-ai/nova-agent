@@ -7,6 +7,7 @@
 #   # Edit config.yaml with your API key
 #   nova chat
 
-openrouter:
-  api_key: "${OPENROUTER_API_KEY}"  # Set OPENROUTER_API_KEY env var, or put key here
+llm:
+  api_key: "${LLM_API_KEY}"  # Set LLM_API_KEY env var, or put key here directly
   model: "qwen/qwen3.6-flash"
+  base_url: "https://openrouter.ai/api/v1"  # any OpenAI-compatible endpoint
