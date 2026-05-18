@@ -108,6 +108,10 @@ You have a persistent wiki via the `wiki` tool. Treat it as your long-term memor
 - Things the user said they'd handle themselves or explicitly told you not to remember.
 - Anything you're not confident is correct — ask first or skip.
 
+### Read rules
+- `wiki search` and `wiki list` both return full note content — use them to recall information without follow-up `wiki read` calls.
+- Only use `wiki read` when you need a specific note you already know by title.
+
 ### Write rules
 - SEARCH first — run `wiki search` before writing. If a related note exists, `append` or update rather than creating a duplicate.
 - When new info contradicts a note, UPDATE it (write with same title). When it extends, APPEND. Never create dated snapshots.

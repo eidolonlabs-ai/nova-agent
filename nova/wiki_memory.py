@@ -242,7 +242,7 @@ class WikiMemory:
                     "title": parsed["frontmatter"].get("title", md_file.stem),
                     "path": str(md_file.relative_to(self.vault_path)),
                     "tags": parsed["frontmatter"].get("tags", []),
-                    "excerpt": _excerpt(text, query_lower),
+                    "content": parsed["content"],
                 }
             )
         return results
@@ -262,14 +262,13 @@ class WikiMemory:
             note_tags = parsed["frontmatter"].get("tags") or []
             if tag and tag not in note_tags:
                 continue
-            first_line = parsed["content"].split("\n")[0][:120] if parsed["content"] else ""
             notes.append(
                 {
                     "title": parsed["frontmatter"].get("title", md_file.stem),
                     "path": str(md_file.relative_to(self.vault_path)),
                     "tags": note_tags,
                     "modified": parsed["frontmatter"].get("modified", ""),
-                    "first_line": first_line,
+                    "content": parsed["content"],
                     "inject": bool(parsed["frontmatter"].get("inject", False)),
                 }
             )

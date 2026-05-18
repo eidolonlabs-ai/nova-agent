@@ -238,10 +238,10 @@ def test_search_no_results(vault: WikiMemory):
     assert vault.search("zzz_no_match") == []
 
 
-def test_search_includes_excerpt(vault: WikiMemory):
+def test_search_includes_content(vault: WikiMemory):
     vault.write("Note", "Here is some specific text to find")
     results = vault.search("specific text")
-    assert results[0]["excerpt"] != ""
+    assert "specific text" in results[0]["content"]
 
 
 def test_list_notes_returns_all(vault: WikiMemory):
