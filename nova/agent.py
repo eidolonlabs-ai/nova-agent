@@ -766,7 +766,7 @@ class NovaAgent:
                 assistant_msg["content"] = content
             if tool_calls:
                 assistant_msg["tool_calls"] = tool_calls
-            if reasoning_content:
+            if reasoning_content is not None:
                 assistant_msg["reasoning_content"] = reasoning_content
 
             self.messages.append(assistant_msg)
