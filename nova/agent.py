@@ -377,6 +377,13 @@ class NovaAgent:
                                 "arguments"
                             ]
 
+        # For reasoning_content: if the model generated any reasoning (full_reasoning is non-empty),
+        # include it. Also include empty string if tool_calls are present (DeepSeek thinking models
+        # require reasoning_content in ALL assistant messages when in thinking mode, even if empty).
+        reasoning_content_value = full_reasoning if full_reasoning else None
+        if not reasoning_content_value and tool_calls:
+            reasoning_content_value = ""
+
         return {
             "choices": [
                 {
@@ -384,7 +391,7 @@ class NovaAgent:
                         "role": "assistant",
                         "content": full_content if full_content else None,
                         "tool_calls": tool_calls if tool_calls else None,
-                        "reasoning_content": full_reasoning if full_reasoning else None,
+                        "reasoning_content": reasoning_content_value,
                     }
                 }
             ]
@@ -775,23 +782,15 @@ class NovaAgent:
             # Keeping it causes models (especially qwen) to repeat it verbatim
             # after the tool result is returned.
             # reasoning_content must be echoed back for DeepSeek thinking models.
-            # If any prior assistant message already has reasoning_content, the
-            # model is in thinking mode and ALL subsequent messages must include
-            # the field — even as an empty string — or DeepSeek returns 400.
-            in_thinking_mode = any(
-                "reasoning_content" in m
-                for m in api_messages
-                if m.get("role") == "assistant"
-            )
             assistant_msg: dict[str, Any] = {"role": "assistant"}
             if content and not tool_calls:
                 assistant_msg["content"] = content
             if tool_calls:
                 assistant_msg["tool_calls"] = tool_calls
-            if reasoning_content:
+            # Always include reasoning_content when present (even if empty string),
+            # since it's now guaranteed to be non-None for tool_calls in thinking mode.
+            if reasoning_content is not None:
                 assistant_msg["reasoning_content"] = reasoning_content
-            elif in_thinking_mode:
-                assistant_msg["reasoning_content"] = ""
 
             self.messages.append(assistant_msg)
             self.session_store.add_message(
