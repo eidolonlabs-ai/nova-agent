@@ -141,9 +141,10 @@ nova setup
 Or create `~/.nova/config.yaml` manually:
 
 ```yaml
-openrouter:
-  api_key: "sk-or-..."        # or set OPENROUTER_API_KEY env var
+llm:
+  api_key: "sk-..."           # or set LLM_API_KEY env var
   model: "qwen/qwen3.6-flash" # Fast, capable, affordable
+  base_url: "https://openrouter.ai/api/v1"  # any OpenAI-compatible endpoint
 ```
 
 ### For Developers

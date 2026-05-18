@@ -1,9 +1,14 @@
 # Nova Agent Configuration
 
-# OpenRouter API
-openrouter:
-  api_key: "${OPENROUTER_API_KEY}"  # or set OPENROUTER_API_KEY env var
-  model: "qwen/qwen3.6-flash"       # Fast, capable, affordable
+# LLM API — any OpenAI-compatible endpoint
+# Examples:
+#   OpenRouter:  base_url: "https://openrouter.ai/api/v1"
+#   DeepSeek:    base_url: "https://api.deepseek.com/v1"
+#   OpenAI:      base_url: "https://api.openai.com/v1"
+#   Ollama:      base_url: "http://localhost:11434/v1"
+llm:
+  api_key: "${LLM_API_KEY}"   # or set LLM_API_KEY env var (OPENROUTER_API_KEY also accepted)
+  model: "qwen/qwen3.6-flash" # Any model supported by your endpoint
   base_url: "https://openrouter.ai/api/v1"
 
 # Agent settings

@@ -32,7 +32,7 @@ from nova.tools.registry import ToolRegistry, discover_builtin_tools
 def _minimal_config(delegation_enabled: bool = False, depth: int = 0) -> dict:
     """Return a minimal config for testing."""
     return {
-        "openrouter": {
+        "llm": {
             "base_url": "https://openrouter.ai/api/v1",
             "api_key": "test-key",
             "model": "test-model",
@@ -122,13 +122,13 @@ def test_build_subagent_config_model_override():
         model="openai/gpt-4o-mini",
         max_iterations=30,
     )
-    assert child_config["openrouter"]["model"] == "openai/gpt-4o-mini"
+    assert child_config["llm"]["model"] == "openai/gpt-4o-mini"
 
 
 def test_build_subagent_config_inherits_model_when_none():
     parent_config = _minimal_config(delegation_enabled=True)
     child_config = _build_subagent_config(parent_config, depth=1, model=None, max_iterations=30)
-    assert child_config["openrouter"]["model"] == "test-model"
+    assert child_config["llm"]["model"] == "test-model"
 
 
 def test_build_subagent_config_applies_iteration_budget():
@@ -148,9 +148,9 @@ def test_build_subagent_config_uses_argument_when_no_config_budget():
 
 def test_build_subagent_config_does_not_mutate_parent():
     parent_config = _minimal_config(delegation_enabled=True)
-    original_model = parent_config["openrouter"]["model"]
+    original_model = parent_config["llm"]["model"]
     _build_subagent_config(parent_config, depth=1, model="other/model", max_iterations=30)
-    assert parent_config["openrouter"]["model"] == original_model
+    assert parent_config["llm"]["model"] == original_model
 
 
 # ---------------------------------------------------------------------------
@@ -664,7 +664,7 @@ def test_run_subagent_custom_model_passed_to_config():
         )
 
     assert len(captured_configs) == 1
-    assert captured_configs[0]["openrouter"]["model"] == "custom/model"
+    assert captured_configs[0]["llm"]["model"] == "custom/model"
 
 
 def test_register_delegate_tool_depth_limit_logging(caplog):

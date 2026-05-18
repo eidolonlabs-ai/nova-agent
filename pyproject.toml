@@ -12,7 +12,7 @@ requires-python = ">=3.12"
 authors = [
     {name = "Eidolon Labs LLC"},
 ]
-keywords = ["ai-agent", "llm", "openrouter", "personal-assistant"]
+keywords = ["ai-agent", "llm", "openai-compatible", "personal-assistant"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

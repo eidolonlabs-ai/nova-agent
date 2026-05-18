@@ -15,7 +15,7 @@ from nova.session import SessionStore
 def minimal_config():
     """Minimal test config."""
     return {
-        "openrouter": {
+        "llm": {
             "base_url": "https://openrouter.ai/api/v1",
             "api_key": "test-key",
             "model": "test-model",

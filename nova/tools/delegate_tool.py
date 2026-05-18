@@ -88,7 +88,7 @@ def _build_subagent_config(
 
     # Override model if specified
     if model:
-        config["openrouter"]["model"] = model
+        config["llm"]["model"] = model
 
     # Set sub-agent depth
     config["_subagent_depth"] = depth
@@ -172,14 +172,12 @@ def _run_subagent(
     try:
         # Create a new HTTP client for the sub-agent — httpx.Client is not
         # thread-safe for concurrent use, so we cannot share the parent's client.
-        openrouter_cfg = subagent_config["openrouter"]
+        llm_cfg = subagent_config["llm"]
         subagent_http_client = httpx.Client(
-            base_url=openrouter_cfg["base_url"],
+            base_url=llm_cfg["base_url"],
             headers={
-                "Authorization": f"Bearer {openrouter_cfg['api_key']}",
+                "Authorization": f"Bearer {llm_cfg['api_key']}",
                 "Content-Type": "application/json",
-                "HTTP-Referer": "https://nova-agent.local",
-                "X-Title": "Nova Agent",
             },
             timeout=120.0,
         )

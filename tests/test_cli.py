@@ -371,14 +371,14 @@ class TestCmdSetup:
 
         with (
             patch("nova.cli.ensure_nova_home") as mock_ensure,
-            patch.dict("os.environ", {"OPENROUTER_API_KEY": "env-api-key"}),
+            patch.dict("os.environ", {"LLM_API_KEY": "env-api-key"}),
             patch("builtins.input", return_value="1"),
         ):  # select default model
             mock_ensure.return_value = Path(tmpdir)
             cmd_setup(args)
 
         captured = capsys.readouterr()
-        assert "OPENROUTER_API_KEY found in environment" in captured.out
+        assert "API key found in environment" in captured.out
         assert "Setup complete!" in captured.out
 
     def test_cmd_setup_with_existing_config(self, capsys):
@@ -391,7 +391,7 @@ class TestCmdSetup:
         import yaml
 
         existing = {
-            "openrouter": {
+            "llm": {
                 "api_key": "existing-key",
                 "model": "anthropic/claude-sonnet-4",
             }
@@ -432,7 +432,7 @@ class TestCmdSetup:
 
         with (
             patch("nova.cli.ensure_nova_home") as mock_ensure,
-            patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"LLM_API_KEY": "test-key"}),
             patch("builtins.input", side_effect=["5", "custom/model"]),
         ):
             mock_ensure.return_value = Path(tmpdir)
@@ -448,7 +448,7 @@ class TestCmdSetup:
 
         with (
             patch("nova.cli.ensure_nova_home") as mock_ensure,
-            patch.dict("os.environ", {"OPENROUTER_API_KEY": "test-key"}),
+            patch.dict("os.environ", {"LLM_API_KEY": "test-key"}),
             patch("builtins.input", return_value="2"),
         ):  # choice 2: opus
             mock_ensure.return_value = Path(tmpdir)

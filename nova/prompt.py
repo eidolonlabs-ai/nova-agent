@@ -176,7 +176,7 @@ def build_system_prompt(
         parts.append(TOOL_USE_GUIDANCE)
 
     # Execution discipline — for models that need stronger nudges toward tool use
-    model = config.get("openrouter", {}).get("model", "")
+    model = config.get("llm", {}).get("model", "")
     if _needs_execution_discipline(model, config):
         parts.append(EXECUTION_DISCIPLINE)
 
@@ -227,7 +227,7 @@ def build_system_prompt(
     from datetime import date
 
     parts.append(f"Today: {date.today().isoformat()}")
-    current_model = config.get("openrouter", {}).get("model", "unknown")
+    current_model = config.get("llm", {}).get("model", "unknown")
     parts.append(f"Model: {current_model}")
 
     result = "\n\n".join(p.strip() for p in parts if p.strip())

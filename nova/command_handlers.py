@@ -145,7 +145,7 @@ def cmd_status(agent: NovaAgent, args: str) -> None:
         system_prompt=agent._system_prompt or "",
     )
     _cprint(f"{_DIM}Session: {agent.session_id}")
-    _cprint(f"Model:   {agent.config['openrouter']['model']}")
+    _cprint(f"Model:   {agent.config['llm']['model']}")
     _cprint(f"Context: {ctx:,} tokens")
     # Delegation state
     delegation_cfg = agent.config.get("delegation", {})
@@ -174,10 +174,10 @@ def cmd_model(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
 
     if args:
-        agent.config["openrouter"]["model"] = args.strip()
+        agent.config["llm"]["model"] = args.strip()
         _cprint(f"{_DIM}Model switched to: {args.strip()}{_RST}")
     else:
-        _cprint(f"{_DIM}Current model: {agent.config['openrouter']['model']}{_RST}")
+        _cprint(f"{_DIM}Current model: {agent.config['llm']['model']}{_RST}")
 
 
 @command_handler("tools")
@@ -234,7 +234,7 @@ def cmd_usage(agent: NovaAgent, args: str) -> None:
         agent.messages,
         system_prompt=agent._system_prompt or "",
     )
-    cw = get_model_context_window(agent.config["openrouter"]["model"])
+    cw = get_model_context_window(agent.config["llm"]["model"])
     pct = int(ctx / cw * 100) if cw else 0
     _cprint(f"{_DIM}Context used: {ctx:,} / {cw:,} tokens ({pct}%){_RST}")
     if agent.cost_tracker:

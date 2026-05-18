@@ -10,7 +10,7 @@ from nova.config import _deep_merge, _resolve_env_vars, load_config
 
 def test_default_config():
     config = load_config()
-    assert "openrouter" in config
+    assert "llm" in config
     assert "agent" in config
     assert "budgets" in config
     assert config["agent"]["max_iterations"] == 50

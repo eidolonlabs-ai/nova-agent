@@ -50,7 +50,7 @@ def test_delegate_timeout_triggered():
     mock_agent.depth = 0
     mock_agent.config = {
         "delegation": {"max_spawn_depth": 2, "default_timeout_seconds": 1},
-        "openrouter": {"model": "test", "base_url": "http://test", "api_key": "test"},
+        "llm": {"model": "test", "base_url": "http://test", "api_key": "test"},
         "agent": {"max_iterations": 3},
         "budgets": {"system_prompt_max": 8000},
         "compression": {"enabled": False},
@@ -87,7 +87,7 @@ def test_delegate_invalid_context_mode():
     mock_agent.depth = 0
     mock_agent.config = {
         "delegation": {"max_spawn_depth": 2},
-        "openrouter": {"model": "test", "base_url": "http://test", "api_key": "test"},
+        "llm": {"model": "test", "base_url": "http://test", "api_key": "test"},
     }
     mock_agent.cost_tracker = None
 
@@ -117,7 +117,7 @@ def test_delegate_timeout_seconds_clamped():
     mock_agent.depth = 0
     mock_agent.config = {
         "delegation": {"max_spawn_depth": 2},
-        "openrouter": {"model": "test", "base_url": "http://test", "api_key": "test"},
+        "llm": {"model": "test", "base_url": "http://test", "api_key": "test"},
     }
     mock_agent.cost_tracker = None
 
@@ -145,7 +145,7 @@ def test_delegate_cost_tracker_aggregation():
     mock_agent.depth = 0
     mock_agent.config = {
         "delegation": {"max_spawn_depth": 2},
-        "openrouter": {"model": "test", "base_url": "http://test", "api_key": "test"},
+        "llm": {"model": "test", "base_url": "http://test", "api_key": "test"},
     }
     mock_agent.cost_tracker = MagicMock()
 
@@ -215,7 +215,7 @@ def test_delegate_config_deep_copy():
     mock_agent.depth = 0
     original_config = {
         "delegation": {"max_spawn_depth": 2},
-        "openrouter": {"model": "original-model", "base_url": "http://test", "api_key": "test"},
+        "llm": {"model": "original-model", "base_url": "http://test", "api_key": "test"},
     }
     mock_agent.config = original_config.copy()
 
@@ -235,7 +235,7 @@ def test_delegate_config_deep_copy():
                 agent=mock_agent,
             )
             # Verify parent config model is unchanged
-            assert mock_agent.config["openrouter"]["model"] == "original-model"
+            assert mock_agent.config["llm"]["model"] == "original-model"
 
 
 def test_delegate_label_generation():
@@ -244,7 +244,7 @@ def test_delegate_label_generation():
     mock_agent.depth = 0
     mock_agent.config = {
         "delegation": {"max_spawn_depth": 2},
-        "openrouter": {"model": "test", "base_url": "http://test", "api_key": "test"},
+        "llm": {"model": "test", "base_url": "http://test", "api_key": "test"},
     }
     mock_agent.cost_tracker = None
 
@@ -278,7 +278,7 @@ def test_delegate_fork_mode_inherits_transcript():
     mock_agent.depth = 0
     mock_agent.config = {
         "delegation": {"max_spawn_depth": 2},
-        "openrouter": {"model": "test", "base_url": "http://test", "api_key": "test"},
+        "llm": {"model": "test", "base_url": "http://test", "api_key": "test"},
     }
     mock_agent.messages = [
         {"role": "user", "content": "parent message"},
@@ -310,7 +310,7 @@ def test_delegate_result_structure():
     mock_agent.depth = 0
     mock_agent.config = {
         "delegation": {"max_spawn_depth": 2},
-        "openrouter": {"model": "test", "base_url": "http://test", "api_key": "test"},
+        "llm": {"model": "test", "base_url": "http://test", "api_key": "test"},
     }
     mock_agent.cost_tracker = None
 

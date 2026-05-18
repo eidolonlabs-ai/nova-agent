@@ -200,13 +200,13 @@ def test_cmd_model_no_args_prints_current_model(agent):
 def test_cmd_model_with_args_switches_model(agent):
     with patch("nova.display._cprint"):
         dispatch_command("model", agent, "openai/gpt-4o")
-    assert agent.config["openrouter"]["model"] == "openai/gpt-4o"
+    assert agent.config["llm"]["model"] == "openai/gpt-4o"
 
 
 def test_cmd_model_trims_whitespace(agent):
     with patch("nova.display._cprint"):
         dispatch_command("model", agent, "  openai/gpt-4o  ")
-    assert agent.config["openrouter"]["model"] == "openai/gpt-4o"
+    assert agent.config["llm"]["model"] == "openai/gpt-4o"
 
 
 # ─── cmd_tools ───────────────────────────────────────────────────────────────

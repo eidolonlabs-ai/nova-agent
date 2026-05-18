@@ -28,7 +28,7 @@ def _chat_loop(agent):
     console = Console()
     print_banner(console, agent.config)
 
-    model = agent.config["openrouter"]["model"]
+    model = agent.config["llm"]["model"]
     context_window = get_model_context_window(model)
     tui = NovaTUI(model=model, context_window=context_window, config=agent.config)
     agent._reasoning_callback = None
@@ -169,28 +169,31 @@ def cmd_setup(args):
         with open(config_path, encoding="utf-8") as f:
             existing_config = yaml.safe_load(f) or {}
 
-    # Get OpenRouter API key
-    current_key = existing_config.get("openrouter", {}).get("api_key", "")
-    env_key = os.environ.get("OPENROUTER_API_KEY", "")
+    # Get API key (prefer llm section, fall back to legacy openrouter section)
+    current_key = existing_config.get("llm", existing_config.get("openrouter", {})).get(
+        "api_key", ""
+    )
+    env_key = os.environ.get("LLM_API_KEY", os.environ.get("OPENROUTER_API_KEY", ""))
 
     if env_key:
-        print("✓ OPENROUTER_API_KEY found in environment")
+        print("✓ API key found in environment")
         api_key = env_key
     elif current_key:
         masked = current_key[:8] + "..." if len(current_key) > 8 else current_key
         print(f"✓ API key already configured: {masked}")
         api_key = current_key
     else:
-        print("OpenRouter API key is required.")
-        print("Get one at: https://openrouter.ai/keys")
+        print("LLM API key is required.")
         print()
-        api_key = input("Enter your OpenRouter API key: ").strip()
+        api_key = input("Enter your API key: ").strip()
         if not api_key:
             print("✗ API key is required. Setup cancelled.")
             sys.exit(1)
 
     # Get model preference
-    current_model = existing_config.get("openrouter", {}).get("model", "")
+    current_model = existing_config.get("llm", existing_config.get("openrouter", {})).get(
+        "model", ""
+    )
     if current_model:
         print(f"\nCurrent model: {current_model}")
         change = input("Change model? [y/N]: ").strip().lower()
@@ -219,9 +222,9 @@ def cmd_setup(args):
 
     # Build config
     config = existing_config
-    config.setdefault("openrouter", {})
-    config["openrouter"]["api_key"] = api_key
-    config["openrouter"]["model"] = model
+    config.setdefault("llm", {})
+    config["llm"]["api_key"] = api_key
+    config["llm"]["model"] = model
 
     # Write config atomically (temp file + rename to prevent corruption)
     import tempfile

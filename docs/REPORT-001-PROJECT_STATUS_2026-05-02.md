@@ -127,7 +127,7 @@ New modules account for ~26% of total codebase.
 
 | Section | Purpose |
 |---------|---------|
-| `openrouter` | API key, model, base URL |
+| `llm` | API key, model, base URL (any OpenAI-compatible endpoint) |
 | `agent` | Identity, max iterations, temperature |
 | `budgets` | Token budgets at every layer |
 | `compression` | LLM-based context compression |

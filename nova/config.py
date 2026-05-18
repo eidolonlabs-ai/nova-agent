@@ -9,7 +9,7 @@ from typing import Any
 import yaml
 
 DEFAULT_CONFIG = {
-    "openrouter": {
+    "llm": {
         "api_key": "",
         "model": "qwen/qwen3.6-flash",
         "base_url": "https://openrouter.ai/api/v1",
@@ -131,7 +131,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
-_KNOWN_TOP_LEVEL_KEYS: frozenset[str] = frozenset(DEFAULT_CONFIG.keys())
+_KNOWN_TOP_LEVEL_KEYS: frozenset[str] = frozenset(DEFAULT_CONFIG.keys()) | frozenset({"openrouter"})
 # Internal keys set at runtime (not from user config files)
 _RUNTIME_KEYS: frozenset[str] = frozenset({"_subagent_depth"})
 
@@ -185,10 +185,19 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
     # Resolve environment variable placeholders
     config = _deep_resolve(config)
 
+    # Backward compat: migrate old 'openrouter' config key to 'llm'
+    if "openrouter" in config:
+        old: dict[str, Any] = config.pop("openrouter")  # type: ignore[assignment]
+        existing: dict[str, Any] = config.get("llm", {})  # type: ignore[assignment]
+        config["llm"] = _deep_merge(existing, old)
+
     # Ensure API key from env var if not in config
-    openrouter = config.get("openrouter", {})
-    if isinstance(openrouter, dict) and not openrouter.get("api_key"):
-        config["openrouter"]["api_key"] = os.environ.get("OPENROUTER_API_KEY", "")  # type: ignore[index]
+    # Accept LLM_API_KEY (preferred) or OPENROUTER_API_KEY (legacy)
+    llm = config.get("llm", {})
+    if isinstance(llm, dict) and not llm.get("api_key"):
+        config["llm"]["api_key"] = os.environ.get(  # type: ignore[index]
+            "LLM_API_KEY", os.environ.get("OPENROUTER_API_KEY", "")
+        )
 
     return config
 

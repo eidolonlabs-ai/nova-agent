@@ -33,7 +33,7 @@ def print_banner(console, config: dict) -> None:
     from rich.panel import Panel
     from rich.table import Table
 
-    model = config["openrouter"]["model"]
+    model = config["llm"]["model"]
     model_short = model.split("/")[-1] if "/" in model else model
 
     # Build info table

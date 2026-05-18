@@ -46,7 +46,7 @@ Blocked content is marked with `[BLOCKED: potential prompt injection]` in the sy
 
 ### API Key Handling
 
-- API keys are loaded from `config.yaml` or the `OPENROUTER_API_KEY` environment variable
+- API keys are loaded from `config.yaml` or the `LLM_API_KEY` environment variable (`OPENROUTER_API_KEY` also accepted for backward compatibility)
 - Keys are never logged or printed to the terminal
 - The `config.yaml` file is excluded from git via `.gitignore`
 

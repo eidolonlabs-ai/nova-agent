@@ -104,7 +104,7 @@ nova reset                # Reset session state
 ## Configuration
 
 1. Copy `config.yaml.example` to `config.yaml`
-2. Set your OpenRouter API key: `OPENROUTER_API_KEY=...`
+2. Set your API key: `LLM_API_KEY=...` (or `OPENROUTER_API_KEY` for legacy)
 3. Optionally customize model, max_tokens, temperature, system_prompt_mode
 
 ## Testing Notes

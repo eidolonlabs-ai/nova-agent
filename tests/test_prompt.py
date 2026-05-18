@@ -12,7 +12,7 @@ from nova.tools.registry import discover_builtin_tools
 
 def _minimal_config() -> dict:
     return {
-        "openrouter": {"model": "test-model"},
+        "llm": {"model": "test-model"},
         "agent": {"identity": "You are a test agent."},
         "budgets": {
             "system_prompt_max": 8000,

@@ -29,7 +29,7 @@ cp config/SOUL.md.example ~/.nova/SOUL.md
 cp config.yaml.example config.yaml
 
 # 2. Set your API key (or use env var)
-export OPENROUTER_API_KEY="sk-or-v1-..."
+export LLM_API_KEY="sk-..."
 
 # 3. Copy default files to your Nova home
 mkdir -p ~/.nova/skills
@@ -41,12 +41,12 @@ cp config/SOUL.md.example ~/.nova/SOUL.md
 
 ### Model Selection
 
-Nova uses OpenRouter, giving you access to 100+ models. The default model is **`qwen/qwen3.6-flash`** — fast, capable, and affordable.
+Nova works with any OpenAI-compatible API — OpenRouter, DeepSeek, OpenAI, Ollama, and others. The default model is **`qwen/qwen3.6-flash`** via OpenRouter — fast, capable, and affordable.
 
 Change the model in your config:
 
 ```yaml
-openrouter:
+llm:
   model: "qwen/qwen3.6-flash"         # Default — fast and affordable
   # model: "anthropic/claude-sonnet-4-20250514"  # More capable
   # model: "anthropic/claude-opus-4-20250514"    # Most capable
@@ -304,7 +304,7 @@ AGENTS.md               # Agent instructions (optional)
 
 | Variable | Description |
 |----------|-------------|
-| `OPENROUTER_API_KEY` | Your OpenRouter API key (alternative to config.yaml) |
+| `LLM_API_KEY` | Your API key (alternative to config.yaml); `OPENROUTER_API_KEY` also accepted for backward compatibility |
 | `GITHUB_TOKEN` | GitHub personal access token (for MCP GitHub server) |
 
 ## Permissions

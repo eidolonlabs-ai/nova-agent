@@ -24,7 +24,7 @@ def _mock_global_personality():
 @pytest.fixture
 def minimal_config() -> dict:
     return {
-        "openrouter": {
+        "llm": {
             "base_url": "https://openrouter.ai/api/v1",
             "api_key": "test-key",
             "model": "test-model",

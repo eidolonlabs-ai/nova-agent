@@ -90,7 +90,7 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 
 ## 🆘 Troubleshooting
 
-1. **Can't connect to OpenRouter** → Check `OPENROUTER_API_KEY` env var or `config.yaml`
+1. **Can't connect to LLM API** → Check `LLM_API_KEY` env var or `llm.api_key` in `config.yaml`
 2. **Tool blocked unexpectedly** → See [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) — check `denied_tools` and `path_rules`
 3. **Context too long / compression triggering** → See [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) — adjust `threshold_percent`
 4. **MCP server not appearing** → See [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md#troubleshooting)
