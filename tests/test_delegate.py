@@ -153,12 +153,6 @@ def test_build_subagent_config_does_not_mutate_parent():
     assert parent_config["openrouter"]["model"] == original_model
 
 
-def test_build_subagent_config_sets_minimal_prompt_mode():
-    parent_config = _minimal_config(delegation_enabled=True)
-    child_config = _build_subagent_config(parent_config, depth=1, model=None, max_iterations=30)
-    assert child_config.get("_prompt_mode") == "minimal"
-
-
 # ---------------------------------------------------------------------------
 # NovaAgent depth tracking
 # ---------------------------------------------------------------------------

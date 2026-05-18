@@ -397,9 +397,8 @@ def test_agent_is_not_leaf_below_max_depth(delegation_config, mock_http_client, 
 def test_agent_prompt_mode_respected_for_subagent(
     delegation_config, mock_http_client, mock_session_store
 ):
-    """Sub-agent config with _prompt_mode='minimal' should produce a minimal prompt."""
+    """Sub-agent with prompt_mode='minimal' should produce a minimal prompt."""
     delegation_config["_subagent_depth"] = 1
-    delegation_config["_prompt_mode"] = "minimal"
     delegation_config["skills"]["enabled"] = True
     delegation_config["skills"]["directory"] = str(Path(tempfile.mkdtemp()))
 
@@ -407,6 +406,7 @@ def test_agent_prompt_mode_respected_for_subagent(
         config=delegation_config,
         http_client=mock_http_client,
         session_store=mock_session_store,
+        prompt_mode="minimal",
     )
 
     # Sub-agent should have a minimal prompt (no skills index)

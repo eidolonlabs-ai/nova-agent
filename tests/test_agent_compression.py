@@ -149,6 +149,55 @@ def test_compression_tier2_llm_compression(minimal_config, mock_session_store, m
         mock_compress.assert_called()
 
 
+def test_compression_tier2_summary_survives_next_turn(
+    minimal_config, mock_session_store, mock_http_client
+):
+    """Tier 2 summaries are retained in agent history after compression."""
+    minimal_config["compression"]["enabled"] = True
+    minimal_config["compression"]["threshold_percent"] = 0.01
+    minimal_config["microcompact"]["enabled"] = False
+    minimal_config["agent"]["max_iterations"] = 1
+
+    llm_response = {
+        "choices": [
+            {
+                "message": {
+                    "role": "assistant",
+                    "content": "Done",
+                }
+            }
+        ]
+    }
+    mock_http_client.post.return_value = MagicMock(
+        status_code=200,
+        json=MagicMock(return_value=llm_response),
+        text=json.dumps(llm_response),
+    )
+
+    agent = NovaAgent(
+        config=minimal_config,
+        http_client=mock_http_client,
+        session_store=mock_session_store,
+    )
+    root_prompt = agent._system_prompt or ""
+
+    for i in range(20):
+        agent.messages.append({"role": "user", "content": f"message {i} " * 50})
+        agent.messages.append({"role": "assistant", "content": f"response {i} " * 50})
+
+    compressed_messages = [
+        {"role": "system", "content": root_prompt},
+        {"role": "system", "content": "[Previous conversation summary]\nImportant facts"},
+        {"role": "user", "content": "recent request"},
+    ]
+
+    with patch("nova.agent.compress_conversation", return_value=compressed_messages):
+        agent.run("test", stream=False)
+
+    assert {"role": "system", "content": root_prompt} not in agent.messages
+    assert any("Important facts" in m.get("content", "") for m in agent.messages)
+
+
 def test_compression_disabled_in_config(minimal_config, mock_session_store, mock_http_client):
     """Test that compression is fully skipped when disabled in config."""
     minimal_config["compression"]["enabled"] = False

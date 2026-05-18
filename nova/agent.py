@@ -64,12 +64,13 @@ class NovaAgent:
         http_client: httpx.Client | None = None,
         session_store: SessionStore | None = None,
         wiki_memory_store: WikiMemory | None = None,
+        prompt_mode: str = "full",
     ):
         self.config = config or load_config()
+        self._prompt_mode = prompt_mode
         self.session_id = session_id
         self.messages: list[dict[str, Any]] = []
         self._system_prompt: str | None = None
-        self._cached_system_prompt: str | None = None
         self._interrupt_check: Callable[[], bool] | None = None
         # Token estimate cache: hash(content) → token_count (bounded to 2048 entries)
         self._token_cache: dict[int, int] = {}
@@ -185,10 +186,10 @@ class NovaAgent:
 
         The mode is resolved in priority order:
         1. Explicit ``mode`` argument (used by tests / refresh calls)
-        2. ``config["_prompt_mode"]`` — set by sub-agent config builder
+        2. ``self._prompt_mode`` — set at construction time
         3. ``"full"`` — default for root agents
         """
-        resolved_mode = mode or self.config.get("_prompt_mode", "full")
+        resolved_mode = mode or self._prompt_mode
 
         wiki_content = None
         if self.wiki:
@@ -199,9 +200,8 @@ class NovaAgent:
             mode=resolved_mode,
             wiki_content=wiki_content,
         )
-        self._cached_system_prompt = self._system_prompt
 
-    def _refresh_system_prompt(self, mode: str = "full"):
+    def _refresh_system_prompt(self, mode: str | None = None):
         """Rebuild the system prompt (e.g., after memory changes)."""
         self._build_system_prompt(mode=mode)
         if self.session_id:
@@ -209,6 +209,19 @@ class NovaAgent:
                 self.session_id,
                 self._system_prompt or "",
             )
+
+    def _conversation_messages_from_api(
+        self,
+        api_messages: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        messages = list(api_messages)
+        if (
+            messages
+            and messages[0].get("role") == "system"
+            and messages[0].get("content") == (self._system_prompt or "")
+        ):
+            return messages[1:]
+        return messages
 
     def _call_llm(
         self,
@@ -625,7 +638,7 @@ class NovaAgent:
         self.session_store.add_message(self.session_id or "", "user", user_message)
 
         # Build messages for API
-        api_messages = [{"role": "system", "content": self._cached_system_prompt or ""}]
+        api_messages = [{"role": "system", "content": self._system_prompt or ""}]
         api_messages.extend(self.messages)
 
         # Proactive history trimming: keep recent turns within budget
@@ -642,7 +655,7 @@ class NovaAgent:
                 turn_limit,
             )
             self.messages = self.messages[-max_messages:]
-            api_messages = [{"role": "system", "content": self._cached_system_prompt or ""}]
+            api_messages = [{"role": "system", "content": self._system_prompt or ""}]
             api_messages.extend(self.messages)
 
         # Get tool definitions
@@ -664,7 +677,7 @@ class NovaAgent:
             # Check context window — apply microcompact if approaching budget
             total_tokens = (
                 self._estimate_messages_tokens_cached(api_messages)
-                + estimate_tokens(self._cached_system_prompt or "")
+                + estimate_tokens(self._system_prompt or "")
                 + (estimate_tool_tokens(tools) if tools else 0)
             )
             compression_cfg = self.config.get("compression", {})
@@ -690,6 +703,9 @@ class NovaAgent:
                             compacted_tokens,
                         )
                         api_messages = compacted
+                        # Sync self.messages with compacted state so token
+                        # estimates stay accurate for the remainder of the turn.
+                        self.messages = self._conversation_messages_from_api(compacted)
                         total_tokens = compacted_tokens
 
                 # Tier 2: LLM-based context compression
@@ -710,9 +726,11 @@ class NovaAgent:
                     )
                     if compressed:
                         api_messages = compressed
+                        # Sync self.messages with compressed state.
+                        self.messages = self._conversation_messages_from_api(compressed)
                         total_tokens = estimate_total_request_tokens(
                             api_messages,
-                            system_prompt=self._cached_system_prompt or "",
+                            system_prompt=self._system_prompt or "",
                             tools=tools,
                         )
                         t2_savings = tokens_before_t2 - total_tokens
@@ -802,79 +820,3 @@ class NovaAgent:
                 api_messages.append(tool_result_msg)
 
         return f"[Max iterations ({max_iterations}) reached]"
-
-    def chat_loop(self):
-        """Run an interactive chat loop with prompt_toolkit TUI."""
-        from rich.console import Console
-
-        from nova.command_handlers import dispatch_command
-        from nova.display import (
-            NovaTUI,
-            StreamingReasoningBox,
-            print_banner,
-            print_tool_calls,
-        )
-
-        console = Console()
-        print_banner(console, self.config)
-
-        model = self.config["openrouter"]["model"]
-        context_window = get_model_context_window(model)
-        tui = NovaTUI(model=model, context_window=context_window, config=self.config)
-        self._reasoning_callback = None
-
-        def on_input(user_input: str) -> None:
-            from nova.display import _DIM, _RST, _cprint
-
-            # Slash command dispatch via handler registry
-            if user_input.startswith("/"):
-                parts = user_input[1:].split(None, 1)
-                cmd_name = parts[0].lower()
-                cmd_args = parts[1] if len(parts) > 1 else ""
-
-                if dispatch_command(cmd_name, self, cmd_args):
-                    return
-
-                # Unknown/unhandled slash command — send as message to agent
-                _cprint(f"{_DIM}(sending /{cmd_name} to agent){_RST}")
-
-            # Regular message → agent
-            display = StreamingReasoningBox()
-            display.reset()
-            tool_names: list[str] = []
-
-            def stream_callback(chunk: str, d: StreamingReasoningBox = display) -> None:
-                d.feed(chunk)
-
-            def reasoning_callback(chunk: str, d: StreamingReasoningBox = display) -> None:
-                d.feed_reasoning(chunk)
-
-            # Print tool calls immediately as they execute (before response)
-            _tl = tool_names
-
-            def tool_callback(
-                name: str, tl: list[str] = _tl, d: StreamingReasoningBox = display
-            ) -> None:
-                tl.append(name)
-                # Flush any pending response content first, then show tool block
-                d.flush()
-                d.reset()
-                print_tool_calls(tl[:])
-                tl.clear()
-
-            self._reasoning_callback = reasoning_callback
-            self._tool_callback = tool_callback
-            # Wire Ctrl+C interrupt into the agent loop
-            self._interrupt_check = tui._interrupt_requested.is_set
-            self.run(user_input, stream=True, stream_callback=stream_callback)
-            self._interrupt_check = None
-            display.flush()
-
-            ctx = estimate_total_request_tokens(
-                self.messages,
-                system_prompt=self._cached_system_prompt or "",
-            )
-            tui.update_context(ctx)
-
-        tui.run(on_input)
-        self.close()

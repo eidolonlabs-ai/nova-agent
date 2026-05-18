@@ -133,7 +133,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 _KNOWN_TOP_LEVEL_KEYS: frozenset[str] = frozenset(DEFAULT_CONFIG.keys())
 # Internal keys set at runtime (not from user config files)
-_RUNTIME_KEYS: frozenset[str] = frozenset({"_subagent_depth", "_prompt_mode"})
+_RUNTIME_KEYS: frozenset[str] = frozenset({"_subagent_depth"})
 
 
 def _warn_unknown_keys(user_config: dict[str, Any], source: str) -> None:

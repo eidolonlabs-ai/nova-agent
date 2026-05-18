@@ -9,13 +9,92 @@ from typing import Any
 
 from nova.agent import NovaAgent
 from nova.config import ensure_nova_home, load_config
+from nova.model_metadata import get_model_context_window
+from nova.tokens import estimate_total_request_tokens
+
+
+def _chat_loop(agent):
+    """Run an interactive chat loop with prompt_toolkit TUI."""
+    from rich.console import Console
+
+    from nova.command_handlers import dispatch_command
+    from nova.display import (
+        NovaTUI,
+        StreamingReasoningBox,
+        print_banner,
+        print_tool_calls,
+    )
+
+    console = Console()
+    print_banner(console, agent.config)
+
+    model = agent.config["openrouter"]["model"]
+    context_window = get_model_context_window(model)
+    tui = NovaTUI(model=model, context_window=context_window, config=agent.config)
+    agent._reasoning_callback = None
+
+    def on_input(user_input: str) -> None:
+        from nova.display import _DIM, _RST, _cprint
+
+        # Slash command dispatch via handler registry
+        if user_input.startswith("/"):
+            parts = user_input[1:].split(None, 1)
+            cmd_name = parts[0].lower()
+            cmd_args = parts[1] if len(parts) > 1 else ""
+
+            if dispatch_command(cmd_name, agent, cmd_args):
+                return
+
+            # Unknown/unhandled slash command — send as message to agent
+            _cprint(f"{_DIM}(sending /{cmd_name} to agent){_RST}")
+
+        # Regular message → agent
+        display = StreamingReasoningBox()
+        display.reset()
+        tool_names: list[str] = []
+
+        def stream_callback(chunk: str, d: StreamingReasoningBox = display) -> None:
+            d.feed(chunk)
+
+        def reasoning_callback(chunk: str, d: StreamingReasoningBox = display) -> None:
+            d.feed_reasoning(chunk)
+
+        # Print tool calls immediately as they execute (before response)
+        _tl = tool_names
+
+        def tool_callback(
+            name: str, tl: list[str] = _tl, d: StreamingReasoningBox = display
+        ) -> None:
+            tl.append(name)
+            # Flush any pending response content first, then show tool block
+            d.flush()
+            d.reset()
+            print_tool_calls(tl[:])
+            tl.clear()
+
+        agent._reasoning_callback = reasoning_callback
+        agent._tool_callback = tool_callback
+        # Wire Ctrl+C interrupt into the agent loop
+        agent._interrupt_check = tui._interrupt_requested.is_set
+        agent.run(user_input, stream=True, stream_callback=stream_callback)
+        agent._interrupt_check = None
+        display.flush()
+
+        ctx = estimate_total_request_tokens(
+            agent.messages,
+            system_prompt=agent._system_prompt or "",
+        )
+        tui.update_context(ctx)
+
+    tui.run(on_input)
+    agent.close()
 
 
 def cmd_chat(args):
     """Start an interactive chat session."""
     config = load_config()
     agent = NovaAgent(config=config, session_id=args.session)
-    agent.chat_loop()
+    _chat_loop(agent)
 
 
 def cmd_ask(args):

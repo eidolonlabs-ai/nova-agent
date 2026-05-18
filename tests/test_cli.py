@@ -99,13 +99,14 @@ class TestCmdChat:
     """Tests for cmd_chat command."""
 
     def test_cmd_chat_starts_agent(self):
-        """Test that cmd_chat creates and runs agent."""
+        """Test that cmd_chat creates and runs agent via _chat_loop."""
         mock_agent = MagicMock()
         args = MagicMock(session=None)
 
         with (
             patch("nova.cli.load_config") as mock_config,
             patch("nova.cli.NovaAgent", return_value=mock_agent) as mock_agent_cls,
+            patch("nova.cli._chat_loop") as mock_chat_loop,
         ):
             mock_config.return_value = {"test": "config"}
             cmd_chat(args)
@@ -114,7 +115,7 @@ class TestCmdChat:
             config={"test": "config"},
             session_id=None,
         )
-        mock_agent.chat_loop.assert_called_once()
+        mock_chat_loop.assert_called_once_with(mock_agent)
 
     def test_cmd_chat_with_session_id(self):
         """Test that cmd_chat passes session_id to agent."""
@@ -124,21 +125,21 @@ class TestCmdChat:
         with (
             patch("nova.cli.load_config") as mock_config,
             patch("nova.cli.NovaAgent", return_value=mock_agent),
+            patch("nova.cli._chat_loop") as mock_chat_loop,
         ):
             mock_config.return_value = {"test": "config"}
             cmd_chat(args)
 
-        mock_agent.chat_loop.assert_called_once()
+        mock_chat_loop.assert_called_once_with(mock_agent)
 
     def test_cmd_chat_handles_agent_exception(self):
-        """Test that cmd_chat propagates agent errors."""
-        mock_agent = MagicMock()
-        mock_agent.chat_loop.side_effect = KeyboardInterrupt()
+        """Test that cmd_chat propagates _chat_loop errors."""
         args = MagicMock(session=None)
 
         with (
             patch("nova.cli.load_config"),
-            patch("nova.cli.NovaAgent", return_value=mock_agent),
+            patch("nova.cli.NovaAgent"),
+            patch("nova.cli._chat_loop", side_effect=KeyboardInterrupt()),
             pytest.raises(KeyboardInterrupt),
         ):
             cmd_chat(args)

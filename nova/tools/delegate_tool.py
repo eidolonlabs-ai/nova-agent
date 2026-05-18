@@ -107,10 +107,6 @@ def _build_subagent_config(
     if "tool_result_max_chars" in subagent_budgets:
         config["budgets"]["tool_result_max_chars"] = subagent_budgets["tool_result_max_chars"]
 
-    # Sub-agents use minimal prompt mode (no skills index, no context files)
-    # to keep their context window focused on the task
-    config["_prompt_mode"] = "minimal"
-
     return config
 
 
@@ -194,6 +190,7 @@ def _run_subagent(
                 http_client=subagent_http_client,
                 session_store=parent_agent.session_store,
                 wiki_memory_store=parent_agent.wiki,
+                prompt_mode="minimal",
             )
 
             # Inject prefill messages if forking

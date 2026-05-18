@@ -142,7 +142,7 @@ def cmd_status(agent: NovaAgent, args: str) -> None:
 
     ctx = estimate_total_request_tokens(
         agent.messages,
-        system_prompt=agent._cached_system_prompt or "",
+        system_prompt=agent._system_prompt or "",
     )
     _cprint(f"{_DIM}Session: {agent.session_id}")
     _cprint(f"Model:   {agent.config['openrouter']['model']}")
@@ -232,7 +232,7 @@ def cmd_usage(agent: NovaAgent, args: str) -> None:
 
     ctx = estimate_total_request_tokens(
         agent.messages,
-        system_prompt=agent._cached_system_prompt or "",
+        system_prompt=agent._system_prompt or "",
     )
     cw = get_model_context_window(agent.config["openrouter"]["model"])
     pct = int(ctx / cw * 100) if cw else 0

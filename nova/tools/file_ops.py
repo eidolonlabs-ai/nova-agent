@@ -23,6 +23,8 @@ _BLOCKED_PATHS = {
     "/etc/ssl",
 }
 _BLOCKED_PREFIXES = [
+    "/etc/",
+    "/private/etc/",
     "/proc/",
     "/sys/",
     "/dev/",
