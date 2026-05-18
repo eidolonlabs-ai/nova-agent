@@ -775,6 +775,14 @@ class NovaAgent:
             # Keeping it causes models (especially qwen) to repeat it verbatim
             # after the tool result is returned.
             # reasoning_content must be echoed back for DeepSeek thinking models.
+            # If any prior assistant message already has reasoning_content, the
+            # model is in thinking mode and ALL subsequent messages must include
+            # the field — even as an empty string — or DeepSeek returns 400.
+            in_thinking_mode = any(
+                "reasoning_content" in m
+                for m in api_messages
+                if m.get("role") == "assistant"
+            )
             assistant_msg: dict[str, Any] = {"role": "assistant"}
             if content and not tool_calls:
                 assistant_msg["content"] = content
@@ -782,6 +790,8 @@ class NovaAgent:
                 assistant_msg["tool_calls"] = tool_calls
             if reasoning_content:
                 assistant_msg["reasoning_content"] = reasoning_content
+            elif in_thinking_mode:
+                assistant_msg["reasoning_content"] = ""
 
             self.messages.append(assistant_msg)
             self.session_store.add_message(
