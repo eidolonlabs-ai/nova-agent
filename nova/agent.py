@@ -102,14 +102,12 @@ class NovaAgent:
         if http_client is not None:
             self.client = http_client
         else:
-            openrouter_config = self.config["openrouter"]
+            llm_config = self.config["llm"]
             self.client = httpx.Client(
-                base_url=openrouter_config["base_url"],
+                base_url=llm_config["base_url"],
                 headers={
-                    "Authorization": f"Bearer {openrouter_config['api_key']}",
+                    "Authorization": f"Bearer {llm_config['api_key']}",
                     "Content-Type": "application/json",
-                    "HTTP-Referer": "https://nova-agent.local",
-                    "X-Title": "Nova Agent",
                 },
                 timeout=120.0,
             )
@@ -131,7 +129,7 @@ class NovaAgent:
             cost_cfg = self.config.get("cost_tracking", {})
             self.cost_tracker: CostTracker | None = None
             if cost_cfg.get("enabled", True):
-                self.cost_tracker = CostTracker(model=self.config["openrouter"]["model"])
+                self.cost_tracker = CostTracker(model=self.config["llm"]["model"])
 
             # Create or load session (tools discovered above, so _build_system_prompt
             # will include tool summaries from the start)
@@ -155,7 +153,7 @@ class NovaAgent:
     def _create_session(self):
         """Create a new session."""
         self.session_id = self.session_store.create_session(
-            model=self.config["openrouter"]["model"],
+            model=self.config["llm"]["model"],
         )
         self._build_system_prompt()
         self.session_store.update_system_prompt(self.session_id, self._system_prompt or "")
@@ -234,12 +232,12 @@ class NovaAgent:
         # Fire pre_llm_call hook
         hooks.emit(EVENT_PRE_LLM_CALL, messages=messages, tools=tools)
 
-        openrouter_config = self.config["openrouter"]
+        llm_config = self.config["llm"]
         agent_config = self.config["agent"]
         retry_cfg = self.config.get("retry", {})
 
         payload = {
-            "model": openrouter_config["model"],
+            "model": llm_config["model"],
             "messages": messages,
             "temperature": agent_config.get("temperature", 0.7),
             "top_p": agent_config.get("top_p", 1.0),
@@ -302,6 +300,7 @@ class NovaAgent:
         payload["stream"] = True
 
         full_content = ""
+        full_reasoning = ""
         tool_calls: list[dict[str, Any]] = []
 
         with self.client.stream("POST", "/chat/completions", json=payload) as response:
@@ -345,9 +344,12 @@ class NovaAgent:
                 delta = data.get("choices", [{}])[0].get("delta", {})
 
                 # Handle reasoning content (OpenRouter sends this separately)
+                # Accumulate it so it can be echoed back to DeepSeek on the next turn
                 reasoning = delta.get("reasoning")
-                if reasoning and reasoning_callback:
-                    reasoning_callback(reasoning)
+                if reasoning:
+                    full_reasoning += reasoning
+                    if reasoning_callback:
+                        reasoning_callback(reasoning)
 
                 # Handle text content
                 content = delta.get("content")
@@ -382,6 +384,7 @@ class NovaAgent:
                         "role": "assistant",
                         "content": full_content if full_content else None,
                         "tool_calls": tool_calls if tool_calls else None,
+                        "reasoning_content": full_reasoning if full_reasoning else None,
                     }
                 }
             ]
@@ -685,7 +688,7 @@ class NovaAgent:
             if compression_cfg.get("enabled"):
                 # Use model-specific context window
                 context_window = get_model_context_window(
-                    self.config["openrouter"]["model"],
+                    self.config["llm"]["model"],
                 )
                 threshold = int(context_window * compression_cfg.get("threshold_percent", 0.40))
 
@@ -712,7 +715,7 @@ class NovaAgent:
                 if total_tokens >= threshold:
                     summary_model = compression_cfg.get(
                         "summary_model",
-                        self.config["openrouter"]["model"],
+                        self.config["llm"]["model"],
                     )
                     preserve_recent = microcompact_cfg.get("keep_recent", 6)
                     tokens_before_t2 = total_tokens
@@ -720,8 +723,8 @@ class NovaAgent:
                         messages=api_messages,
                         http_client=self.client,
                         model=summary_model,
-                        base_url=self.config["openrouter"]["base_url"],
-                        api_key=self.config["openrouter"]["api_key"],
+                        base_url=self.config["llm"]["base_url"],
+                        api_key=self.config["llm"]["api_key"],
                         preserve_recent=preserve_recent,
                     )
                     if compressed:
@@ -748,7 +751,7 @@ class NovaAgent:
                             "Consider starting a new session.",
                             total_tokens,
                             threshold,
-                            self.config["openrouter"]["model"],
+                            self.config["llm"]["model"],
                             context_window,
                         )
 
@@ -764,17 +767,21 @@ class NovaAgent:
             message = choice.get("message", {})
             content = message.get("content")
             tool_calls = message.get("tool_calls")
+            reasoning_content = message.get("reasoning_content")
 
             # Add assistant message to history.
             # When content arrives alongside tool_calls, drop the content from
             # the stored message — the streaming already showed it to the user.
             # Keeping it causes models (especially qwen) to repeat it verbatim
             # after the tool result is returned.
-            assistant_msg = {"role": "assistant"}
+            # reasoning_content must be echoed back for DeepSeek thinking models.
+            assistant_msg: dict[str, Any] = {"role": "assistant"}
             if content and not tool_calls:
                 assistant_msg["content"] = content
             if tool_calls:
                 assistant_msg["tool_calls"] = tool_calls
+            if reasoning_content:
+                assistant_msg["reasoning_content"] = reasoning_content
 
             self.messages.append(assistant_msg)
             self.session_store.add_message(

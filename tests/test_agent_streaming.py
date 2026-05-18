@@ -20,7 +20,7 @@ from nova.session import SessionStore
 def minimal_config():
     """Minimal test config."""
     return {
-        "openrouter": {
+        "llm": {
             "base_url": "https://openrouter.ai/api/v1",
             "api_key": "test-key",
             "model": "test-model",
@@ -221,6 +221,30 @@ def test_stream_response_reasoning_callback(minimal_config, mock_session_store):
     assert len(callback_invoked) == 2
     assert callback_invoked[0] == "Let me"
     assert callback_invoked[1] == " think"
+
+
+def test_stream_response_reasoning_content_in_result(minimal_config, mock_session_store):
+    """reasoning_content must be returned in the message dict so it can be echoed back (DeepSeek requirement)."""
+    mock_client = MagicMock(spec=httpx.Client)
+
+    lines = [
+        'data: {"choices": [{"delta": {"reasoning": "Let me"}}]}',
+        'data: {"choices": [{"delta": {"reasoning": " think"}}]}',
+        'data: {"choices": [{"delta": {"content": "Answer"}}]}',
+        "data: [DONE]",
+    ]
+    mock_client.stream = make_mock_stream_response(lines)
+
+    agent = NovaAgent(
+        config=minimal_config,
+        http_client=mock_client,
+        session_store=mock_session_store,
+    )
+
+    result = agent._stream_response({"messages": []})
+    msg = result["choices"][0]["message"]
+    assert msg["reasoning_content"] == "Let me think"
+    assert msg["content"] == "Answer"
 
 
 def test_stream_response_text_callback(minimal_config, mock_session_store):
