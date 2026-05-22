@@ -4,8 +4,12 @@ Supports JSON payloads, custom headers, and timeout enforcement.
 Integrates with permission system to control external URLs.
 """
 
+from __future__ import annotations
+
+import ipaddress
 import json
 import logging
+import socket
 from typing import Any
 
 import httpx
@@ -119,6 +123,68 @@ HTTP_DELETE_SCHEMA = {
 }
 
 _MAX_RESPONSE_CHARS = 10000
+
+# URL schemes we allow
+_ALLOWED_SCHEMES = {"http", "https"}
+
+# Hostnames/paths we always block
+_BLOCKED_HOSTS = frozenset({
+     "localhost",
+     "127.0.0.1",
+     "::1",
+     "0.0.0.0",
+     "metadata.google.internal",
+     "169.254.169.254",      # AWS metadata
+     "169.254.170.2",       # AWS credentials
+     "metadata.ec2.internal",
+     "kubernetes.default",
+     "metadata.azure.com",
+     "100.64.100.64",       # EC2 metadata v2
+})
+
+
+def _is_url_safe(url: str) -> tuple[bool, str]:
+    """Validate URL format, scheme, and target safety.
+
+     Blocks:
+     - Non http/https schemes
+     - IPv4 private ranges (10.x, 172.16-31.x, 192.168.x)
+     - Link-local (169.254.x)
+     - Unspecified (0.0.0.0)
+     - IPv6 loopback/unspecified
+     - Well-known SSRF hosts (AWS/Azure/GCP metadata endpoints)
+     """
+    valid, msg = _validate_url(url)
+    if not valid:
+        return False, msg
+
+    try:
+        parsed = httpx.URL(url)
+        host = parsed.host
+
+        # Check blocked hostnames
+        if host.lower() in _BLOCKED_HOSTS:
+            return False, f"URL denied: {host} is a reserved address"
+
+        addr = ipaddress.ip_address(socket.gethostbyname(host))
+
+        # Block private/reserved ranges
+        if addr.is_private:
+            return False, f"URL denied: {host} is a private address"
+
+        if addr.is_loopback:
+            return False, f"URL denied: {host} is a loopback address"
+
+        if addr.is_link_local:
+            return False, f"URL denied: {host} is a link-local address"
+
+        if addr.is_reserved:
+            return False, f"URL denied: {host} is a reserved address"
+
+    except (socket.gaierror, OSError, ValueError) as e:
+        return False, f"URL denied: unable to resolve host — {e}"
+
+    return True, ""
 
 
 def _validate_url(url: str) -> tuple[bool, str]:
