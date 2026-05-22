@@ -9,8 +9,10 @@ This is Tier 1 of a multi-tier compaction strategy:
 3. Full LLM summarization — summarize older messages (future)
 """
 
-import logging
+from __future__ import annotations
+
 import copy
+import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -44,7 +46,7 @@ def microcompact_messages(
 
     for i, msg in enumerate(messages):
         role = msg.get("role", "")
-        new_msg = copy.deepcopy(msg)    # shallow copy (safe: tool_calls replaced entirely)
+        new_msg = copy.deepcopy(msg)  # shallow copy (safe: tool_calls replaced entirely)
 
         if i < split_point and role == "tool":
             # Strip old tool content — keep just a placeholder

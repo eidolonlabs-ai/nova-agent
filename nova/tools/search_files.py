@@ -4,6 +4,8 @@ Essential for coding tasks: find symbols, patterns, or text across
 the workspace.
 """
 
+from __future__ import annotations
+
 import logging
 import re
 from pathlib import Path
@@ -16,63 +18,97 @@ logger = logging.getLogger(__name__)
 SEARCH_FILES_SCHEMA = {
     "name": "search_files",
     "description": (
-        "Search for a pattern in files within a directory. "
-        "Use 'regex' mode for symbol/function/class searches, "
-        "'content' mode for plain text. Returns matching file paths and line previews."
-    ),
+         "Search for a pattern in files within a directory. "
+         "Use 'regex' mode for symbol/function/class searches, "
+         "'content' mode for plain text. Returns matching file paths and line previews."
+     ),
     "parameters": {
-        "type": "object",
-        "properties": {
-            "pattern": {
-                "type": "string",
-                "description": "The search pattern (regex or plain text).",
-            },
-            "path": {
-                "type": "string",
-                "description": "Directory to search in (default: current directory).",
-                "default": ".",
-            },
-            "mode": {
-                "type": "string",
-                "enum": ["regex", "content"],
-                "description": "Search mode: 'regex' for patterns, 'content' for literal text.",
-                "default": "content",
-            },
-            "file_pattern": {
-                "type": "string",
-                "description": "Glob pattern to filter files (e.g., '*.py', 'src/**/*.ts').",
-                "default": "*",
-            },
-            "max_results": {
-                "type": "integer",
-                "description": "Maximum number of matches to return (default: 50).",
-                "default": 50,
-            },
-        },
-        "required": ["pattern"],
-    },
+         "type": "object",
+         "properties": {
+             "pattern": {
+                 "type": "string",
+                 "description": "The search pattern (regex or plain text).",
+             },
+             "path": {
+                 "type": "string",
+                 "description": "Directory to search in (default: current directory).",
+                 "default": ".",
+             },
+             "mode": {
+                 "type": "string",
+                 "enum": ["regex", "content"],
+                 "description": "Search mode: 'regex' for patterns, 'content' for literal text.",
+                 "default": "content",
+             },
+             "file_pattern": {
+                 "type": "string",
+                 "description": "Glob pattern to filter files (e.g., '*.py', 'src/**/*.ts').",
+                 "default": "*",
+             },
+             "max_results": {
+                 "type": "integer",
+                 "description": "Maximum number of matches to return (default: 50).",
+                 "default": 50,
+             },
+         },
+         "required": ["pattern"],
+     },
 }
 
 _MAX_RESULTS = 50
 _MAX_PREVIEW_CHARS = 120
-# Directories to skip by default
-_SKIP_DIRS = {
-    ".git",
-    ".venv",
-    "venv",
-    "env",
-    "node_modules",
-    "__pycache__",
-    ".ruff_cache",
-    ".pytest_cache",
-    "dist",
-    "build",
-    ".mypy_cache",
-}
+
+# Paths that should never be searched
+_BLOCKED_PATHS: frozenset[str] = frozenset({
+    "/etc/shadow",
+    "/etc/passwd",
+    "/etc/ssh",
+    "/proc",
+    "/sys",
+    "/dev",
+})
+_BLOCKED_PREFIXES: tuple[str, ...] = (
+    "/etc/",
+    "/private/etc/",
+    "/proc/",
+    "/sys/",
+    "/dev/",
+)
+
+
+def _is_path_safe(path: Path) -> str | None:
+     """Check if a search path is safe to access. Returns error message or None if safe."""
+    try:
+        resolved = path.resolve()
+    except (OSError, ValueError):
+        return f"Error: Cannot resolve path: {path}"
+
+    path_str = str(resolved)
+
+    if path_str in _BLOCKED_PATHS:
+        return f"Error: Access denied to protected path: {path}"
+
+    for prefix in _BLOCKED_PREFIXES:
+        if path_str.startswith(prefix):
+            return f"Error: Access denied to protected path: {path}"
+
+    # Only allow paths within known safe workspaces (home, /tmp, cwd)
+    workspace_dirs: list[Path] = [Path.home(), Path("/tmp")]
+    try:
+        workspace_dirs.append(Path.cwd().resolve())
+    except OSError:
+        pass
+
+    for ws in workspace_dirs:
+        if path_str.startswith(str(ws)):
+            return None
+
+    logger.debug("Search path resolved outside known workspaces: %s", path_str)
+    return f"Error: Access denied to path outside workspace: {path}"
 
 
 def _search_files(args: dict[str, Any], **kwargs) -> str:
-    """Search for a pattern across files."""
+     """Search for a pattern across files."""
     pattern = args.get("pattern", "")
     search_path = Path(args.get("path", ".")).expanduser()
     mode = args.get("mode", "content")
@@ -85,7 +121,11 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
     if not search_path.exists():
         return f"Error: Path not found: {search_path}"
 
-    # Compile regex if needed
+     # Security check — prevent searching arbitrary system paths
+    if error := _is_path_safe(search_path):
+        return error
+
+     # Compile regex if needed
     if mode == "regex":
         try:
             regex = re.compile(pattern)
@@ -103,7 +143,7 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
         if not file_path.is_file():
             continue
 
-        # Skip hidden/binary dirs
+         # Skip hidden/binary dirs
         if any(part in _SKIP_DIRS for part in file_path.parts):
             continue
 
@@ -133,7 +173,7 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
 
     lines = [f"Found {len(matches)} match(es) for '{pattern}' in {total_files} files:\n"]
     for match_path, line_num, preview in matches:
-        lines.append(f"  {match_path}:{line_num}: {preview}")
+        lines.append(f"   {match_path}:{line_num}: {preview}")
 
     if len(matches) >= max_results:
         lines.append(f"\n[...limited to {max_results} results, refine your search...]")
@@ -141,10 +181,25 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
     return "\n".join(lines)
 
 
+_SKIP_DIRS = {
+     ".git",
+     ".venv",
+     "venv",
+     "env",
+     "node_modules",
+     "__pycache__",
+     ".ruff_cache",
+     ".pytest_cache",
+     "dist",
+     "build",
+     ".mypy_cache",
+}
+
+
 registry.register(
-    name="search_files",
-    toolset="file",
-    schema=SEARCH_FILES_SCHEMA,
-    handler=_search_files,
-    emoji="🔎",
+     name="search_files",
+     toolset="file",
+     schema=SEARCH_FILES_SCHEMA,
+     handler=_search_files,
+     emoji="🔎",
 )

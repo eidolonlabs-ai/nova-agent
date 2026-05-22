@@ -4,6 +4,8 @@ Handles the conversation loop with tool calling, streaming,
 context compression, and session management.
 """
 
+from __future__ import annotations
+
 import copy
 import json
 import logging
