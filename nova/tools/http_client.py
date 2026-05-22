@@ -128,32 +128,34 @@ _MAX_RESPONSE_CHARS = 10000
 _ALLOWED_SCHEMES = {"http", "https"}
 
 # Hostnames/paths we always block
-_BLOCKED_HOSTS = frozenset({
-     "localhost",
-     "127.0.0.1",
-     "::1",
-     "0.0.0.0",
-     "metadata.google.internal",
-     "169.254.169.254",      # AWS metadata
-     "169.254.170.2",       # AWS credentials
-     "metadata.ec2.internal",
-     "kubernetes.default",
-     "metadata.azure.com",
-     "100.64.100.64",       # EC2 metadata v2
-})
+_BLOCKED_HOSTS = frozenset(
+    {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+        "0.0.0.0",
+        "metadata.google.internal",
+        "169.254.169.254",  # AWS metadata
+        "169.254.170.2",  # AWS credentials
+        "metadata.ec2.internal",
+        "kubernetes.default",
+        "metadata.azure.com",
+        "100.64.100.64",  # EC2 metadata v2
+    }
+)
 
 
 def _is_url_safe(url: str) -> tuple[bool, str]:
     """Validate URL format, scheme, and target safety.
 
-     Blocks:
-     - Non http/https schemes
-     - IPv4 private ranges (10.x, 172.16-31.x, 192.168.x)
-     - Link-local (169.254.x)
-     - Unspecified (0.0.0.0)
-     - IPv6 loopback/unspecified
-     - Well-known SSRF hosts (AWS/Azure/GCP metadata endpoints)
-     """
+    Blocks:
+    - Non http/https schemes
+    - IPv4 private ranges (10.x, 172.16-31.x, 192.168.x)
+    - Link-local (169.254.x)
+    - Unspecified (0.0.0.0)
+    - IPv6 loopback/unspecified
+    - Well-known SSRF hosts (AWS/Azure/GCP metadata endpoints)
+    """
     valid, msg = _validate_url(url)
     if not valid:
         return False, msg
@@ -161,6 +163,9 @@ def _is_url_safe(url: str) -> tuple[bool, str]:
     try:
         parsed = httpx.URL(url)
         host = parsed.host
+
+        if not host:
+            return False, "URL denied: missing host"
 
         # Check blocked hostnames
         if host.lower() in _BLOCKED_HOSTS:
@@ -222,6 +227,11 @@ def _make_request(
     # Validate URL
     valid, msg = _validate_url(url)
     if not valid:
+        return f"Error: {msg}"
+
+    # SSRF safety check
+    safe, msg = _is_url_safe(url)
+    if not safe:
         return f"Error: {msg}"
 
     # Validate timeout

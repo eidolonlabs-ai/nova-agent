@@ -386,24 +386,24 @@ class NovaAgent:
         """Check if an error is transient (retryable) vs permanent."""
         error_lower = error_msg.lower()
         transient_keywords = {
-             "timeout",
-             "timed out",
-             "connection",
-             "reset",
-             "refused",
-             "temporarily unavailable",
-             "too many requests",
-             "rate limit",
-             "502",
-             "503",
-             "504",
-             "connection error",
-             "deadline",
-             "cancelled",
-             "canceled",
-             "aborted",
-             "interrupt",
-             "interrupted",
+            "timeout",
+            "timed out",
+            "connection",
+            "reset",
+            "refused",
+            "temporarily unavailable",
+            "too many requests",
+            "rate limit",
+            "502",
+            "503",
+            "504",
+            "connection error",
+            "deadline",
+            "cancelled",
+            "canceled",
+            "aborted",
+            "interrupt",
+            "interrupted",
         }
         return any(kw in error_lower for kw in transient_keywords)
 
@@ -615,9 +615,7 @@ class NovaAgent:
         head = text[:head_chars]
         tail = text[-tail_chars:]
         truncated_tokens = (
-            total_tokens
-            - int(head_chars / chars_per_token)
-            - int(tail_chars / chars_per_token)
+            total_tokens - int(head_chars / chars_per_token) - int(tail_chars / chars_per_token)
         )
 
         return f"{head}\n\n[...{truncated_tokens:,} tokens truncated...]\n\n{tail}"
