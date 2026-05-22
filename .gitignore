@@ -44,6 +44,9 @@ config.yaml
 .DS_Store
 Thumbs.db
 
+# Claude Code
+.claude/worktrees/
+
 # mypy
 .mypy_cache/
 
