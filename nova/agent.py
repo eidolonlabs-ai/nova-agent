@@ -40,7 +40,7 @@ from nova.tokens import (
     estimate_tool_tokens,
     estimate_total_request_tokens,
 )
-from nova.tools.registry import discover_builtin_tools, registry
+from nova.tools.registry import _READ_ONLY_TOOLS, discover_builtin_tools, registry
 from nova.wiki_memory import WikiMemory
 
 logger = logging.getLogger(__name__)
@@ -422,7 +422,7 @@ class NovaAgent:
             return f"Error: Invalid JSON arguments: {arguments_str}"
 
         # Permission check
-        entry = registry._tools.get(name)
+        entry = registry.get_tool(name)
         is_read_only = entry.is_read_only if entry else False
 
         # Extract file_path and command for permission evaluation
@@ -500,8 +500,6 @@ class NovaAgent:
         we parallelize only read-only tool calls; write/mutate tools run
         sequentially after the parallel batch.
         """
-        from nova.tools.registry import _READ_ONLY_TOOLS
-
         read_only_calls = []
         write_calls = []
 

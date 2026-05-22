@@ -156,6 +156,10 @@ class ToolRegistry:
             _hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=args, result=error_result)
             return error_result
 
+    def get_tool(self, name: str) -> ToolEntry | None:
+        """Get a tool entry by name, or None if not found."""
+        return self._tools.get(name)
+
     @property
     def generation(self) -> int:
         return self._generation

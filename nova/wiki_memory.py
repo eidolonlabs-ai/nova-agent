@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import tempfile
+from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -380,11 +381,11 @@ class WikiMemory:
             return {"error": f"Note not found: '{title}'"}
 
         visited: dict[str, int] = {}
-        queue: list[tuple[str, int]] = [(title, 0)]
+        queue: deque[tuple[str, int]] = deque([(title, 0)])
         nodes: list[dict] = []
 
         while queue and len(nodes) < max_notes:
-            current_title, current_depth = queue.pop(0)
+            current_title, current_depth = queue.popleft()
             key = current_title.lower()
             if key in visited:
                 continue
@@ -421,7 +422,7 @@ class WikiMemory:
                 for link in links:
                     link_key = link.lower()
                     if link_key not in visited and link_key in index:
-                        queue.append((link, current_depth + 1))
+                        queue.append((link, current_depth + 1))  # type: ignore[arg-type]
 
         return {"start": title, "depth": depth, "nodes_found": len(nodes), "nodes": nodes}
 

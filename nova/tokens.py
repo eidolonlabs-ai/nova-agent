@@ -5,6 +5,7 @@ falls back to character-based estimation.
 """
 
 import logging
+import threading
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -14,17 +15,20 @@ _CHARS_PER_TOKEN = 4
 
 # Module-level encoder cache — initialised once, reused for every estimate call
 _encoder = None
+_encoder_lock = threading.Lock()
 
 
 def _get_encoder():
     global _encoder
     if _encoder is None:
-        try:
-            import tiktoken
+        with _encoder_lock:
+            if _encoder is None:
+                try:
+                    import tiktoken
 
-            _encoder = tiktoken.get_encoding("cl100k_base")
-        except Exception:
-            pass
+                    _encoder = tiktoken.get_encoding("cl100k_base")
+                except Exception:
+                    pass
     return _encoder
 
 

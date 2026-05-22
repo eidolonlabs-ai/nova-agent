@@ -149,27 +149,31 @@ class SessionStore:
         with sqlite3.connect(self.db_path) as conn:
             # Atomic: get max idx and insert in one transaction to avoid TOCTOU race
             conn.execute("BEGIN IMMEDIATE")
-            cursor = conn.execute(
-                "SELECT COALESCE(MAX(idx), -1) FROM messages WHERE session_id = ?",
-                (session_id,),
-            )
-            idx = cursor.fetchone()[0] + 1
-
-            conn.execute(
-                "INSERT INTO messages (session_id, idx, role, content, tool_calls, timestamp) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (session_id, idx, role, content, tool_calls_json, now),
-            )
-            conn.execute(
-                "UPDATE sessions SET updated_at = ?, message_count = message_count + 1 WHERE session_id = ?",
-                (now, session_id),
-            )
-            # Keep FTS content in sync so search_sessions actually finds messages
-            if role in ("user", "assistant") and content:
-                conn.execute(
-                    "UPDATE session_fts SET content = content || ' ' || ? WHERE session_id = ?",
-                    (content, session_id),
+            try:
+                cursor = conn.execute(
+                    "SELECT COALESCE(MAX(idx), -1) FROM messages WHERE session_id = ?",
+                    (session_id,),
                 )
+                idx = cursor.fetchone()[0] + 1
+
+                conn.execute(
+                    "INSERT INTO messages (session_id, idx, role, content, tool_calls, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (session_id, idx, role, content, tool_calls_json, now),
+                )
+                conn.execute(
+                    "UPDATE sessions SET updated_at = ?, message_count = message_count + 1 WHERE session_id = ?",
+                    (now, session_id),
+                )
+                # Keep FTS content in sync so search_sessions actually finds messages
+                if role in ("user", "assistant") and content:
+                    conn.execute(
+                        "UPDATE session_fts SET content = content || ' ' || ? WHERE session_id = ?",
+                        (content, session_id),
+                    )
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
 
         return idx
 
@@ -275,13 +279,30 @@ class SessionStore:
 
         cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
         with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.execute("SELECT session_id FROM sessions WHERE updated_at < ?", (cutoff,))
-            old_ids = [row[0] for row in cursor.fetchall()]
-            for sid in old_ids:
-                conn.execute("DELETE FROM messages WHERE session_id = ?", (sid,))
-                conn.execute("DELETE FROM session_fts WHERE session_id = ?", (sid,))
-                conn.execute("DELETE FROM session_search WHERE session_id = ?", (sid,))
-            conn.execute("DELETE FROM sessions WHERE updated_at < ?", (cutoff,))
+            conn.execute("BEGIN")
+            try:
+                cursor = conn.execute(
+                    "SELECT session_id FROM sessions WHERE updated_at < ?", (cutoff,)
+                )
+                old_ids = [row[0] for row in cursor.fetchall()]
+                if old_ids:
+                    placeholders = ",".join("?" for _ in old_ids)
+                    conn.execute(
+                        f"DELETE FROM messages WHERE session_id IN ({placeholders})", old_ids
+                    )
+                    conn.execute(
+                        f"DELETE FROM session_fts WHERE session_id IN ({placeholders})", old_ids
+                    )
+                    conn.execute(
+                        f"DELETE FROM session_search WHERE session_id IN ({placeholders})", old_ids
+                    )
+                    conn.execute(
+                        f"DELETE FROM sessions WHERE session_id IN ({placeholders})", old_ids
+                    )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
         logger.info("Pruned %d sessions older than %d days", len(old_ids), older_than_days)
         return len(old_ids)
 

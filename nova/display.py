@@ -151,9 +151,9 @@ def split_reasoning_and_response(text: str) -> tuple[list[dict[str, str | int]],
 
 # ─── Footer spinner (Hermes-style status bar) ────────────────────────────────
 
-_SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
-KAWAII_FACES = [
+KAWAII_FACES = (
     "(｡◕‿◕｡)",
     "( ˘▽˘)っ",
     "(◕ᴗ◕)",
@@ -169,9 +169,9 @@ KAWAII_FACES = [
     "( •_•)>⌐■-■",
     "(⌐■_■)",
     "٩(๑❛ᴗ❛๑)۶",
-]
+)
 
-THINKING_VERBS = [
+THINKING_VERBS = (
     "pondering",
     "contemplating",
     "musing",
@@ -186,7 +186,7 @@ THINKING_VERBS = [
     "computing",
     "synthesizing",
     "formulating",
-]
+)
 
 
 class NovaTUI:
@@ -500,8 +500,11 @@ class NovaTUI:
         process_thread.start()
 
         # ── Run the application inside patch_stdout ───────────────────────────
-        with patch_stdout(), suppress(KeyboardInterrupt):
-            app.run()
+        with patch_stdout():
+            try:
+                app.run()
+            except KeyboardInterrupt:
+                self._should_exit.set()
 
         self._should_exit.set()
         _cprint(f"{_DIM}Goodbye!{_RST}")
