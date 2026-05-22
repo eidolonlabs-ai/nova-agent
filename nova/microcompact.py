@@ -10,6 +10,7 @@ This is Tier 1 of a multi-tier compaction strategy:
 """
 
 import logging
+import copy
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ def microcompact_messages(
 
     for i, msg in enumerate(messages):
         role = msg.get("role", "")
-        new_msg = dict(msg)  # shallow copy
+        new_msg = copy.deepcopy(msg)    # shallow copy (safe: tool_calls replaced entirely)
 
         if i < split_point and role == "tool":
             # Strip old tool content — keep just a placeholder

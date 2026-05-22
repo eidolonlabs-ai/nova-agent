@@ -4,6 +4,7 @@ Handles the conversation loop with tool calling, streaming,
 context compression, and session management.
 """
 
+import copy
 import json
 import logging
 import time
@@ -55,7 +56,7 @@ class NovaAgent:
         wiki_memory_store: WikiMemory | None = None,
         prompt_mode: str = "full",
     ):
-        self.config = config or load_config()
+        self.config = copy.deepcopy(config) if config else load_config()
         self._prompt_mode = prompt_mode
         self.session_id = session_id
         self.messages: list[dict[str, Any]] = []
@@ -383,18 +384,24 @@ class NovaAgent:
         """Check if an error is transient (retryable) vs permanent."""
         error_lower = error_msg.lower()
         transient_keywords = {
-            "timeout",
-            "timed out",
-            "connection",
-            "reset",
-            "refused",
-            "temporarily unavailable",
-            "too many requests",
-            "rate limit",
-            "502",
-            "503",
-            "504",
-            "connection error",
+             "timeout",
+             "timed out",
+             "connection",
+             "reset",
+             "refused",
+             "temporarily unavailable",
+             "too many requests",
+             "rate limit",
+             "502",
+             "503",
+             "504",
+             "connection error",
+             "deadline",
+             "cancelled",
+             "canceled",
+             "aborted",
+             "interrupt",
+             "interrupted",
         }
         return any(kw in error_lower for kw in transient_keywords)
 
@@ -549,7 +556,6 @@ class NovaAgent:
         Messages that haven't changed since the last call are not re-encoded.
         Cache is bounded to 2048 entries to prevent unbounded growth.
         """
-        import json
 
         from nova.tokens import estimate_tokens
 
@@ -608,7 +614,7 @@ class NovaAgent:
         tail = text[-tail_chars:]
         truncated_tokens = (
             total_tokens
-            - int(max_chars * 0.70 / chars_per_token)
+            - int(head_chars / chars_per_token)
             - int(tail_chars / chars_per_token)
         )
 
