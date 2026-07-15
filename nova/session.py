@@ -55,6 +55,7 @@ class SessionStore:
                     role TEXT NOT NULL,
                     content TEXT NOT NULL,
                     tool_calls TEXT,
+                    reasoning_content TEXT,
                     timestamp TEXT NOT NULL,
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id)
                 );
@@ -141,6 +142,7 @@ class SessionStore:
         role: str,
         content: str,
         tool_calls: list | None = None,
+        reasoning_content: str | None = None,
     ) -> int:
         """Add a message to a session. Returns the message index."""
         now = datetime.now().isoformat()
@@ -157,9 +159,10 @@ class SessionStore:
                 idx = cursor.fetchone()[0] + 1
 
                 conn.execute(
-                    "INSERT INTO messages (session_id, idx, role, content, tool_calls, timestamp) "
-                    "VALUES (?, ?, ?, ?, ?, ?)",
-                    (session_id, idx, role, content, tool_calls_json, now),
+                    "INSERT INTO messages "
+                    "(session_id, idx, role, content, tool_calls, reasoning_content, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (session_id, idx, role, content, tool_calls_json, reasoning_content, now),
                 )
                 conn.execute(
                     "UPDATE sessions SET updated_at = ?, message_count = message_count + 1 WHERE session_id = ?",
@@ -183,13 +186,13 @@ class SessionStore:
             if limit:
                 # Use parameterized query to prevent SQL injection
                 query = (
-                    "SELECT role, content, tool_calls FROM messages "
+                    "SELECT role, content, tool_calls, reasoning_content FROM messages "
                     "WHERE session_id = ? ORDER BY idx DESC LIMIT ?"
                 )
                 cursor = conn.execute(query, (session_id, limit))
             else:
                 query = (
-                    "SELECT role, content, tool_calls FROM messages "
+                    "SELECT role, content, tool_calls, reasoning_content FROM messages "
                     "WHERE session_id = ? ORDER BY idx"
                 )
                 cursor = conn.execute(query, (session_id,))
@@ -201,6 +204,8 @@ class SessionStore:
                 }
                 if row[2]:
                     msg["tool_calls"] = json.loads(row[2])
+                if row[3]:
+                    msg["reasoning_content"] = row[3]
                 messages.append(msg)
 
             if limit:
@@ -279,30 +284,18 @@ class SessionStore:
 
         cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
         with sqlite3.connect(self.db_path) as conn:
-            conn.execute("BEGIN")
-            try:
-                cursor = conn.execute(
-                    "SELECT session_id FROM sessions WHERE updated_at < ?", (cutoff,)
+            cursor = conn.execute("SELECT session_id FROM sessions WHERE updated_at < ?", (cutoff,))
+            old_ids = [row[0] for row in cursor.fetchall()]
+            if old_ids:
+                placeholders = ",".join("?" for _ in old_ids)
+                conn.execute(f"DELETE FROM messages WHERE session_id IN ({placeholders})", old_ids)
+                conn.execute(
+                    f"DELETE FROM session_fts WHERE session_id IN ({placeholders})", old_ids
                 )
-                old_ids = [row[0] for row in cursor.fetchall()]
-                if old_ids:
-                    placeholders = ",".join("?" for _ in old_ids)
-                    conn.execute(
-                        f"DELETE FROM messages WHERE session_id IN ({placeholders})", old_ids
-                    )
-                    conn.execute(
-                        f"DELETE FROM session_fts WHERE session_id IN ({placeholders})", old_ids
-                    )
-                    conn.execute(
-                        f"DELETE FROM session_search WHERE session_id IN ({placeholders})", old_ids
-                    )
-                    conn.execute(
-                        f"DELETE FROM sessions WHERE session_id IN ({placeholders})", old_ids
-                    )
-                conn.execute("COMMIT")
-            except Exception:
-                conn.execute("ROLLBACK")
-                raise
+                conn.execute(
+                    f"DELETE FROM session_search WHERE session_id IN ({placeholders})", old_ids
+                )
+                conn.execute(f"DELETE FROM sessions WHERE session_id IN ({placeholders})", old_ids)
         logger.info("Pruned %d sessions older than %d days", len(old_ids), older_than_days)
         return len(old_ids)
 

@@ -306,3 +306,46 @@ def test_session_message_count_increments():
 
         store.add_message(sid, "assistant", "msg2")
         assert store.get_session_info(sid)["message_count"] == 2
+
+
+def test_reasoning_content_persists():
+    """reasoning_content must round-trip through add_message/get_messages.
+
+    Without this, DeepSeek-style thinking models lose their chain of thought
+    on session resume, which makes the next LLM call incoherent.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "test.db"
+        store = SessionStore(db)
+
+        sid = store.create_session()
+        store.add_message(
+            sid,
+            "assistant",
+            "",
+            tool_calls=[
+                {"id": "1", "type": "function", "function": {"name": "x", "arguments": "{}"}}
+            ],
+            reasoning_content="step 1: think about the problem",
+        )
+
+        msgs = store.get_messages(sid)
+        assert msgs[0]["reasoning_content"] == "step 1: think about the problem"
+        assert msgs[0]["tool_calls"][0]["function"]["name"] == "x"
+
+
+def test_reasoning_content_omitted_when_none():
+    """If reasoning_content is None it must not appear in loaded messages.
+
+    Loading sessions added before this column existed, or assistant messages
+    without reasoning, must not include an empty field that confuses callers.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "test.db"
+        store = SessionStore(db)
+
+        sid = store.create_session()
+        store.add_message(sid, "assistant", "regular reply")
+
+        msgs = store.get_messages(sid)
+        assert "reasoning_content" not in msgs[0]

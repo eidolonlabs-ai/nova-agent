@@ -236,9 +236,7 @@ class NovaAgent:
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
-        else:
-            # Some models reject empty tools array
-            pass
+        # else: omit tools entirely — some models reject an empty tools array.
 
         max_retries = retry_cfg.get("max_retries", 3)
         base_delay = retry_cfg.get("base_delay", 1.0)
@@ -500,15 +498,15 @@ class NovaAgent:
         we parallelize only read-only tool calls; write/mutate tools run
         sequentially after the parallel batch.
         """
-        read_only_calls = []
-        write_calls = []
+        read_only_calls: list[tuple[int, dict]] = []
+        write_calls: list[tuple[int, dict]] = []
 
-        for tc in tool_calls:
+        for idx, tc in enumerate(tool_calls):
             fn_name = tc.get("function", {}).get("name", "")
             if fn_name in _READ_ONLY_TOOLS:
-                read_only_calls.append(tc)
+                read_only_calls.append((idx, tc))
             else:
-                write_calls.append(tc)
+                write_calls.append((idx, tc))
 
         results: list[str | None] = [None] * len(tool_calls)
 
@@ -516,11 +514,9 @@ class NovaAgent:
         if read_only_calls:
             max_workers = min(len(read_only_calls), 4)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_idx = {}
-                for tc in read_only_calls:
-                    idx = tool_calls.index(tc)
-                    future = executor.submit(self._execute_tool_call, tc)
-                    future_to_idx[future] = idx
+                future_to_idx = {
+                    executor.submit(self._execute_tool_call, tc): idx for idx, tc in read_only_calls
+                }
 
                 for future in as_completed(future_to_idx):
                     idx = future_to_idx[future]
@@ -539,8 +535,7 @@ class NovaAgent:
                             tool_cb(fn_name)
 
         # Execute write/mutate tools sequentially
-        for tc in write_calls:
-            idx = tool_calls.index(tc)
+        for idx, tc in write_calls:
             tool_cb = getattr(self, "_tool_callback", None)
             if tool_cb:
                 fn_name = tc.get("function", {}).get("name", "")
@@ -779,6 +774,7 @@ class NovaAgent:
                 "assistant",
                 content or "" if not tool_calls else "",
                 tool_calls=tool_calls,
+                reasoning_content=reasoning_content,
             )
             api_messages.append(assistant_msg)
 

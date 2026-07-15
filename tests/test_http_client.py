@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 import httpx
 import pytest
 
-from nova.tools.http_client import _http_delete, _http_get, _http_post, _http_put
+from nova.tools.http_client import _http_delete, _http_get, _http_post, _http_put, _is_url_safe
 
 
 @pytest.fixture
@@ -140,3 +140,55 @@ class TestTimeoutValidation:
         """Test negative timeout."""
         result = _http_get({"url": "https://example.com/api", "timeout": -1})
         assert "Error:" in result
+
+
+class TestSSRFProtection:
+    """Tests for SSRF protection in _is_url_safe.
+
+    The check must inspect every A record returned by getaddrinfo, not just
+    the first one — that's what makes DNS rebinding attacks harder. A host
+    that resolves to a mix of public and private IPs should be denied.
+    """
+
+    def test_blocks_hostname_resolving_to_private_ip(self):
+        fake_info = [
+            (2, 1, 6, "", ("10.0.0.5", 0)),
+        ]
+        with patch("nova.tools.http_client.socket.getaddrinfo", return_value=fake_info):
+            ok, msg = _is_url_safe("https://evil.example.com/")
+        assert ok is False
+        assert "private" in msg.lower()
+
+    def test_blocks_when_any_record_is_private(self):
+        # Multi-IP host: first A record is public, second is link-local.
+        # Old code that called gethostbyname() would have seen only the
+        # first (public) record and let this through.
+        fake_info = [
+            (2, 1, 6, "", ("8.8.8.8", 0)),
+            (2, 1, 6, "", ("169.254.169.254", 0)),  # AWS metadata
+        ]
+        with patch("nova.tools.http_client.socket.getaddrinfo", return_value=fake_info):
+            ok, _ = _is_url_safe("https://rebind.example.com/")
+        assert ok is False
+
+    def test_blocks_aws_metadata_endpoint(self):
+        # Direct hit, no DNS shenanigans
+        ok, _ = _is_url_safe("https://169.254.169.254/latest/meta-data/")
+        assert ok is False
+
+    def test_blocks_loopback(self):
+        ok, _ = _is_url_safe("http://127.0.0.1/admin")
+        assert ok is False
+
+    def test_blocks_non_http_scheme(self):
+        ok, _ = _is_url_safe("file:///etc/passwd")
+        assert ok is False
+
+    def test_blocks_unresolvable_host(self):
+        with patch(
+            "nova.tools.http_client.socket.getaddrinfo",
+            side_effect=OSError("no such host"),
+        ):
+            ok, msg = _is_url_safe("https://nope.invalid/")
+        assert ok is False
+        assert "unable to resolve" in msg.lower()

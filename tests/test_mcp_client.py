@@ -73,6 +73,27 @@ def test_add_server_named():
     assert "my-server" in client._server_configs
 
 
+def test_add_two_http_servers_get_distinct_names():
+    """Regression: add_server() used to give every HTTP server the default
+    name 'http-0' regardless of URL, so the second one silently overwrote
+    the first. Names must now be derived from the URL.
+    """
+    client = McpClient()
+    client.add_server(McpHttpConfig(url="https://a.example.com/mcp"))
+    client.add_server(McpHttpConfig(url="https://b.example.com/mcp"))
+    assert len(client._server_configs) == 2
+    assert "http:https://a.example.com/mcp" in client._server_configs
+    assert "http:https://b.example.com/mcp" in client._server_configs
+
+
+def test_add_two_sse_servers_get_distinct_names():
+    """Same regression as above for SSE transport."""
+    client = McpClient()
+    client.add_server(McpSseConfig(url="https://a.example.com/sse"))
+    client.add_server(McpSseConfig(url="https://b.example.com/sse"))
+    assert len(client._server_configs) == 2
+
+
 def test_remove_server():
     client = McpClient()
     client.add_server_named("test", McpHttpConfig(url="https://example.com"))

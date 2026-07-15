@@ -130,6 +130,15 @@ def _wiki_tool(args: dict[str, Any], **kwargs) -> str:
         return f"Error: {e}"
 
 
+def _dump(result: Any) -> str:
+    """Serialize a result as compact JSON (no indent, ASCII-safe) for tool returns.
+
+    The wiki tool can be called many times per turn, and indented JSON costs
+    tokens. This is the single chokepoint so all results stay consistent.
+    """
+    return json.dumps(result, ensure_ascii=False, separators=(",", ":"))
+
+
 def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
     if action == "write":
         title = args.get("title", "").strip()
@@ -141,7 +150,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         tags = args.get("tags") or []
         result = wiki.write(title, content, tags)
         _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "append":
         title = args.get("title", "").strip()
@@ -152,7 +161,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
             return "Error: 'content' is required for append."
         result = wiki.append(title, content)
         _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "patch":
         title = args.get("title", "").strip()
@@ -168,7 +177,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         result = wiki.patch(title, old_text, new_text, count=count)
         if result.get("status") == "patched":
             _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "replace":
         old_text = args.get("old_text")
@@ -181,7 +190,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         result = wiki.vault_replace(old_text, new_text, count=count)
         if result["patched_notes"]:
             _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "add_tag":
         title = args.get("title", "").strip()
@@ -193,7 +202,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         result = wiki.add_tag(title, tag)
         if result.get("status") == "added":
             _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "remove_tag":
         title = args.get("title", "").strip()
@@ -205,7 +214,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         result = wiki.remove_tag(title, tag)
         if result.get("status") == "removed":
             _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "pin":
         title = args.get("title", "").strip()
@@ -214,7 +223,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         result = wiki.pin(title)
         if result.get("status") == "pinned":
             _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "unpin":
         title = args.get("title", "").strip()
@@ -223,7 +232,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         result = wiki.unpin(title)
         if result.get("status") == "unpinned":
             _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "read":
         title = args.get("title", "").strip()
@@ -254,14 +263,14 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         results = wiki.search(query)
         if not results:
             return f"No notes found matching '{query}'."
-        return json.dumps(results, indent=2, ensure_ascii=False)
+        return _dump(results)
 
     elif action == "list":
         tag = args.get("tag")
         notes = wiki.list_notes(tag=tag)
         if not notes:
             return "No notes found."
-        return json.dumps(notes, indent=2, ensure_ascii=False)
+        return _dump(notes)
 
     elif action == "delete":
         title = args.get("title", "").strip()
@@ -275,7 +284,7 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
             response["warning"] = (
                 f"{broken} note(s) still link to '[[{title}]]' — consider updating them."
             )
-        return json.dumps(response)
+        return _dump(response)
 
     elif action == "rename":
         title = args.get("title", "").strip()
@@ -287,13 +296,13 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         result = wiki.rename(title, new_title)
         if result.get("status") == "renamed":
             _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "list_tags":
         tags = wiki.list_tags()
         if not tags:
             return "No tags found."
-        return json.dumps(tags, indent=2, ensure_ascii=False)
+        return _dump(tags)
 
     elif action == "rename_tag":
         old_tag = args.get("old_tag", "").strip()
@@ -305,12 +314,12 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         result = wiki.rename_tag(old_tag, new_tag)
         if result.get("updated_notes"):
             _refresh(kwargs)
-        return json.dumps(result)
+        return _dump(result)
 
     elif action == "maintenance":
         stale_days = args.get("stale_days", 90)
         report = wiki.maintenance(stale_days=stale_days)
-        return json.dumps(report, indent=2, ensure_ascii=False)
+        return _dump(report)
 
     elif action == "follow":
         title = args.get("title", "").strip()
@@ -324,14 +333,14 @@ def _dispatch(wiki, action: str, args: dict[str, Any], kwargs: dict) -> str:
         )
         if "error" in result:
             return f"Note not found: '{title}'"
-        return json.dumps(result, indent=2, ensure_ascii=False)
+        return _dump(result)
 
     elif action == "backlinks":
         title = args.get("title", "").strip()
         if not title:
             return "Error: 'title' is required for backlinks."
         results = wiki.backlinks(title)
-        return json.dumps(results, indent=2, ensure_ascii=False)
+        return _dump(results)
 
     return (
         f"Error: Unknown action '{action}'. "

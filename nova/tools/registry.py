@@ -14,9 +14,11 @@ from nova.hooks import EVENT_POST_TOOL_CALL, EVENT_PRE_TOOL_CALL
 logger = logging.getLogger(__name__)
 
 
-# Tools that are inherently read-only (never mutate state)
-# delegate_task is included here to allow the parent agent to spawn multiple
-# sub-agents in parallel.
+# Tools that are inherently read-only (never mutate state).
+# These are eligible for parallel dispatch — multiple read-only tool calls
+# in the same LLM response run concurrently.
+# delegate_task is intentionally NOT here: it spawns sub-agents with shared
+# state (wiki, session store) and is not safe to fan out in parallel.
 _READ_ONLY_TOOLS: frozenset[str] = frozenset(
     {
         "read_file",
@@ -24,7 +26,6 @@ _READ_ONLY_TOOLS: frozenset[str] = frozenset(
         "web_search",
         "skills_list",
         "skill_view",
-        "delegate_task",
     }
 )
 

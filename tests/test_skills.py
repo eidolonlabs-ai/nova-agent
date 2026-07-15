@@ -68,6 +68,34 @@ Some body text."""
     assert body == content
 
 
+def test_parse_frontmatter_multiline_value():
+    """YAML frontmatter can have multi-line values. The previous hand-rolled
+    parser dropped them; pyyaml handles them correctly.
+    """
+    content = """---
+name: multiline-skill
+description: |
+  A long description
+  that spans multiple lines.
+---
+Body."""
+    fm, _ = parse_frontmatter(content)
+    assert "long description" in fm["description"]
+    assert "spans multiple" in fm["description"]
+
+
+def test_parse_frontmatter_invalid_yaml_falls_back():
+    """If YAML is malformed, return empty frontmatter and the full body."""
+    content = """---
+name: [unclosed
+: : :
+---
+Body."""
+    fm, body = parse_frontmatter(content)
+    assert fm == {}
+    assert "Body." in body
+
+
 def test_extract_description_from_frontmatter():
     """Test that description is extracted from frontmatter first."""
     fm = {"description": "This is the description."}

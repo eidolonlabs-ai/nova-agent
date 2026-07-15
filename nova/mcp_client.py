@@ -447,13 +447,25 @@ class McpClient:
         self._connected: set[str] = set()
 
     def add_server(self, config: McpServerConfig) -> None:
-        """Register an MCP server configuration."""
-        name = getattr(config, "name", f"{config.type}-{len(self._server_configs)}")
-        # For stdio configs without a name, use command as name
-        if isinstance(config, McpStdioConfig) and not config.command:
-            name = f"stdio-{len(self._server_configs)}"
-        elif isinstance(config, McpStdioConfig):
-            name = config.command.split("/")[-1] or config.command
+        """Register an MCP server configuration.
+
+        Derives a name from the config so two HTTP/SSE servers don't collide
+        on a default name. For unambiguous naming across multiple servers,
+        prefer add_server_named().
+        """
+        if isinstance(config, McpStdioConfig):
+            if not config.command:
+                name = f"stdio-{len(self._server_configs)}"
+            else:
+                # Use the command's basename; same command + same args will
+                # still collide — use add_server_named() to disambiguate.
+                name = config.command.split("/")[-1] or config.command
+        elif isinstance(config, McpHttpConfig):
+            name = f"http:{config.url}" if config.url else f"http-{len(self._server_configs)}"
+        elif isinstance(config, McpSseConfig):
+            name = f"sse:{config.url}" if config.url else f"sse-{len(self._server_configs)}"
+        else:
+            name = f"{config.type}-{len(self._server_configs)}"
         self._server_configs[name] = config
         logger.info("Registered MCP server: %s (type=%s)", name, config.type)
 

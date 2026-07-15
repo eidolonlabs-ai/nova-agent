@@ -81,6 +81,18 @@ def test_search_found(wiki: WikiMemory):
     assert data[0]["title"] == "Alpha"
 
 
+def test_search_returns_compact_json(wiki: WikiMemory):
+    """Wiki tool results are returned as compact (no-indent) JSON to save
+    tokens across many tool calls in a single turn.
+    """
+    wiki.write("A", "x")
+    wiki.write("B", "y")
+    result = _wiki_tool({"action": "list"}, wiki=wiki)
+    # Compact JSON must have no newlines and no leading whitespace
+    assert "\n" not in result
+    assert "  " not in result
+
+
 def test_search_not_found(wiki: WikiMemory):
     wiki.write("Note", "no match here")
     result = _wiki_tool({"action": "search", "query": "zzz_absent"}, wiki=wiki)

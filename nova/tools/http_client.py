@@ -171,20 +171,27 @@ def _is_url_safe(url: str) -> tuple[bool, str]:
         if host.lower() in _BLOCKED_HOSTS:
             return False, f"URL denied: {host} is a reserved address"
 
-        addr = ipaddress.ip_address(socket.gethostbyname(host))
-
-        # Block private/reserved ranges
-        if addr.is_private:
-            return False, f"URL denied: {host} is a private address"
-
-        if addr.is_loopback:
-            return False, f"URL denied: {host} is a loopback address"
-
-        if addr.is_link_local:
-            return False, f"URL denied: {host} is a link-local address"
-
-        if addr.is_reserved:
-            return False, f"URL denied: {host} is a reserved address"
+        # Resolve every address the host maps to and check each one. A single
+        # gethostbyname() call returns only the first A record and is checked
+        # before httpx resolves again — DNS rebinding between those two calls
+        # is the classic SSRF bypass. By checking every address returned by
+        # getaddrinfo() we close that window without needing a custom resolver.
+        infos = socket.getaddrinfo(host, None)
+        for info in infos:
+            sockaddr = info[4]
+            addr_str = sockaddr[0]
+            try:
+                addr = ipaddress.ip_address(addr_str)
+            except ValueError:
+                return False, f"URL denied: {addr_str} is not a valid IP"
+            if addr.is_private:
+                return False, f"URL denied: {host} resolves to private address {addr_str}"
+            if addr.is_loopback:
+                return False, f"URL denied: {host} resolves to loopback address {addr_str}"
+            if addr.is_link_local:
+                return False, f"URL denied: {host} resolves to link-local address {addr_str}"
+            if addr.is_reserved:
+                return False, f"URL denied: {host} resolves to reserved address {addr_str}"
 
     except (socket.gaierror, OSError, ValueError) as e:
         return False, f"URL denied: unable to resolve host — {e}"

@@ -6,8 +6,22 @@ based on per-model pricing from OpenRouter response headers.
 
 import logging
 from dataclasses import dataclass, field
+from typing import TypedDict
 
 logger = logging.getLogger(__name__)
+
+
+class UsageDelta(TypedDict, total=False):
+    """One response's worth of usage, ready to splat into CostTracker.add_usage.
+
+    `total=False` because not all fields are always present — add_usage()
+    supplies its own defaults.
+    """
+
+    input_tokens: int
+    output_tokens: int
+    input_cost: float
+    output_cost: float
 
 
 # Approximate per-model pricing (USD per 1M tokens)
@@ -124,23 +138,22 @@ class CostTracker:
         return " | ".join(lines)
 
 
-def extract_usage_from_response(response_data: dict) -> dict[str, int]:
+def extract_usage_from_response(response_data: dict) -> UsageDelta:
     """Extract token usage from an OpenRouter API response.
 
     OpenRouter returns usage in the response body under 'usage' key.
     Also checks for cost headers.
 
-    Returns dict with input_tokens, output_tokens, and optionally
-    input_cost, output_cost from headers.
+    Returns a UsageDelta with input_tokens, output_tokens, and optionally
+    input_cost, output_cost from headers — splat-safe into add_usage().
     """
     usage = response_data.get("usage", {})
-    result: dict[str, int] = {
+    result: UsageDelta = {
         "input_tokens": usage.get("prompt_tokens", 0),
         "output_tokens": usage.get("completion_tokens", 0),
     }
 
-    # OpenRouter may include cost in the usage dict
     if "cost" in usage:
-        result["output_cost"] = usage["cost"]  # type: ignore[assignment]
+        result["output_cost"] = usage["cost"]
 
-    return result  # type: ignore[return-value]
+    return result

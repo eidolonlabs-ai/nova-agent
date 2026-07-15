@@ -13,6 +13,8 @@ import json
 import logging
 from pathlib import Path
 
+import yaml
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,22 +33,14 @@ def parse_frontmatter(content: str) -> tuple[dict, str]:
     body = content[end + 4 :].lstrip("\n")
     frontmatter_text = content[3:end].strip()
 
-    # Simple YAML parsing (avoid pyyaml dependency for frontmatter)
-    frontmatter = {}
-    for line in frontmatter_text.split("\n"):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if ":" in line:
-            key, _, value = line.partition(":")
-            key = key.strip()
-            value = value.strip().strip('"').strip("'")
-            if value.startswith("[") and value.endswith("]"):
-                # Parse list
-                items = [item.strip().strip('"').strip("'") for item in value[1:-1].split(",")]
-                frontmatter[key] = [i for i in items if i]
-            else:
-                frontmatter[key] = value  # type: ignore[assignment]
+    try:
+        frontmatter = yaml.safe_load(frontmatter_text) or {}
+    except yaml.YAMLError as e:
+        logger.warning("Failed to parse skill frontmatter: %s", e)
+        return {}, body
+
+    if not isinstance(frontmatter, dict):
+        return {}, body
 
     return frontmatter, body
 
