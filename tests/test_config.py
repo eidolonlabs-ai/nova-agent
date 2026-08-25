@@ -1,11 +1,14 @@
 """Tests for configuration loading."""
 
+import copy
 import os
 import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from nova.config import _deep_merge, _resolve_env_vars, load_config
+import pytest
+
+from nova.config import DEFAULT_CONFIG, ConfigError, _deep_merge, _resolve_env_vars, load_config
 
 
 def test_default_config():
@@ -36,6 +39,25 @@ def test_env_var_resolution():
 def test_env_var_unchanged_if_missing():
     result = _resolve_env_vars("prefix ${NONEXISTENT_VAR_12345} suffix")
     assert result == "prefix ${NONEXISTENT_VAR_12345} suffix"
+
+
+@pytest.mark.parametrize(
+    ("section", "key", "value"),
+    [
+        ("agent", "max_iterations", 0),
+        ("agent", "temperature", 3.0),
+        ("budgets", "tool_result_max_chars", -1),
+        ("compression", "threshold_percent", 1.5),
+        ("retry", "max_retries", 11),
+    ],
+)
+def test_invalid_config_values_are_rejected(section, key, value):
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config[section][key] = value
+    with pytest.raises(ConfigError):
+        from nova.config import _validate_config
+
+        _validate_config(config)
 
 
 def test_global_config_loaded():

@@ -446,11 +446,6 @@ class NovaAgent:
             "504",
             "connection error",
             "deadline",
-            "cancelled",
-            "canceled",
-            "aborted",
-            "interrupt",
-            "interrupted",
         }
         return any(kw in error_lower for kw in transient_keywords)
 
@@ -501,6 +496,7 @@ class NovaAgent:
 
         # Execute with automatic retry on transient errors
         max_retries = max(0, self.config.get("agent", {}).get("tool_retry_max_attempts", 2))
+        result = ""
         for attempt in range(max_retries + 1):
             # Pass config, wiki, and agent reference to tool handlers via kwargs
             result = registry.dispatch(
@@ -517,7 +513,8 @@ class NovaAgent:
 
             # Retry on transient errors (timeout, network, rate-limit)
             is_transient = (
-                isinstance(result, str)
+                is_read_only
+                and isinstance(result, str)
                 and result.startswith("Error:")
                 and self._is_transient_error(result)
                 and attempt < max_retries

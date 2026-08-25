@@ -97,6 +97,47 @@ DEFAULT_CONFIG = {
 }
 
 
+class ConfigError(ValueError):
+    """Raised when configuration values cannot be used safely."""
+
+
+def _validate_config(config: dict[str, Any]) -> None:
+    """Validate resource and model controls before they reach the agent loop."""
+    sections = ("llm", "agent", "budgets", "compression", "microcompact", "retry")
+    for section in sections:
+        if not isinstance(config.get(section), dict):
+            raise ConfigError(f"Config section '{section}' must be a mapping")
+
+    agent = config["agent"]
+    if not isinstance(agent.get("max_iterations"), int) or not 1 <= agent["max_iterations"] <= 1000:
+        raise ConfigError("agent.max_iterations must be an integer between 1 and 1000")
+    for name, low, high in (("temperature", 0.0, 2.0), ("top_p", 0.0, 1.0)):
+        value = agent.get(name)
+        if not isinstance(value, (int, float)) or not low <= value <= high:
+            raise ConfigError(f"agent.{name} must be between {low} and {high}")
+
+    budgets = config["budgets"]
+    for name, value in budgets.items():
+        if not isinstance(value, int) or value < 1:
+            raise ConfigError(f"budgets.{name} must be a positive integer")
+
+    compression = config["compression"]
+    threshold = compression.get("threshold_percent")
+    if not isinstance(threshold, (int, float)) or not 0.05 <= threshold <= 0.95:
+        raise ConfigError("compression.threshold_percent must be between 0.05 and 0.95")
+
+    microcompact = config["microcompact"]
+    if not isinstance(microcompact.get("keep_recent"), int) or microcompact["keep_recent"] < 0:
+        raise ConfigError("microcompact.keep_recent must be a non-negative integer")
+
+    retry = config["retry"]
+    if not isinstance(retry.get("max_retries"), int) or not 0 <= retry["max_retries"] <= 10:
+        raise ConfigError("retry.max_retries must be between 0 and 10")
+    for name in ("base_delay", "max_delay"):
+        if not isinstance(retry.get(name), (int, float)) or retry[name] < 0:
+            raise ConfigError(f"retry.{name} must be non-negative")
+
+
 def _resolve_env_vars(value: Any) -> Any:
     """Resolve ${ENV_VAR} and $ENV_VAR placeholders in config values."""
     if isinstance(value, str):
@@ -218,6 +259,7 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
             "LLM_API_KEY", os.environ.get("OPENROUTER_API_KEY", "")
         )
 
+    _validate_config(config)
     return config
 
 

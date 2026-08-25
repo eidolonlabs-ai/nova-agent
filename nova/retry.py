@@ -46,6 +46,7 @@ _CONNECTION_ERROR_PATTERNS = [
 # API-level timeouts (may be permanent — retry only once)
 _API_TIMEOUT_PATTERNS = [
     "timeout",
+    "timed out",
     "temporary failure",
     "gateway timeout",
 ]
