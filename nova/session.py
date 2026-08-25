@@ -8,6 +8,7 @@ import json
 import logging
 import sqlite3
 import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
@@ -20,22 +21,38 @@ class SessionStore:
     def __init__(self, db_path: Path):
         self.db_path = db_path
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.db_path.parent.chmod(0o700)
         self._init_db()
+        self.db_path.chmod(0o600)
         atexit.register(self.close)
+
+    @contextmanager
+    def _connection(self):
+        """Open a short-lived SQLite connection with production-safe defaults."""
+        conn = sqlite3.connect(self.db_path, timeout=5.0)
+        try:
+            conn.execute("PRAGMA busy_timeout=5000")
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def close(self) -> None:
         """Merge FTS5 index segments for efficient future searches."""
         if not self.db_path.exists():
             return
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self._connection() as conn:
                 conn.execute("PRAGMA optimize")
         except sqlite3.OperationalError:
             pass
 
     def _init_db(self):
         """Initialize database schema."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             conn.execute("PRAGMA journal_mode=WAL")
             conn.executescript("""
                 CREATE TABLE IF NOT EXISTS sessions (
@@ -126,7 +143,7 @@ class SessionStore:
             session_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
 
         now = datetime.now().isoformat()
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             conn.execute(
                 "INSERT INTO sessions (session_id, created_at, updated_at, model, system_prompt, title, message_count) "
                 "VALUES (?, ?, ?, ?, ?, ?, 0)",
@@ -153,7 +170,7 @@ class SessionStore:
         now = datetime.now().isoformat()
         tool_calls_json = json.dumps(tool_calls) if tool_calls else None
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             # Atomic: get max idx and insert in one transaction to avoid TOCTOU race
             conn.execute("BEGIN IMMEDIATE")
             try:
@@ -196,7 +213,7 @@ class SessionStore:
 
     def get_messages(self, session_id: str, limit: int | None = None) -> list[dict]:
         """Get all messages for a session, optionally limited."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             if limit:
                 # Use parameterized query to prevent SQL injection
                 query = (
@@ -231,7 +248,7 @@ class SessionStore:
 
     def get_session_info(self, session_id: str) -> dict | None:
         """Get session metadata."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             cursor = conn.execute(
                 "SELECT session_id, created_at, updated_at, model, system_prompt, title, message_count "
                 "FROM sessions WHERE session_id = ?",
@@ -253,7 +270,7 @@ class SessionStore:
 
     def update_system_prompt(self, session_id: str, system_prompt: str):
         """Update the system prompt for a session."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             conn.execute(
                 "UPDATE sessions SET system_prompt = ?, updated_at = ? WHERE session_id = ?",
                 (system_prompt, datetime.now().isoformat(), session_id),
@@ -261,7 +278,7 @@ class SessionStore:
 
     def list_sessions(self, limit: int = 20) -> list[dict]:
         """List recent sessions."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             cursor = conn.execute(
                 "SELECT session_id, created_at, updated_at, model, title, message_count "
                 "FROM sessions ORDER BY updated_at DESC LIMIT ?",
@@ -281,7 +298,7 @@ class SessionStore:
 
     def delete_session(self, session_id: str) -> bool:
         """Delete a session and all its messages. Returns True if deleted."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             cursor = conn.execute(
                 "SELECT session_id FROM sessions WHERE session_id = ?", (session_id,)
             )
@@ -299,7 +316,7 @@ class SessionStore:
         from datetime import timedelta
 
         cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             cursor = conn.execute("SELECT session_id FROM sessions WHERE updated_at < ?", (cutoff,))
             old_ids = [row[0] for row in cursor.fetchall()]
             if old_ids:
@@ -322,7 +339,7 @@ class SessionStore:
         fts_query = query.replace('"', "").strip()
         if not fts_query:
             return []
-        with sqlite3.connect(self.db_path) as conn:
+        with self._connection() as conn:
             cursor = conn.execute(
                 "SELECT s.session_id, s.title, s.updated_at, s.message_count "
                 "FROM sessions s "
