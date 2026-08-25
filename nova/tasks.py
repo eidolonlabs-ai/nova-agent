@@ -214,32 +214,47 @@ class BackgroundTaskManager:
             if not proc or proc.poll() is not None:
                 task.status = STATUS_COMPLETED
                 task.ended_at = time.time()
-                self._notify_completion(task)
-                return f"Task '{task_id}' already finished."
+                finished = True
+            else:
+                finished = False
 
-            # SIGTERM first
+        if finished:
+            self._notify_completion(task)
+            return f"Task '{task_id}' already finished."
+
+        if proc is None:
+            return f"Task '{task_id}' already finished."
+
+        # Signal outside the lock so status queries stay responsive during the
+        # grace period, then finalize under the lock.
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            logger.info("Sent SIGTERM to task %s (pid=%d)", task_id, proc.pid)
+        except OSError:
+            pass
+
+        for _ in range(30):
+            if proc.poll() is not None:
+                break
+            time.sleep(0.1)
+        else:
             try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                logger.info("Sent SIGTERM to task %s (pid=%d)", task_id, proc.pid)
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                logger.info("Sent SIGKILL to task %s (pid=%d)", task_id, proc.pid)
             except OSError:
                 pass
 
-            # Wait up to 3 seconds
-            for _ in range(30):
-                if proc.poll() is not None:
-                    break
-                time.sleep(0.1)
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if task and task.status not in TERMINAL_STATUSES:
+                task.status = STATUS_KILLED
+                task.ended_at = time.time()
+                task.return_code = proc.returncode
+                finalizing = True
             else:
-                # SIGKILL
-                try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-                    logger.info("Sent SIGKILL to task %s (pid=%d)", task_id, proc.pid)
-                except OSError:
-                    pass
+                finalizing = False
 
-            task.status = STATUS_KILLED
-            task.ended_at = time.time()
-            task.return_code = proc.returncode
+        if task and finalizing:
             self._notify_completion(task)
         return f"Task '{task_id}' stopped."
 
@@ -280,20 +295,24 @@ class BackgroundTaskManager:
             return_code = -1
             logger.error("Error watching task %s: %s", task_id, e)
 
+        should_notify = False
         with self._lock:
             task = self._tasks.get(task_id)
             self._processes.pop(task_id, None)
+            # A concurrent stop_task may have already finalized this record;
+            # never regress a terminal status or fire listeners twice.
+            if task and task.status not in TERMINAL_STATUSES:
+                task.return_code = return_code
+                task.ended_at = time.time()
+                task.status = STATUS_COMPLETED if return_code == 0 else STATUS_FAILED
+                should_notify = True
 
-        if task:
-            task.return_code = return_code
-            task.ended_at = time.time()
-            task.status = STATUS_COMPLETED if return_code == 0 else STATUS_FAILED
-
+        if task and should_notify:
             logger.info(
                 "Background task %s finished (exit=%d) after %.1fs",
                 task_id,
                 return_code,
-                (task.ended_at - (task.started_at or task.created_at)),
+                ((task.ended_at or time.time()) - (task.started_at or task.created_at)),
             )
             self._notify_completion(task)
 

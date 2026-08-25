@@ -343,7 +343,7 @@ class TestCmdReset:
         assert "Deleted session sess-123" in captured.out
 
     def test_cmd_reset_session_not_found(self, capsys):
-        """Test reset when session doesn't exist."""
+        """Test reset when session doesn't exist exits nonzero."""
         args = MagicMock(session_id="nonexistent")
 
         with (
@@ -355,8 +355,10 @@ class TestCmdReset:
             mock_store.delete_session.return_value = False
             mock_store_cls.return_value = mock_store
 
-            cmd_reset(args)
+            with pytest.raises(SystemExit) as exc_info:
+                cmd_reset(args)
 
+        assert exc_info.value.code == 1
         captured = capsys.readouterr()
         assert "Session not found: nonexistent" in captured.out
 

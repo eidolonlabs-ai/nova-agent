@@ -339,21 +339,27 @@ class SessionStore:
         fts_query = query.replace('"', "").strip()
         if not fts_query:
             return []
-        with self._connection() as conn:
-            cursor = conn.execute(
-                "SELECT s.session_id, s.title, s.updated_at, s.message_count "
-                "FROM sessions s "
-                "JOIN session_search fs ON s.session_id = fs.session_id "
-                "WHERE session_search MATCH ? "
-                "ORDER BY rank LIMIT ?",
-                (fts_query, limit),
-            )
-            return [
-                {
-                    "session_id": row[0],
-                    "title": row[1],
-                    "updated_at": row[2],
-                    "message_count": row[3],
-                }
-                for row in cursor.fetchall()
-            ]
+        try:
+            with self._connection() as conn:
+                cursor = conn.execute(
+                    "SELECT s.session_id, s.title, s.updated_at, s.message_count "
+                    "FROM sessions s "
+                    "JOIN session_search fs ON s.session_id = fs.session_id "
+                    "WHERE session_search MATCH ? "
+                    "ORDER BY rank LIMIT ?",
+                    (fts_query, limit),
+                )
+                return [
+                    {
+                        "session_id": row[0],
+                        "title": row[1],
+                        "updated_at": row[2],
+                        "message_count": row[3],
+                    }
+                    for row in cursor.fetchall()
+                ]
+        except sqlite3.OperationalError as e:
+            # FTS5 treats characters like ( ) : ^ - as query syntax; a hostile
+            # or accidental operator string must degrade to no results.
+            logger.warning("Session search rejected query %r: %s", fts_query[:80], e)
+            return []

@@ -215,6 +215,21 @@ def test_search_sessions_empty_query():
         assert isinstance(results, list)
 
 
+def test_search_sessions_invalid_syntax_returns_empty():
+    """FTS5 operator characters must degrade to no results, not raise."""
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "test.db"
+        store = SessionStore(db)
+
+        sid = store.create_session(title="Test")
+        store.add_message(sid, "user", "searchable content")
+
+        for bad_query in ("foo AND (", "content:", "^-", "(("):
+            results = store.search_sessions(bad_query)
+            assert isinstance(results, list)
+            assert all(r["session_id"] != sid or bad_query == "" for r in results)
+
+
 def test_add_message_with_tool_calls():
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "test.db"

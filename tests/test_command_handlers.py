@@ -302,6 +302,24 @@ def test_cmd_compact_leaves_short_history_unchanged(agent):
     assert len(agent.messages) == 2
 
 
+def test_cmd_compact_does_not_orphan_tool_results(agent):
+    from nova.agent import _normalize_message_history
+
+    agent.messages = [{"role": "user", "content": f"msg {i}"} for i in range(8)] + [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": "c1", "function": {"name": "terminal", "arguments": "{}"}}],
+        },
+        {"role": "tool", "content": "out", "tool_call_id": "c1"},
+    ]
+    with patch("nova.display._cprint"):
+        dispatch_command("compact", agent, "")
+    assert agent.messages == _normalize_message_history(agent.messages)
+    roles = [m["role"] for m in agent.messages]
+    assert "tool" not in roles or "assistant" in roles
+
+
 # ─── cmd_copy ────────────────────────────────────────────────────────────────
 
 

@@ -245,9 +245,14 @@ def cmd_usage(agent: NovaAgent, args: str) -> None:
 def cmd_undo(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
 
-    # Remove last user+assistant pair
-    if len(agent.messages) >= 2:
-        agent.messages = agent.messages[:-2]
+    # Remove everything back to (and including) the last user message so the
+    # remaining history never strands tool results without their calls.
+    last_user = max(
+        (i for i, msg in enumerate(agent.messages) if msg.get("role") == "user"),
+        default=-1,
+    )
+    if 0 <= last_user < len(agent.messages) - 1:
+        agent.messages = agent.messages[:last_user]
         _cprint(f"{_DIM}Last exchange removed{_RST}")
     else:
         _cprint(f"{_DIM}Nothing to undo{_RST}")
@@ -255,12 +260,17 @@ def cmd_undo(agent: NovaAgent, args: str) -> None:
 
 @command_handler("compact")
 def cmd_compact(agent: NovaAgent, args: str) -> None:
+    from nova.agent import _normalize_message_history
     from nova.display import _DIM, _RST, _cprint
 
     _cprint(f"{_DIM}Compacting context…{_RST}")
-    # Keep system prompt + last 4 messages
+    # Keep system prompt + recent messages, cut at a safe boundary so no tool
+    # result loses its parent assistant tool_calls message.
     if len(agent.messages) > 4:
-        agent.messages = agent.messages[-4:]
+        cut = len(agent.messages) - 4
+        while cut > 0 and agent.messages[cut].get("role") != "user":
+            cut -= 1
+        agent.messages = _normalize_message_history(agent.messages[cut:])
     _cprint(f"{_DIM}Context compacted to {len(agent.messages)} messages{_RST}")
 
 

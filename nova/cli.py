@@ -160,6 +160,7 @@ def cmd_reset(args):
         print(f"Deleted session {args.session_id}")
     else:
         print(f"Session not found: {args.session_id}")
+        sys.exit(1)
 
 
 def cmd_setup(args):
@@ -313,6 +314,16 @@ def cmd_update(args):
     print("  Run 'nova chat' to start.")
 
 
+def _non_negative_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"invalid int value: '{value}'") from e
+    if parsed < 0:
+        raise argparse.ArgumentTypeError("must be non-negative")
+    return parsed
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="nova",
@@ -335,7 +346,7 @@ def main():
     sessions_parser.add_argument("--limit", type=int, default=20, help="Max sessions to show")
     sessions_parser.add_argument(
         "--prune",
-        type=int,
+        type=_non_negative_int,
         metavar="DAYS",
         help="Delete sessions older than DAYS days (e.g. --prune 30)",
     )
@@ -360,7 +371,19 @@ def main():
         parser.print_help()
         sys.exit(1)
 
-    args.func(args)
+    from nova.config import ConfigError
+
+    try:
+        args.func(args)
+    except KeyboardInterrupt:
+        print("\nInterrupted.")
+        sys.exit(130)
+    except ConfigError as e:
+        print(f"Configuration error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
