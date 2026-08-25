@@ -133,7 +133,8 @@ def test_extract_usage_from_response_with_cost():
     usage = extract_usage_from_response(response)
     assert usage["input_tokens"] == 1000
     assert usage["output_tokens"] == 500
-    assert usage["output_cost"] == 0.000075
+    assert usage["input_cost"] == 0.000075
+    assert usage["output_cost"] == 0.0
 
 
 def test_extract_usage_from_response_empty():

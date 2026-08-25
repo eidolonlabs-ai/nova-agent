@@ -154,6 +154,8 @@ def extract_usage_from_response(response_data: dict) -> UsageDelta:
     }
 
     if "cost" in usage:
-        result["output_cost"] = usage["cost"]
+        # OpenRouter reports `cost` for the complete request.
+        result["input_cost"] = usage["cost"]
+        result["output_cost"] = 0.0
 
     return result

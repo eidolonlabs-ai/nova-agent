@@ -98,6 +98,13 @@ def make_reasoning_chunk(reasoning: str) -> MagicMock:
     return chunk
 
 
+def make_usage_chunk(usage: dict) -> MagicMock:
+    chunk = MagicMock()
+    chunk.choices = []
+    chunk.usage.model_dump.return_value = usage
+    return chunk
+
+
 def test_stream_response_interrupt_during_stream(minimal_config, mock_session_store):
     """Test that interrupt check stops streaming."""
     from openai import OpenAI
@@ -142,6 +149,27 @@ def test_stream_response_empty_content(minimal_config, mock_session_store):
     result = agent._stream_response({"model": "test-model", "messages": []})
 
     assert result["choices"][0]["message"]["content"] is None
+
+
+def test_stream_response_captures_usage(minimal_config, mock_session_store):
+    from openai import OpenAI
+
+    mock_client = MagicMock(spec=OpenAI)
+    mock_client.chat.completions.create.return_value = make_mock_stream(
+        make_text_chunk("answer"),
+        make_usage_chunk({"prompt_tokens": 12, "completion_tokens": 4, "total_tokens": 16}),
+    )
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_client,
+        session_store=mock_session_store,
+    )
+
+    result = agent._stream_response({"model": "test-model", "messages": []})
+
+    assert result["usage"]["prompt_tokens"] == 12
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert call_kwargs["stream_options"] == {"include_usage": True}
 
 
 def test_stream_response_multiple_tool_calls(minimal_config, mock_session_store):

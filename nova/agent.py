@@ -364,9 +364,16 @@ class NovaAgent:
             tools=payload["tools"] if payload.get("tools") else NOT_GIVEN,
             tool_choice="auto" if payload.get("tools") else NOT_GIVEN,
             stream=True,
+            stream_options={"include_usage": True},
         ) as stream:
+            usage: dict[str, Any] | None = None
             for chunk in stream:
                 if not chunk.choices:
+                    chunk_usage = getattr(chunk, "usage", None)
+                    if chunk_usage is not None and hasattr(chunk_usage, "model_dump"):
+                        dumped_usage = chunk_usage.model_dump()
+                        if isinstance(dumped_usage, dict):
+                            usage = dumped_usage
                     continue
                 chunk_finish_reason = chunk.choices[0].finish_reason
                 if isinstance(chunk_finish_reason, str):
@@ -425,7 +432,8 @@ class NovaAgent:
                         "reasoning_content": reasoning_content_value,
                     },
                 }
-            ]
+            ],
+            "usage": usage,
         }
 
     @staticmethod
