@@ -232,6 +232,12 @@ def test_build_checker_missing_config():
     assert checker.settings.mode == PermissionMode.ASK
 
 
+def test_empty_denied_commands_keeps_builtin_protection():
+    checker = build_permission_checker({"permissions": {"denied_commands": []}})
+    result = checker.evaluate("terminal", command="rm -rf /")
+    assert result.allowed is False
+
+
 # ── is_mutating_tool ────────────────────────────────────────────────────────
 
 

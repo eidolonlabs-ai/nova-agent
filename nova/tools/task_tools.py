@@ -112,6 +112,13 @@ def _task_create(args: dict[str, Any], **kwargs) -> str:
         return json.dumps({"success": False, "error": "Command is required."})
 
     mgr = get_task_manager()
+    task_cfg = kwargs.get("config", {}).get("tasks", {})
+    max_concurrent = task_cfg.get("max_concurrent", 4)
+    running = sum(1 for task in mgr.list_tasks(status="running"))
+    if isinstance(max_concurrent, int) and running >= max_concurrent:
+        return json.dumps(
+            {"success": False, "error": f"Maximum of {max_concurrent} concurrent tasks reached."}
+        )
     task_id = mgr.create_shell_task(command, description)
     return json.dumps(
         {
@@ -159,6 +166,11 @@ def _task_output(args: dict[str, Any], **kwargs) -> str:
         return json.dumps({"success": False, "error": "task_id is required."})
 
     max_bytes = args.get("max_bytes", 12000)
+    max_allowed = kwargs.get("config", {}).get("tasks", {}).get("max_output_bytes", 100000)
+    if not isinstance(max_bytes, int) or max_bytes < 1:
+        max_bytes = 1
+    if isinstance(max_allowed, int):
+        max_bytes = min(max_bytes, max_allowed)
     mgr = get_task_manager()
     output = mgr.read_task_output(task_id, max_bytes=max_bytes)
     return output

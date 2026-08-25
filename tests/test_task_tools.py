@@ -127,6 +127,32 @@ def test_task_output_custom_max_bytes(mock_task_manager):
     mock_task_manager.read_task_output.assert_called_with("b12345", max_bytes=5000)
 
 
+def test_task_output_clamps_max_bytes(mock_task_manager):
+    mock_task_manager.read_task_output.return_value = "short output"
+
+    with patch("nova.tools.task_tools.get_task_manager", return_value=mock_task_manager):
+        result = _task_output(
+            {"task_id": "b12345", "max_bytes": 999999},
+            config={"tasks": {"max_output_bytes": 1000}},
+        )
+
+    assert result == "short output"
+    mock_task_manager.read_task_output.assert_called_with("b12345", max_bytes=1000)
+
+
+def test_task_create_rejects_concurrency_limit(mock_task_manager, sample_task):
+    mock_task_manager.list_tasks.return_value = [sample_task] * 2
+    with patch("nova.tools.task_tools.get_task_manager", return_value=mock_task_manager):
+        result = _task_create(
+            {"command": "echo hello"},
+            config={"tasks": {"max_concurrent": 2}},
+        )
+
+    data = json.loads(result)
+    assert data["success"] is False
+    mock_task_manager.create_shell_task.assert_not_called()
+
+
 def test_task_output_missing_task_id(mock_task_manager):
     with patch("nova.tools.task_tools.get_task_manager", return_value=mock_task_manager):
         result = _task_output({"task_id": ""})

@@ -225,7 +225,7 @@ def build_permission_checker(config: dict) -> PermissionChecker:
         mode=mode,
         denied_tools=set(perm_cfg.get("denied_tools", [])),
         allowed_tools=set(perm_cfg.get("allowed_tools", [])),
-        denied_commands=perm_cfg.get("denied_commands", list(_DEFAULT_DENIED_COMMANDS)),
+        denied_commands=perm_cfg.get("denied_commands") or list(_DEFAULT_DENIED_COMMANDS),
         path_rules=perm_cfg.get("path_rules", []),
     )
 

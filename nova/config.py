@@ -89,6 +89,10 @@ DEFAULT_CONFIG = {
         "enabled": True,
         "keep_recent": 6,
     },
+    "tasks": {
+        "max_concurrent": 4,
+        "max_output_bytes": 100000,
+    },
     "retry": {
         "max_retries": 3,
         "base_delay": 1.0,
@@ -136,6 +140,17 @@ def _validate_config(config: dict[str, Any]) -> None:
     for name in ("base_delay", "max_delay"):
         if not isinstance(retry.get(name), (int, float)) or retry[name] < 0:
             raise ConfigError(f"retry.{name} must be non-negative")
+
+    tasks = config.get("tasks", {})
+    if not isinstance(tasks, dict):
+        raise ConfigError("Config section 'tasks' must be a mapping")
+    if not isinstance(tasks.get("max_concurrent"), int) or not 1 <= tasks["max_concurrent"] <= 32:
+        raise ConfigError("tasks.max_concurrent must be an integer between 1 and 32")
+    if (
+        not isinstance(tasks.get("max_output_bytes"), int)
+        or not 1 <= tasks["max_output_bytes"] <= 10_000_000
+    ):
+        raise ConfigError("tasks.max_output_bytes must be between 1 and 10000000")
 
 
 def _resolve_env_vars(value: Any) -> Any:
