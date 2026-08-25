@@ -46,6 +46,40 @@ from nova.wiki_memory import WikiMemory
 logger = logging.getLogger(__name__)
 
 
+def _normalize_message_history(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove incomplete tool-call blocks before sending history to a provider."""
+    normalized: list[dict[str, Any]] = []
+    pending_ids: set[str] = set()
+    pending_start: int | None = None
+
+    for message in messages:
+        role = message.get("role")
+        if role == "assistant" and message.get("tool_calls"):
+            if pending_ids and pending_start is not None:
+                del normalized[pending_start:]
+            pending_ids = {call.get("id", "") for call in message["tool_calls"] if call.get("id")}
+            pending_start = len(normalized)
+            normalized.append(message)
+        elif role == "tool":
+            call_id = message.get("tool_call_id", "")
+            if not pending_ids or call_id not in pending_ids:
+                continue
+            normalized.append(message)
+            pending_ids.remove(call_id)
+            if not pending_ids:
+                pending_start = None
+        else:
+            if pending_ids and pending_start is not None:
+                del normalized[pending_start:]
+                pending_ids.clear()
+                pending_start = None
+            normalized.append(message)
+
+    if pending_ids and pending_start is not None:
+        del normalized[pending_start:]
+    return normalized
+
+
 class NovaAgent:
     """Main agent class with explicit token budgets and smart context management."""
 
@@ -164,6 +198,7 @@ class NovaAgent:
                 self.session_id,
                 limit=turn_limit * 4,  # ~4 msgs per turn (user+assistant+tool pairs)
             )
+            self.messages = _normalize_message_history(self.messages)
             # Always rebuild the prompt on resume so wiki notes, skills, and
             # context files reflect current state rather than the stale cache.
             self._refresh_system_prompt()
@@ -269,6 +304,11 @@ class NovaAgent:
                 return {
                     "choices": [
                         {
+                            "finish_reason": (
+                                resp.choices[0].finish_reason
+                                if isinstance(resp.choices[0].finish_reason, str)
+                                else None
+                            ),
                             "message": {
                                 "role": "assistant",
                                 "content": message.content,
@@ -280,7 +320,7 @@ class NovaAgent:
                                 "reasoning_content": (message.model_extra or {}).get(
                                     "reasoning_content"
                                 ),
-                            }
+                            },
                         }
                     ],
                     "usage": resp.usage.model_dump() if resp.usage else None,
@@ -313,6 +353,8 @@ class NovaAgent:
         full_content = ""
         full_reasoning = ""
         tool_calls: list[dict[str, Any]] = []
+        interrupted = False
+        finish_reason: str | None = None
 
         with self.client.chat.completions.create(  # type: ignore[call-overload]
             model=payload["model"],
@@ -326,11 +368,15 @@ class NovaAgent:
             for chunk in stream:
                 if not chunk.choices:
                     continue
+                chunk_finish_reason = chunk.choices[0].finish_reason
+                if isinstance(chunk_finish_reason, str):
+                    finish_reason = chunk_finish_reason
                 delta = chunk.choices[0].delta
 
                 _ic = getattr(self, "_interrupt_check", None)
                 if _ic is not None and _ic():
                     logger.info("Stream interrupted by user")
+                    interrupted = True
                     break
 
                 if delta.content:
@@ -371,12 +417,13 @@ class NovaAgent:
         return {
             "choices": [
                 {
+                    "finish_reason": finish_reason,
                     "message": {
                         "role": "assistant",
                         "content": full_content if full_content else None,
-                        "tool_calls": tool_calls if tool_calls else None,
+                        "tool_calls": None if interrupted else (tool_calls if tool_calls else None),
                         "reasoning_content": reasoning_content_value,
-                    }
+                    },
                 }
             ]
         }
@@ -634,6 +681,7 @@ class NovaAgent:
         self.session_store.add_message(self.session_id or "", "user", user_message)
 
         # Build messages for API
+        self.messages = _normalize_message_history(self.messages)
         api_messages = [{"role": "system", "content": self._system_prompt or ""}]
         api_messages.extend(self.messages)
 
@@ -650,7 +698,7 @@ class NovaAgent:
                 max_messages,
                 turn_limit,
             )
-            self.messages = self.messages[-max_messages:]
+            self.messages = _normalize_message_history(self.messages[-max_messages:])
             api_messages = [{"role": "system", "content": self._system_prompt or ""}]
             api_messages.extend(self.messages)
 
@@ -698,7 +746,7 @@ class NovaAgent:
                             total_tokens,
                             compacted_tokens,
                         )
-                        api_messages = compacted
+                        api_messages = _normalize_message_history(compacted)
                         # Sync self.messages with compacted state so token
                         # estimates stay accurate for the remainder of the turn.
                         self.messages = self._conversation_messages_from_api(compacted)
@@ -719,7 +767,7 @@ class NovaAgent:
                         preserve_recent=preserve_recent,
                     )
                     if compressed:
-                        api_messages = compressed
+                        api_messages = _normalize_message_history(compressed)
                         # Sync self.messages with compressed state.
                         self.messages = self._conversation_messages_from_api(compressed)
                         total_tokens = estimate_total_request_tokens(
@@ -759,6 +807,11 @@ class NovaAgent:
             content = message.get("content")
             tool_calls = message.get("tool_calls")
             reasoning_content = message.get("reasoning_content")
+            finish_reason = choice.get("finish_reason")
+
+            if finish_reason == "length" and tool_calls:
+                logger.warning("Discarding tool calls from length-truncated response")
+                tool_calls = None
 
             # Add assistant message to history.
             # When content arrives alongside tool_calls, drop the content from
@@ -791,6 +844,22 @@ class NovaAgent:
             # Check for interrupt between iterations (Ctrl+C)
             if _interrupt_check is not None and _interrupt_check():
                 logger.info("Agent interrupted by user")
+                for tool_call in tool_calls:
+                    call_id = tool_call.get("id", "")
+                    if not call_id:
+                        continue
+                    interrupted_result = {
+                        "role": "tool",
+                        "content": "[Interrupted by user before tool execution]",
+                        "tool_call_id": call_id,
+                    }
+                    self.messages.append(interrupted_result)
+                    self.session_store.add_message(
+                        self.session_id or "",
+                        "tool",
+                        interrupted_result["content"],
+                        tool_call_id=call_id,
+                    )
                 return "[Interrupted]"
 
             # Execute tool calls — parallelize independent calls

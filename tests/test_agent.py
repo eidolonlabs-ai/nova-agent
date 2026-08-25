@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from nova.agent import NovaAgent
+from nova.agent import NovaAgent, _normalize_message_history
 from nova.tools.registry import discover_builtin_tools
 
 
@@ -28,6 +28,27 @@ def make_openai_response(content: str = "OK", tool_calls=None) -> MagicMock:
         "total_tokens": 15,
     }
     return resp
+
+
+def test_normalize_message_history_removes_orphaned_tool_messages():
+    messages = [
+        {"role": "user", "content": "Do it"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "call_1"}]},
+        {"role": "tool", "content": "ok", "tool_call_id": "call_1"},
+        {"role": "tool", "content": "orphan", "tool_call_id": "call_old"},
+        {"role": "assistant", "content": "finished"},
+    ]
+    result = _normalize_message_history(messages)
+    assert len(result) == 4
+    assert result[-1]["content"] == "finished"
+
+
+def test_normalize_message_history_removes_incomplete_tool_call():
+    messages = [
+        {"role": "user", "content": "Do it"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": "call_1"}]},
+    ]
+    assert _normalize_message_history(messages) == messages[:1]
 
 
 def test_agent_creation_with_injected_deps(minimal_config, mock_session_store, mock_openai_client):
