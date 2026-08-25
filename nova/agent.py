@@ -57,6 +57,7 @@ class NovaAgent:
         session_store: SessionStore | None = None,
         wiki_memory_store: WikiMemory | None = None,
         prompt_mode: str = "full",
+        confirmation_callback: Callable[[str, dict[str, Any]], bool] | None = None,
     ):
         self.config = copy.deepcopy(config) if config else load_config()
         self._prompt_mode = prompt_mode
@@ -64,6 +65,7 @@ class NovaAgent:
         self.messages: list[dict[str, Any]] = []
         self._system_prompt: str | None = None
         self._interrupt_check: Callable[[], bool] | None = None
+        self._confirmation_callback = confirmation_callback
         # Token estimate cache: hash(content) → token_count (bounded to 2048 entries)
         self._token_cache: dict[int, int] = {}
 
@@ -439,8 +441,12 @@ class NovaAgent:
             return f"Error: {perm_result.reason}"
 
         if perm_result.requires_confirmation:
-            # In auto mode this won't fire, but in ask mode we log it
-            logger.info("Tool '%s' requires confirmation (mode=ask, auto-approved for CLI)", name)
+            approved = bool(
+                self._confirmation_callback and self._confirmation_callback(name, arguments)
+            )
+            if not approved:
+                logger.info("Tool '%s' denied because confirmation was not granted", name)
+                return f"Error: Tool '{name}' requires confirmation"
 
         # Fire pre_tool_call hook (also fired in registry.dispatch, but we fire here
         # first so the permission check happens before the hook)
@@ -809,6 +815,7 @@ class NovaAgent:
                     self.session_id or "",
                     "tool",
                     result,
+                    tool_call_id=call_id,
                 )
                 api_messages.append(tool_result_msg)
 

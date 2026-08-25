@@ -228,7 +228,15 @@ def test_add_message_with_tool_calls():
 
         msgs = store.get_messages(sid)
         assert len(msgs) == 1
-        assert msgs[0]["tool_calls"] == tool_calls
+    assert msgs[0]["tool_calls"] == tool_calls
+
+
+def test_tool_call_id_round_trips():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SessionStore(Path(tmp) / "sessions.db")
+        sid = store.create_session()
+        store.add_message(sid, "tool", "result", tool_call_id="call_123")
+        assert store.get_messages(sid)[0]["tool_call_id"] == "call_123"
 
 
 def test_add_message_indexes():

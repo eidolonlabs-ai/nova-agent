@@ -5,6 +5,7 @@ Integrates with the permission system for command deny checking.
 """
 
 import logging
+import os
 import subprocess
 from typing import Any
 
@@ -120,6 +121,11 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
     logger.info("Executing%s: %s", destructive_flag, command[:200])
 
     try:
+        safe_env = {
+            key: value
+            for key, value in os.environ.items()
+            if not any(secret in key.upper() for secret in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
+        }
         result = subprocess.run(
             command,
             shell=True,
@@ -127,6 +133,7 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
             text=True,
             timeout=timeout,
             cwd=workdir,
+            env=safe_env,
         )
 
         output_parts = []

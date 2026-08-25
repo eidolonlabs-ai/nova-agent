@@ -1,10 +1,12 @@
 """Configuration loading and validation."""
 
+import copy
 import logging
 import os
+import re
 import stat
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -71,7 +73,7 @@ DEFAULT_CONFIG = {
         },
     },
     "permissions": {
-        "mode": "auto",
+        "mode": "ask",
         "denied_tools": [],
         "allowed_tools": [],
         "denied_commands": [],
@@ -102,7 +104,7 @@ def _resolve_env_vars(value: Any) -> Any:
 
         def _replace(match: re.Match) -> str:
             var_name = match.group(1) or match.group(2) or ""
-            return os.environ.get(var_name, match.group(0))
+            return os.environ.get(var_name) or match.group(0)
 
         # Handle both ${VAR} and $VAR forms
         return re.sub(r"\$\{(\w+)\}|\$(\w+)", _replace, value)
@@ -153,7 +155,7 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
     3. config.yaml in the current directory (local config, if it exists)
     4. Explicit config_path (if provided, overrides local config)
     """
-    config = DEFAULT_CONFIG.copy()
+    config = copy.deepcopy(DEFAULT_CONFIG)
 
     # Layer 2: Global config (~/.nova/config.yaml)
     global_config_path = get_nova_home() / "config.yaml"
@@ -172,18 +174,35 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
         _warn_unknown_keys(global_config, str(global_config_path))
         config = _deep_merge(config, global_config)
 
-    # Layer 3: Local config (config.yaml in current directory)
-    if config_path is None:
-        config_path = Path.cwd() / "config.yaml"
+    # Local config is supported for project preferences, but an untrusted
+    # repository must not be able to redirect credentials or tool execution.
+    is_automatic_local_config = config_path is None
+    resolved_config_path = config_path or (Path.cwd() / "config.yaml")
 
-    if config_path.exists():
-        with open(config_path, encoding="utf-8") as f:
+    if resolved_config_path.exists():
+        with open(resolved_config_path, encoding="utf-8") as f:
             user_config: dict[str, Any] = yaml.safe_load(f) or {}
-        _warn_unknown_keys(user_config, str(config_path))
+        _warn_unknown_keys(user_config, str(resolved_config_path))
+        if is_automatic_local_config:
+            user_config = copy.deepcopy(user_config)
+            for key in ("permissions", "mcp", "delegation"):
+                user_config.pop(key, None)
+            if isinstance(user_config.get("llm"), dict):
+                user_config["llm"].pop("api_key", None)
+                user_config["llm"].pop("base_url", None)
+            if isinstance(user_config.get("openrouter"), dict):
+                user_config["openrouter"].pop("api_key", None)
+                user_config["openrouter"].pop("base_url", None)
         config = _deep_merge(config, user_config)
 
     # Resolve environment variable placeholders
     config = _deep_resolve(config)
+
+    if isinstance(config.get("llm"), dict):
+        llm_config = cast(dict[str, Any], config["llm"])
+        api_key = llm_config.get("api_key", "")
+        if isinstance(api_key, str) and re.fullmatch(r"\$\{?\w+\}?", api_key):
+            llm_config["api_key"] = ""
 
     # Backward compat: migrate old 'openrouter' config key to 'llm'
     if "openrouter" in config:

@@ -138,7 +138,8 @@ def _is_path_safe(path: Path) -> str | None:
     # This prevents symlink attacks that resolve to arbitrary paths
     workspace_dirs = [
         Path.home(),
-        Path("/tmp"),
+        Path("/tmp").resolve(),
+        Path(tempfile.gettempdir()).resolve(),
     ]
     # Also allow the current working directory as a workspace
     try:
@@ -149,13 +150,20 @@ def _is_path_safe(path: Path) -> str | None:
 
     # If we can identify a workspace, check the path falls within it
     for ws in workspace_dirs:
-        if path_str.startswith(str(ws)):
+        try:
+            Path(path_str).relative_to(ws)
             return None  # Path is within a known workspace
+        except ValueError:
+            continue
 
-    # If path doesn't match any workspace, it's still allowed if it's not in
-    # a blocked list — but log a warning for visibility
-    logger.debug("Path resolved outside known workspaces: %s", path_str)
-    return None
+    logger.warning("Path denied outside known workspaces: %s", path_str)
+    return f"Error: Access denied outside known workspaces: {path}"
+
+
+def _is_obviously_blocked(path: Path) -> bool:
+    """Recognize protected paths even when the requested file does not exist."""
+    raw = str(path)
+    return raw in _BLOCKED_PATHS or any(raw.startswith(prefix) for prefix in _BLOCKED_PREFIXES)
 
 
 def _validate_offset_limit(offset: Any, limit: Any) -> str | None:
@@ -174,12 +182,15 @@ def _read_file(args: dict[str, Any], **kwargs) -> str:
     if not path_str:
         return "Error: No path provided."
 
-    # Security check
-    if error := _is_path_safe(path):
-        return error
+    if _is_obviously_blocked(path):
+        return f"Error: Access denied to protected path: {path}"
 
     if not path.exists():
         return f"Error: File not found: {path}"
+
+    # Security check
+    if error := _is_path_safe(path):
+        return error
 
     offset = args.get("offset", 1)
     limit = args.get("limit", 500)
@@ -258,9 +269,8 @@ def _patch_file(args: dict[str, Any], **kwargs) -> str:
     if not path_str:
         return "Error: No path provided."
 
-    # Security check
-    if error := _is_path_safe(path):
-        return error
+    if _is_obviously_blocked(path):
+        return f"Error: Access denied to protected path: {path}"
 
     # Validate patch string sizes
     if len(old_string) > _MAX_PATCH_CHARS:
@@ -270,6 +280,10 @@ def _patch_file(args: dict[str, Any], **kwargs) -> str:
 
     if not path.exists():
         return f"Error: File not found: {path}"
+
+    # Security check
+    if error := _is_path_safe(path):
+        return error
 
     try:
         content = path.read_text(encoding="utf-8")

@@ -75,6 +75,9 @@ _MUTATING_TOOLS: frozenset[str] = frozenset(
         "skill_manage",
         "wiki",
         "delegate_task",
+        "http_post",
+        "http_put",
+        "http_delete",
     }
 )
 
@@ -140,22 +143,21 @@ class PermissionChecker:
                 reason=f"Tool '{tool_name}' is explicitly denied",
             )
 
-        # 3. Explicit tool allow list (short-circuit)
-        if tool_name in self.settings.allowed_tools:
-            return PermissionResult(allowed=True)
-
-        # 4. Path-level rules
+        # 3. Path-level rules. Allow lists must not bypass safety rules.
         if file_path and self.settings.path_rules:
             path_result = self._check_path_rules(file_path)
             if path_result is not None:
                 return path_result
 
-        # 5. Command deny patterns
+        # 4. Command deny patterns
         if command and self.settings.denied_commands and self._matches_denied_command(command):
             return PermissionResult(
                 allowed=False,
                 reason=f"Command denied by pattern: '{command[:80]}'",
             )
+
+        # 5. Explicit tool allow list skips confirmation only.
+        explicitly_allowed = tool_name in self.settings.allowed_tools
 
         # 6. Permission mode
         read_only = is_read_only if is_read_only is not None else tool_name in _READ_ONLY_TOOLS
@@ -163,7 +165,7 @@ class PermissionChecker:
         if read_only:
             return PermissionResult(allowed=True)
 
-        if self.settings.mode == PermissionMode.AUTO:
+        if self.settings.mode == PermissionMode.AUTO or explicitly_allowed:
             return PermissionResult(allowed=True)
 
         # ASK mode — mutating tools require confirmation

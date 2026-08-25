@@ -1,6 +1,7 @@
 """CLI entry point for Nova Agent."""
 
 import argparse
+import getpass
 import os
 import subprocess
 import sys
@@ -11,6 +12,15 @@ from nova.agent import NovaAgent
 from nova.config import ensure_nova_home, load_config
 from nova.model_metadata import get_model_context_window
 from nova.tokens import estimate_total_request_tokens
+
+
+def _confirm_tool(name: str, arguments: dict[str, Any]) -> bool:
+    """Ask for explicit approval before executing a mutating tool."""
+    print(f"\nTool '{name}' requests execution with arguments: {arguments}")
+    try:
+        return input("Allow? [y/N] ").strip().lower() in {"y", "yes"}
+    except (EOFError, KeyboardInterrupt):
+        return False
 
 
 def _chat_loop(agent):
@@ -32,6 +42,7 @@ def _chat_loop(agent):
     context_window = get_model_context_window(model)
     tui = NovaTUI(model=model, context_window=context_window, config=agent.config)
     agent._reasoning_callback = None
+    agent._confirmation_callback = _confirm_tool
 
     def on_input(user_input: str) -> None:
         from nova.display import _DIM, _RST, _cprint
@@ -100,7 +111,7 @@ def cmd_chat(args):
 def cmd_ask(args):
     """Ask a one-shot question."""
     config = load_config()
-    agent = NovaAgent(config=config)
+    agent = NovaAgent(config=config, confirmation_callback=_confirm_tool)
     response = agent.run(args.question, stream=False)
     print(response)
 
@@ -185,7 +196,11 @@ def cmd_setup(args):
     else:
         print("LLM API key is required.")
         print()
-        api_key = input("Enter your API key: ").strip()
+        try:
+            api_key = getpass.getpass("Enter your API key: ").strip()
+        except (EOFError, OSError):
+            # Permit redirected stdin in non-interactive setup environments.
+            api_key = input("Enter your API key: ").strip()
         if not api_key:
             print("✗ API key is required. Setup cancelled.")
             sys.exit(1)

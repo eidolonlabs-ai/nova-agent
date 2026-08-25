@@ -53,9 +53,10 @@ class SessionStore:
                     session_id TEXT NOT NULL,
                     idx INTEGER NOT NULL,
                     role TEXT NOT NULL,
-                    content TEXT NOT NULL,
-                    tool_calls TEXT,
-                    reasoning_content TEXT,
+                     content TEXT NOT NULL,
+                     tool_calls TEXT,
+                     tool_call_id TEXT,
+                     reasoning_content TEXT,
                     timestamp TEXT NOT NULL,
                     FOREIGN KEY (session_id) REFERENCES sessions(session_id)
                 );
@@ -86,6 +87,9 @@ class SessionStore:
                 END;
             """)
             self._ensure_fts_trigram(conn)
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+            if "tool_call_id" not in columns:
+                conn.execute("ALTER TABLE messages ADD COLUMN tool_call_id TEXT")
 
     def _ensure_fts_trigram(self, conn: sqlite3.Connection) -> None:
         """Create or migrate session_search to use the FTS5 trigram tokenizer.
@@ -143,6 +147,7 @@ class SessionStore:
         content: str,
         tool_calls: list | None = None,
         reasoning_content: str | None = None,
+        tool_call_id: str | None = None,
     ) -> int:
         """Add a message to a session. Returns the message index."""
         now = datetime.now().isoformat()
@@ -160,9 +165,18 @@ class SessionStore:
 
                 conn.execute(
                     "INSERT INTO messages "
-                    "(session_id, idx, role, content, tool_calls, reasoning_content, timestamp) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (session_id, idx, role, content, tool_calls_json, reasoning_content, now),
+                    "(session_id, idx, role, content, tool_calls, tool_call_id, reasoning_content, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session_id,
+                        idx,
+                        role,
+                        content,
+                        tool_calls_json,
+                        tool_call_id,
+                        reasoning_content,
+                        now,
+                    ),
                 )
                 conn.execute(
                     "UPDATE sessions SET updated_at = ?, message_count = message_count + 1 WHERE session_id = ?",
@@ -186,13 +200,13 @@ class SessionStore:
             if limit:
                 # Use parameterized query to prevent SQL injection
                 query = (
-                    "SELECT role, content, tool_calls, reasoning_content FROM messages "
+                    "SELECT role, content, tool_calls, tool_call_id, reasoning_content FROM messages "
                     "WHERE session_id = ? ORDER BY idx DESC LIMIT ?"
                 )
                 cursor = conn.execute(query, (session_id, limit))
             else:
                 query = (
-                    "SELECT role, content, tool_calls, reasoning_content FROM messages "
+                    "SELECT role, content, tool_calls, tool_call_id, reasoning_content FROM messages "
                     "WHERE session_id = ? ORDER BY idx"
                 )
                 cursor = conn.execute(query, (session_id,))
@@ -205,7 +219,9 @@ class SessionStore:
                 if row[2]:
                     msg["tool_calls"] = json.loads(row[2])
                 if row[3]:
-                    msg["reasoning_content"] = row[3]
+                    msg["tool_call_id"] = row[3]
+                if row[4]:
+                    msg["reasoning_content"] = row[4]
                 messages.append(msg)
 
             if limit:

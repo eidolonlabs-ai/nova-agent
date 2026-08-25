@@ -29,6 +29,14 @@ def test_skills_list_no_skills(skills_config):
     assert "No skills found" in result
 
 
+def test_skill_manage_rejects_path_traversal(skills_config):
+    result = _skill_manage(
+        {"action": "create", "name": "../outside", "content": "secret"},
+        config=skills_config,
+    )
+    assert "Invalid skill name" in result
+
+
 def test_skills_list_with_skills(temp_skills_dir, skills_config):
     skill_dir = temp_skills_dir / "test_skill"
     skill_dir.mkdir()

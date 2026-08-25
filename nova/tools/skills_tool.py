@@ -6,6 +6,7 @@ to discover and use specialized knowledge.
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -98,6 +99,19 @@ def _get_skills_dir(config: dict) -> Path:
     return Path(config.get("skills", {}).get("directory", "~/.nova/skills")).expanduser()
 
 
+def _safe_skill_dir(skills_dir: Path, name: str) -> Path | None:
+    """Resolve a skill directory without allowing traversal or symlink escapes."""
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", name):
+        return None
+    root = skills_dir.resolve()
+    candidate = (root / name).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError:
+        return None
+    return candidate
+
+
 def _skills_list(args: dict[str, Any], **kwargs) -> str:
     """List all available skills."""
     config = kwargs.get("config", {})
@@ -116,7 +130,12 @@ def _skill_view(args: dict[str, Any], **kwargs) -> str:
     skills_dir = _get_skills_dir(config)
     skill_name = args.get("name", "")
 
-    skill_dir_path = skills_dir / skill_name
+    if not skill_name:
+        return f"Error: Skill '{skill_name}' not found."
+
+    skill_dir_path = _safe_skill_dir(skills_dir, skill_name)
+    if skill_dir_path is None:
+        return "Error: Invalid skill name."
     skill_path = skill_dir_path / "SKILL.md"
     content = load_skill_content(str(skill_path), skill_dir=skill_dir_path)
     return content or f"Error: Skill '{skill_name}' not found at {skill_path}."
@@ -128,7 +147,12 @@ def _skill_export(args: dict[str, Any], **kwargs) -> str:
     skills_dir = _get_skills_dir(config)
     skill_name = args.get("name", "")
 
-    skill_dir_path = skills_dir / skill_name
+    if not skill_name:
+        return f"Error: Skill '{skill_name}' not found."
+
+    skill_dir_path = _safe_skill_dir(skills_dir, skill_name)
+    if skill_dir_path is None:
+        return "Error: Invalid skill name."
     result = export_skill(skill_dir_path)
     return result or f"Error: Skill '{skill_name}' not found at {skill_dir_path}."
 
@@ -143,7 +167,9 @@ def _skill_manage(args: dict[str, Any], **kwargs) -> str:
     if not name:
         return "Error: 'name' is required."
 
-    skill_dir = skills_dir / name
+    skill_dir = _safe_skill_dir(skills_dir, name)
+    if skill_dir is None:
+        return "Error: Invalid skill name. Use letters, numbers, '-' or '_'."
     skill_file = skill_dir / "SKILL.md"
 
     if action == "create":

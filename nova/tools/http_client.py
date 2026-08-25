@@ -279,7 +279,8 @@ def _make_request(
             json=json_body,
             headers=headers,
             timeout=float(timeout),
-            follow_redirects=True,
+            # Redirect targets are not revalidated by httpx.
+            follow_redirects=False,
         )
 
         # Log status

@@ -125,6 +125,21 @@ def test_allowed_tool_short_circuits():
     assert result.requires_confirmation is False
 
 
+def test_allowed_tool_does_not_bypass_denied_command():
+    settings = PermissionSettings(
+        mode=PermissionMode.ASK,
+        allowed_tools={"terminal"},
+        denied_commands=["rm *"],
+    )
+    result = PermissionChecker(settings).evaluate("terminal", command="rm important.txt")
+    assert result.allowed is False
+
+
+def test_http_mutations_require_confirmation():
+    result = PermissionChecker(PermissionSettings(mode=PermissionMode.ASK)).evaluate("http_post")
+    assert result.requires_confirmation is True
+
+
 # ── Command Deny Patterns ───────────────────────────────────────────────────
 
 
