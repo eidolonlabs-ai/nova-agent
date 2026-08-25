@@ -54,12 +54,33 @@ def _normalize_message_history(messages: list[dict[str, Any]]) -> list[dict[str,
 
     for message in messages:
         role = message.get("role")
-        if role == "assistant" and message.get("tool_calls"):
-            if pending_ids and pending_start is not None:
-                del normalized[pending_start:]
-            pending_ids = {call.get("id", "") for call in message["tool_calls"] if call.get("id")}
-            pending_start = len(normalized)
-            normalized.append(message)
+        if role == "assistant":
+            calls = message.get("tool_calls")
+            if calls:
+                valid_calls = [call for call in calls if call.get("id")]
+                if not valid_calls:
+                    # Calls without ids cannot be answered; keep any prose but
+                    # never leave an unanswerable tool_call in history.
+                    if pending_ids and pending_start is not None:
+                        del normalized[pending_start:]
+                        pending_ids.clear()
+                        pending_start = None
+                    if message.get("content"):
+                        normalized.append({**message, "tool_calls": None})
+                    continue
+                if len(valid_calls) != len(calls):
+                    message = {**message, "tool_calls": valid_calls}
+                if pending_ids and pending_start is not None:
+                    del normalized[pending_start:]
+                pending_ids = {call["id"] for call in valid_calls}
+                pending_start = len(normalized)
+                normalized.append(message)
+            else:
+                if pending_ids and pending_start is not None:
+                    del normalized[pending_start:]
+                    pending_ids.clear()
+                    pending_start = None
+                normalized.append(message)
         elif role == "tool":
             call_id = message.get("tool_call_id", "")
             if not pending_ids or call_id not in pending_ids:
@@ -473,6 +494,8 @@ class NovaAgent:
 
         # Permission check
         entry = registry.get_tool(name)
+        if entry is None:
+            return f"Error: Unknown tool: {name}"
         is_read_only = entry.is_read_only if entry else False
 
         # Extract file_path and command for permission evaluation

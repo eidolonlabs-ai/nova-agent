@@ -51,6 +51,71 @@ def test_normalize_message_history_removes_incomplete_tool_call():
     assert _normalize_message_history(messages) == messages[:1]
 
 
+def test_normalize_message_history_drops_empty_id_tool_calls():
+    """Tool calls without ids cannot be answered; they must not dangle."""
+    messages = [
+        {"role": "user", "content": "Do it"},
+        {"role": "assistant", "content": None, "tool_calls": [{"id": ""}]},
+        {"role": "user", "content": "hello?"},
+    ]
+    result = _normalize_message_history(messages)
+    assert [m["role"] for m in result] == ["user", "user"]
+
+
+def test_normalize_message_history_keeps_valid_subset_of_mixed_ids():
+    messages = [
+        {"role": "user", "content": "Do it"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [{"id": "a"}, {"id": ""}],
+        },
+        {"role": "tool", "content": "ok", "tool_call_id": "a"},
+        {"role": "user", "content": "thanks"},
+    ]
+    result = _normalize_message_history(messages)
+    assert len(result) == 4
+    assert result[1]["tool_calls"] == [{"id": "a"}]
+    assert result[2]["tool_call_id"] == "a"
+
+
+def _agent_with_tool_response(minimal_config, mock_session_store, mock_openai_client):
+    tc_mock = MagicMock()
+    tc_mock.model_dump.return_value = {
+        "id": "call_1",
+        "type": "function",
+        "function": {"name": "terminal", "arguments": json.dumps({"command": "echo confirmed"})},
+    }
+    tool_response = make_openai_response(content=None, tool_calls=[tc_mock])
+    mock_openai_client.chat.completions.create.return_value = tool_response
+    return NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+    )
+
+
+def test_confirmation_gate_denies_without_callback(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    agent = _agent_with_tool_response(minimal_config, mock_session_store, mock_openai_client)
+    agent.run("run echo confirmed", stream=False)
+    tool_msgs = [m for m in agent.messages if m.get("role") == "tool"]
+    assert tool_msgs
+    assert all("requires confirmation" in m["content"] for m in tool_msgs)
+    assert not any("confirmed" in m["content"] for m in tool_msgs)
+
+
+def test_confirmation_gate_executes_when_approved(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    agent = _agent_with_tool_response(minimal_config, mock_session_store, mock_openai_client)
+    agent._confirmation_callback = lambda name, arguments: True
+    agent.run("run echo confirmed", stream=False)
+    tool_msgs = [m for m in agent.messages if m.get("role") == "tool"]
+    assert tool_msgs and "confirmed" in tool_msgs[-1]["content"]
+
+
 def test_agent_creation_with_injected_deps(minimal_config, mock_session_store, mock_openai_client):
     """Test that agent accepts injected dependencies."""
     agent = NovaAgent(

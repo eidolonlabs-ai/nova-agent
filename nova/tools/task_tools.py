@@ -165,10 +165,9 @@ def _task_output(args: dict[str, Any], **kwargs) -> str:
     if not task_id:
         return json.dumps({"success": False, "error": "task_id is required."})
 
-    max_bytes = args.get("max_bytes", 12000)
+    raw_max_bytes = args.get("max_bytes", 12000)
+    max_bytes = raw_max_bytes if isinstance(raw_max_bytes, int) and raw_max_bytes >= 1 else 12000
     max_allowed = kwargs.get("config", {}).get("tasks", {}).get("max_output_bytes", 100000)
-    if not isinstance(max_bytes, int) or max_bytes < 1:
-        max_bytes = 1
     if isinstance(max_allowed, int):
         max_bytes = min(max_bytes, max_allowed)
     mgr = get_task_manager()

@@ -147,7 +147,7 @@ def extract_usage_from_response(response_data: dict) -> UsageDelta:
     Returns a UsageDelta with input_tokens, output_tokens, and optionally
     input_cost, output_cost from headers — splat-safe into add_usage().
     """
-    usage = response_data.get("usage", {})
+    usage = response_data.get("usage") or {}
     result: UsageDelta = {
         "input_tokens": usage.get("prompt_tokens", 0),
         "output_tokens": usage.get("completion_tokens", 0),

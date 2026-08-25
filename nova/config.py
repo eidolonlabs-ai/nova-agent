@@ -156,7 +156,6 @@ def _validate_config(config: dict[str, Any]) -> None:
 def _resolve_env_vars(value: Any) -> Any:
     """Resolve ${ENV_VAR} and $ENV_VAR placeholders in config values."""
     if isinstance(value, str):
-        import re
 
         def _replace(match: re.Match) -> str:
             var_name = match.group(1) or match.group(2) or ""

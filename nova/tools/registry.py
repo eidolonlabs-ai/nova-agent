@@ -22,10 +22,16 @@ logger = logging.getLogger(__name__)
 _READ_ONLY_TOOLS: frozenset[str] = frozenset(
     {
         "read_file",
+        "file_list",
         "search_files",
+        "search_sessions",
         "web_search",
+        "http_get",
         "skills_list",
         "skill_view",
+        "task_status",
+        "task_list",
+        "task_output",
     }
 )
 

@@ -144,6 +144,13 @@ def test_extract_usage_from_response_empty():
     assert usage["output_tokens"] == 0
 
 
+def test_extract_usage_from_response_none_usage_does_not_crash():
+    """Providers that omit streamed usage must not crash cost tracking."""
+    usage = extract_usage_from_response({"choices": [], "usage": None})
+    assert usage["input_tokens"] == 0
+    assert usage["output_tokens"] == 0
+
+
 # ── Model Pricing Table ─────────────────────────────────────────────────────
 
 

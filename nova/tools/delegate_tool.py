@@ -184,6 +184,7 @@ def _run_subagent(
                 session_store=parent_agent.session_store,
                 wiki_memory_store=parent_agent.wiki,
                 prompt_mode="minimal",
+                confirmation_callback=getattr(parent_agent, "_confirmation_callback", None),
             )
 
             # Inject prefill messages if forking

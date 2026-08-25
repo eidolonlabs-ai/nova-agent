@@ -14,11 +14,23 @@ from nova.model_metadata import get_model_context_window
 from nova.tokens import estimate_total_request_tokens
 
 
-def _confirm_tool(name: str, arguments: dict[str, Any]) -> bool:
+def _confirm_tool(name: str, arguments: dict[str, Any], app: Any = None) -> bool:
     """Ask for explicit approval before executing a mutating tool."""
     print(f"\nTool '{name}' requests execution with arguments: {arguments}")
+    prompt = "Allow? [y/N] "
+
+    def _ask() -> str:
+        if app is None:
+            return input(prompt)
+        try:
+            suspend_ctx = app.suspend()
+        except Exception:
+            return input(prompt)
+        with suspend_ctx:
+            return input(prompt)
+
     try:
-        return input("Allow? [y/N] ").strip().lower() in {"y", "yes"}
+        return _ask().strip().lower() in {"y", "yes"}
     except (EOFError, KeyboardInterrupt):
         return False
 
@@ -42,7 +54,11 @@ def _chat_loop(agent):
     context_window = get_model_context_window(model)
     tui = NovaTUI(model=model, context_window=context_window, config=agent.config)
     agent._reasoning_callback = None
-    agent._confirmation_callback = _confirm_tool
+    agent._confirmation_callback = lambda name, arguments: _confirm_tool(
+        name,
+        arguments,
+        app=getattr(tui, "_app", None),
+    )
 
     def on_input(user_input: str) -> None:
         from nova.display import _DIM, _RST, _cprint
