@@ -50,6 +50,26 @@ def test_redact_handles_common_secret_key_variants_and_bearer_values():
     assert result["ordinary"] == "Bearer is an ordinary word here"
 
 
+def test_redact_handles_normalized_secret_names_and_headers():
+    value = {
+        "api_token": "one",
+        "auth_token": "two",
+        "x-api-key": "three",
+        "access_key": "four",
+        "set-cookie": "five",
+        "credential": "six",
+        "X-Auth-Token": "seven",
+        "safe": "ok",
+    }
+
+    result = redact(value)
+
+    for key in value:
+        if key != "safe":
+            assert result[key] == "[REDACTED]"
+    assert result["safe"] == "ok"
+
+
 def test_adapter_emits_run_llm_tool_policy_and_verification_observations():
     client = MagicMock()
     root = MagicMock()

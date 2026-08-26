@@ -289,10 +289,16 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
                 user_config.pop(key, None)
             if isinstance(user_config.get("observability"), dict):
                 observability = user_config["observability"]
-                for key in ("enabled", "capture_input", "capture_output"):
+                for key in (
+                    "enabled",
+                    "sample_rate",
+                    "capture_input",
+                    "capture_output",
+                    "flush_at_shutdown",
+                ):
                     observability.pop(key, None)
                 if isinstance(observability.get("langfuse"), dict):
-                    for key in ("public_key", "secret_key", "base_url"):
+                    for key in ("public_key", "secret_key", "base_url", "flush_at_shutdown"):
                         observability["langfuse"].pop(key, None)
             if isinstance(user_config.get("llm"), dict):
                 user_config["llm"].pop("api_key", None)

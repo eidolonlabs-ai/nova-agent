@@ -47,3 +47,35 @@ def test_later_verified_recovery_supersedes_earlier_failed_attempt():
     trace.finish_tool(second, outcome="completed", verification=VerificationResult("verified"))
 
     assert derive_run_status(trace.run) == "verified"
+
+
+def test_inconclusive_after_failed_verification_does_not_clear_failure():
+    trace = HarnessTrace("run-5", "retry")
+    first = trace.start_tool("call-1", "write_file", {})
+    trace.finish_tool(first, outcome="failed", verification=VerificationResult("failed"))
+    second = trace.start_tool("call-2", "write_file", {})
+    trace.finish_tool(second, outcome="failed", verification=VerificationResult("inconclusive"))
+
+    assert derive_run_status(trace.run) == "failed"
+
+
+def test_inconclusive_verification_can_recover_to_verified():
+    trace = HarnessTrace("run-6", "retry")
+    first = trace.start_tool("call-1", "write_file", {})
+    trace.finish_tool(first, outcome="failed", verification=VerificationResult("inconclusive"))
+    second = trace.start_tool("call-2", "write_file", {})
+    trace.finish_tool(second, outcome="completed", verification=VerificationResult("verified"))
+
+    assert derive_run_status(trace.run) == "verified"
+
+
+def test_failure_after_verified_recovery_wins():
+    trace = HarnessTrace("run-7", "retry")
+    first = trace.start_tool("call-1", "write_file", {})
+    trace.finish_tool(first, outcome="failed", verification=VerificationResult("failed"))
+    second = trace.start_tool("call-2", "write_file", {})
+    trace.finish_tool(second, outcome="completed", verification=VerificationResult("verified"))
+    third = trace.start_tool("call-3", "write_file", {})
+    trace.finish_tool(third, outcome="failed", verification=VerificationResult("failed"))
+
+    assert derive_run_status(trace.run) == "failed"

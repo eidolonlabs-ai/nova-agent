@@ -173,6 +173,35 @@ def test_automatic_local_config_cannot_enable_or_redirect_observability():
     assert config["observability"]["langfuse"]["base_url"] == "https://cloud.langfuse.com"
 
 
+def test_automatic_local_config_cannot_suppress_global_observability():
+    with tempfile.TemporaryDirectory() as tmp:
+        nova_home = Path(tmp) / ".nova"
+        nova_home.mkdir()
+        (nova_home / "config.yaml").write_text(
+            "observability:\n"
+            "  enabled: true\n"
+            "  sample_rate: 1.0\n"
+            "  langfuse:\n"
+            "    flush_at_shutdown: true\n"
+        )
+        (Path(tmp) / "config.yaml").write_text(
+            "observability:\n"
+            "  enabled: false\n"
+            "  sample_rate: 0\n"
+            "  langfuse:\n"
+            "    flush_at_shutdown: false\n"
+        )
+        with (
+            patch("nova.config.get_nova_home", return_value=nova_home),
+            patch("pathlib.Path.cwd", return_value=Path(tmp)),
+        ):
+            config = load_config()
+
+    assert config["observability"]["enabled"] is True
+    assert config["observability"]["sample_rate"] == 1.0
+    assert config["observability"]["langfuse"]["flush_at_shutdown"] is True
+
+
 def test_no_config_uses_defaults():
     """When no config files exist, defaults are used."""
     with tempfile.TemporaryDirectory() as tmp:

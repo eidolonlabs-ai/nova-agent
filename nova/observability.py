@@ -18,18 +18,40 @@ _MAX_DEPTH = 8
 _MAX_ITEMS = 100
 _SECRET_KEYS = {
     "apikey",
+    "apitoken",
+    "authtoken",
     "secretkey",
     "password",
     "token",
     "authorization",
     "accesstoken",
+    "accesskey",
     "clientsecret",
     "privatekey",
     "cookie",
+    "setcookie",
+    "credential",
+    "credentials",
+    "xapikey",
+    "xapitoken",
+    "xauthtoken",
+    "xaccesstoken",
+    "xsecret",
+    "xsecretkey",
+    "proxyauthorization",
+    "sessiontoken",
+    "refreshtoken",
+    "csrftoken",
+    "idtoken",
+    "jwt",
 }
 _BEARER_VALUE = re.compile(
     r"^(?P<prefix>\s*Bearer\s+)(?P<token>\S+)(?P<suffix>\s*)$", re.IGNORECASE
 )
+
+
+def _normalize_key(key: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", key.lower())
 
 
 def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
@@ -47,7 +69,7 @@ def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
                 key_string = str(key)
                 result[key_string] = (
                     "[REDACTED]"
-                    if re.sub(r"[^a-z0-9]", "", key_string.lower()) in _SECRET_KEYS
+                    if _normalize_key(key_string) in _SECRET_KEYS
                     else _redact(child, depth + 1)
                 )
             return result
