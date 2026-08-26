@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -59,15 +60,19 @@ async def test_prompt_streams_updates_through_the_connected_client() -> None:
 
 
 @pytest.mark.asyncio
-async def test_new_session_isolates_nova_agents() -> None:
+async def test_new_session_isolates_nova_agents(tmp_path) -> None:
     agents = [StreamingAgent([]), StreamingAgent([])]
     agents[0].session_id = "first-session"
     agents[1].session_id = "second-session"
     factory = MagicMock(side_effect=agents)
     adapter = NovaAcpAgent(config={"llm": {}}, agent_factory=factory)
 
-    first = await adapter.new_session(cwd="/tmp/one", mcp_servers=[])
-    second = await adapter.new_session(cwd="/tmp/two", mcp_servers=[])
+    first_workspace = tmp_path / "one"
+    second_workspace = tmp_path / "two"
+    first_workspace.mkdir()
+    second_workspace.mkdir()
+    first = await adapter.new_session(cwd=str(first_workspace), mcp_servers=[])
+    second = await adapter.new_session(cwd=str(second_workspace), mcp_servers=[])
 
     assert first.session_id != second.session_id
     assert factory.call_count == 2
@@ -85,6 +90,27 @@ async def test_new_session_returns_the_nova_session_id() -> None:
     session = await adapter.new_session(cwd="/tmp", mcp_servers=[])
 
     assert session.session_id == "nova-session-id"
+
+
+@pytest.mark.asyncio
+async def test_new_session_passes_absolute_workspace_to_nova(tmp_path) -> None:
+    agent = StreamingAgent([])
+    factory = MagicMock(return_value=agent)
+    adapter = NovaAcpAgent(config={}, agent_factory=factory)
+
+    await adapter.new_session(cwd=str(tmp_path), mcp_servers=[])
+
+    factory.assert_called_once_with(config={}, workspace=tmp_path)
+
+
+@pytest.mark.asyncio
+async def test_new_session_rejects_relative_or_missing_workspace() -> None:
+    adapter = NovaAcpAgent(config={}, agent_factory=MagicMock())
+
+    with pytest.raises(ValueError, match="absolute directory"):
+        await adapter.new_session(cwd="relative/path", mcp_servers=[])
+    with pytest.raises(ValueError, match="absolute directory"):
+        await adapter.new_session(cwd="/definitely/missing/nova-workspace", mcp_servers=[])
 
 
 @pytest.mark.asyncio
@@ -176,7 +202,11 @@ async def test_load_session_replays_user_and_agent_messages() -> None:
     )
 
     assert response is not None
-    factory.assert_called_once_with(config={}, session_id="stable-id")
+    factory.assert_called_once_with(
+        config={},
+        session_id="stable-id",
+        workspace=Path("/tmp").resolve(),
+    )
     assert [call.kwargs["session_id"] for call in client.session_update.call_args_list] == [
         "stable-id",
         "stable-id",

@@ -113,6 +113,7 @@ class NovaAgent:
         wiki_memory_store: WikiMemory | None = None,
         prompt_mode: str = "full",
         confirmation_callback: Callable[[str, dict[str, Any]], bool] | None = None,
+        workspace: Path | None = None,
     ):
         self.config = copy.deepcopy(config) if config else load_config()
         self._prompt_mode = prompt_mode
@@ -121,6 +122,7 @@ class NovaAgent:
         self._system_prompt: str | None = None
         self._interrupt_check: Callable[[], bool] | None = None
         self._confirmation_callback = confirmation_callback
+        self.workspace = workspace.resolve() if workspace else Path.cwd().resolve()
         # Token estimate cache: hash(content) → token_count (bounded to 2048 entries)
         self._token_cache: dict[int, int] = {}
 
@@ -243,6 +245,7 @@ class NovaAgent:
 
         self._system_prompt = build_system_prompt(
             config=self.config,
+            cwd=self.workspace,
             mode=resolved_mode,
             wiki_content=wiki_content,
         )
@@ -492,6 +495,8 @@ class NovaAgent:
         except json.JSONDecodeError:
             return f"Error: Invalid JSON arguments: {arguments_str}"
 
+        arguments = self._apply_workspace_defaults(name, arguments)
+
         # Permission check
         entry = registry.get_tool(name)
         if entry is None:
@@ -567,6 +572,28 @@ class NovaAgent:
             return result
 
         return result
+
+    def _apply_workspace_defaults(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        arguments = dict(arguments)
+        if name == "terminal" and not arguments.get("workdir"):
+            arguments["workdir"] = str(self.workspace)
+        elif name in {"read_file", "write_file", "patch_file"}:
+            path = arguments.get("path")
+            if isinstance(path, str) and path and not Path(path).expanduser().is_absolute():
+                arguments["path"] = str(self.workspace / path)
+        elif name == "search_files":
+            path = arguments.get("path", ".")
+            if isinstance(path, str) and not Path(path).expanduser().is_absolute():
+                arguments["path"] = str(self.workspace / path)
+        elif name == "list_files":
+            root = arguments.get("root", ".")
+            if isinstance(root, str) and not Path(root).expanduser().is_absolute():
+                arguments["root"] = str(self.workspace / root)
+        elif name.startswith("git_"):
+            repo = arguments.get("repo", ".")
+            if isinstance(repo, str) and not Path(repo).expanduser().is_absolute():
+                arguments["repo"] = str(self.workspace / repo)
+        return arguments
 
     def _execute_tool_calls_parallel(
         self,

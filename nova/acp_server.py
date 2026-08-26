@@ -4,6 +4,7 @@ import asyncio
 import copy
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from pathlib import Path
 from threading import Event
 from typing import Any, cast
 
@@ -57,7 +58,8 @@ class NovaAcpAgent:
         )
 
     async def new_session(self, cwd: str, **kwargs: Any) -> NewSessionResponse:
-        agent = self._agent_factory(config=copy.deepcopy(self._config))
+        workspace = self._validate_workspace(cwd)
+        agent = self._agent_factory(config=copy.deepcopy(self._config), workspace=workspace)
         session_id = agent.session_id
         if not session_id:
             agent.close()
@@ -71,6 +73,7 @@ class NovaAcpAgent:
         session_id: str,
         **kwargs: Any,
     ) -> LoadSessionResponse:
+        workspace = self._validate_workspace(cwd)
         if self._client is None:
             raise RuntimeError("ACP client is not connected")
         if session_id not in self._sessions:
@@ -78,6 +81,7 @@ class NovaAcpAgent:
                 agent = self._agent_factory(
                     config=copy.deepcopy(self._config),
                     session_id=session_id,
+                    workspace=workspace,
                 )
             except Exception as error:
                 raise ValueError(f"Unknown Nova session: {session_id}") from error
@@ -158,6 +162,13 @@ class NovaAcpAgent:
             return self._sessions[session_id]
         except KeyError as error:
             raise ValueError(f"Unknown ACP session: {session_id}") from error
+
+    @staticmethod
+    def _validate_workspace(cwd: str) -> Path:
+        workspace = Path(cwd).expanduser()
+        if not workspace.is_absolute() or not workspace.is_dir():
+            raise ValueError("ACP cwd must be an existing absolute directory")
+        return workspace.resolve()
 
 
 async def run_acp_server(config: dict[str, Any]) -> None:

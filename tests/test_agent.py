@@ -143,6 +143,40 @@ def test_agent_creates_session_on_init(minimal_config, mock_session_store, mock_
     assert "test agent" in agent._system_prompt
 
 
+def test_agent_workspace_controls_context_and_relative_tools(
+    minimal_config, mock_session_store, mock_openai_client, tmp_path
+):
+    minimal_config["context_files"] = ["AGENTS.md"]
+    (tmp_path / "AGENTS.md").write_text("workspace sentinel")
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+        workspace=tmp_path,
+        confirmation_callback=lambda name, arguments: True,
+    )
+
+    assert "workspace sentinel" in (agent._system_prompt or "")
+
+    terminal_call = {
+        "function": {
+            "name": "terminal",
+            "arguments": json.dumps({"command": "pwd"}),
+        }
+    }
+    result = agent._execute_tool_call(terminal_call)
+    assert str(tmp_path) in result
+
+    write_call = {
+        "function": {
+            "name": "write_file",
+            "arguments": json.dumps({"path": "nested.txt", "content": "workspace data"}),
+        }
+    }
+    agent._execute_tool_call(write_call)
+    assert (tmp_path / "nested.txt").read_text() == "workspace data"
+
+
 def test_agent_loads_existing_session(minimal_config, mock_session_store, mock_openai_client):
     """Test that an existing session is loaded correctly."""
     agent1 = NovaAgent(
