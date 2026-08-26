@@ -11,6 +11,8 @@ from nova.acp_server import NovaAcpAgent
 class StreamingAgent:
     def __init__(self, chunks: list[str]) -> None:
         self.chunks = chunks
+        self.session_id = "test-session-id"
+        self.messages: list[dict] = []
         self._interrupt_check = None
         self.closed = False
 
@@ -43,7 +45,7 @@ async def test_prompt_streams_updates_through_the_connected_client() -> None:
 
     assert initialized.protocol_version == 1
     assert initialized.agent_capabilities is not None
-    assert initialized.agent_capabilities.load_session is False
+    assert initialized.agent_capabilities.load_session is True
     assert response.stop_reason == "end_turn"
     assert nova_agent.message == "say hello"
     assert nova_agent.stream is True
@@ -59,6 +61,8 @@ async def test_prompt_streams_updates_through_the_connected_client() -> None:
 @pytest.mark.asyncio
 async def test_new_session_isolates_nova_agents() -> None:
     agents = [StreamingAgent([]), StreamingAgent([])]
+    agents[0].session_id = "first-session"
+    agents[1].session_id = "second-session"
     factory = MagicMock(side_effect=agents)
     adapter = NovaAcpAgent(config={"llm": {}}, agent_factory=factory)
 
@@ -70,6 +74,17 @@ async def test_new_session_isolates_nova_agents() -> None:
 
     adapter.close()
     assert all(agent.closed for agent in agents)
+
+
+@pytest.mark.asyncio
+async def test_new_session_returns_the_nova_session_id() -> None:
+    agent = StreamingAgent([])
+    agent.session_id = "nova-session-id"
+    adapter = NovaAcpAgent(config={}, agent_factory=MagicMock(return_value=agent))
+
+    session = await adapter.new_session(cwd="/tmp", mcp_servers=[])
+
+    assert session.session_id == "nova-session-id"
 
 
 @pytest.mark.asyncio
@@ -131,9 +146,54 @@ async def test_initialize_advertises_only_text_prompt_capabilities() -> None:
 
     capabilities = response.agent_capabilities
     assert capabilities is not None
-    assert capabilities.load_session is False
+    assert capabilities.load_session is True
     prompt_capabilities = capabilities.prompt_capabilities
     assert prompt_capabilities is not None
     assert prompt_capabilities.image is False
     assert prompt_capabilities.audio is False
     assert prompt_capabilities.embedded_context is False
+
+
+@pytest.mark.asyncio
+async def test_load_session_replays_user_and_agent_messages() -> None:
+    agent = StreamingAgent([])
+    agent.session_id = "stable-id"
+    agent.messages = [
+        {"role": "user", "content": "Question"},
+        {"role": "assistant", "content": "Answer"},
+        {"role": "tool", "content": "internal result"},
+    ]
+    factory = MagicMock(return_value=agent)
+    client = MagicMock()
+    client.session_update = MagicMock(side_effect=lambda **kwargs: asyncio.sleep(0))
+    adapter = NovaAcpAgent(config={}, agent_factory=factory)
+    adapter.on_connect(client)
+
+    response = await adapter.load_session(
+        cwd="/tmp",
+        session_id="stable-id",
+        mcp_servers=[],
+    )
+
+    assert response is not None
+    factory.assert_called_once_with(config={}, session_id="stable-id")
+    assert [call.kwargs["session_id"] for call in client.session_update.call_args_list] == [
+        "stable-id",
+        "stable-id",
+    ]
+    assert [
+        call.kwargs["update"].session_update for call in client.session_update.call_args_list
+    ] == ["user_message_chunk", "agent_message_chunk"]
+    assert [
+        call.kwargs["update"].content.text for call in client.session_update.call_args_list
+    ] == ["Question", "Answer"]
+
+
+@pytest.mark.asyncio
+async def test_load_session_rejects_unknown_session() -> None:
+    factory = MagicMock(side_effect=ValueError("missing"))
+    adapter = NovaAcpAgent(config={}, agent_factory=factory)
+    adapter.on_connect(MagicMock())
+
+    with pytest.raises(ValueError, match="Unknown Nova session"):
+        await adapter.load_session(cwd="/tmp", session_id="missing", mcp_servers=[])

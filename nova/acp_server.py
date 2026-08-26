@@ -6,16 +6,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from threading import Event
 from typing import Any, cast
-from uuid import uuid4
 
 from acp import (
     Agent,
     InitializeResponse,
+    LoadSessionResponse,
     NewSessionResponse,
     PromptResponse,
     run_agent,
     text_block,
     update_agent_message,
+    update_user_message,
 )
 from acp.interfaces import Client
 from acp.schema import AgentCapabilities, Implementation, PromptCapabilities, TextContentBlock
@@ -49,17 +50,59 @@ class NovaAcpAgent:
         return InitializeResponse(
             protocol_version=protocol_version,
             agent_capabilities=AgentCapabilities(
-                load_session=False,
+                load_session=True,
                 prompt_capabilities=PromptCapabilities(),
             ),
             agent_info=Implementation(name="nova-agent", version=__version__),
         )
 
     async def new_session(self, cwd: str, **kwargs: Any) -> NewSessionResponse:
-        session_id = uuid4().hex
         agent = self._agent_factory(config=copy.deepcopy(self._config))
+        session_id = agent.session_id
+        if not session_id:
+            agent.close()
+            raise RuntimeError("Nova did not create a session ID")
         self._sessions[session_id] = _Session(agent=agent)
         return NewSessionResponse(session_id=session_id)
+
+    async def load_session(
+        self,
+        cwd: str,
+        session_id: str,
+        **kwargs: Any,
+    ) -> LoadSessionResponse:
+        if self._client is None:
+            raise RuntimeError("ACP client is not connected")
+        if session_id not in self._sessions:
+            try:
+                agent = self._agent_factory(
+                    config=copy.deepcopy(self._config),
+                    session_id=session_id,
+                )
+            except Exception as error:
+                raise ValueError(f"Unknown Nova session: {session_id}") from error
+            if agent.session_id != session_id:
+                agent.close()
+                raise ValueError(f"Unknown Nova session: {session_id}")
+            self._sessions[session_id] = _Session(agent=agent)
+
+        for message in self._sessions[session_id].agent.messages:
+            content = message.get("content")
+            if not isinstance(content, str) or not content:
+                continue
+            if message.get("role") == "user":
+                await self._client.session_update(
+                    session_id=session_id,
+                    update=update_user_message(text_block(content)),
+                )
+            elif message.get("role") == "assistant":
+                await self._client.session_update(
+                    session_id=session_id,
+                    update=update_agent_message(text_block(content)),
+                )
+            else:
+                continue
+        return LoadSessionResponse()
 
     async def prompt(
         self,
