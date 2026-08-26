@@ -95,12 +95,8 @@ class HarnessTrace:
 
 def derive_run_status(trace: RunTrace, *, has_output: bool = True) -> RunStatus:
     verifications = [t.verification for t in trace.tool_traces if t.verification is not None]
-    if any(v.status == "failed" for v in verifications):
-        return "failed"
-    if any(v.status == "inconclusive" for v in verifications):
-        return "inconclusive"
-    if any(v.status == "verified" for v in verifications):
-        return "verified"
+    if verifications:
+        return verifications[-1].status
     return "completed" if has_output else "inconclusive"
 
 

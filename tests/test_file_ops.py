@@ -8,6 +8,8 @@ from nova.tools.file_ops import (
     _patch_file,
     _read_file,
     _validate_offset_limit,
+    _verify_patch,
+    _verify_write,
     _write_file,
 )
 
@@ -249,6 +251,14 @@ class TestReadFile:
 
 
 class TestWriteFile:
+    def test_failed_tool_result_cannot_be_verified_by_matching_file(self, tmp_path):
+        path = tmp_path / "test.txt"
+        path.write_text("content")
+
+        result = _verify_write({"path": str(path), "content": "content"}, "Error: write failed")
+
+        assert result.status == "failed"
+
     def test_write_simple_file(self):
         """Write content to a new file."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -327,6 +337,17 @@ class TestWriteFile:
 
 
 class TestPatchFile:
+    def test_failed_tool_result_cannot_be_verified_by_matching_file(self, tmp_path):
+        path = tmp_path / "test.txt"
+        path.write_text("new")
+
+        result = _verify_patch(
+            {"path": str(path), "old_string": "old", "new_string": "new"},
+            "Error: patch failed",
+        )
+
+        assert result.status == "failed"
+
     def test_patch_simple_replacement(self):
         """Apply simple search/replace patch."""
         with tempfile.TemporaryDirectory() as tmp:

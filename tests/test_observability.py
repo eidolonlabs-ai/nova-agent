@@ -30,6 +30,26 @@ def test_redact_removes_secret_shaped_values():
     assert result["nested"] == "ok"
 
 
+def test_redact_handles_common_secret_key_variants_and_bearer_values():
+    value = {
+        "apiKey": "one",
+        "api-key": "two",
+        "client_secret": "three",
+        "private_key": "four",
+        "cookie": "five",
+        "authorization": "six",
+        "header": "Bearer abc.def.ghi",
+        "ordinary": "Bearer is an ordinary word here",
+    }
+
+    result = redact(value)
+
+    for key in ("apiKey", "api-key", "client_secret", "private_key", "cookie", "authorization"):
+        assert result[key] == "[REDACTED]"
+    assert result["header"] == "Bearer [REDACTED]"
+    assert result["ordinary"] == "Bearer is an ordinary word here"
+
+
 def test_adapter_emits_run_llm_tool_policy_and_verification_observations():
     client = MagicMock()
     root = MagicMock()
@@ -353,3 +373,28 @@ def test_real_context_manager_uses_entered_object_and_exception_tuple():
     assert client.observation.entered.ended
     assert client.observation.exit_args is not None
     assert client.observation.exit_args[0] is RuntimeError
+
+
+def test_sdk_context_exit_failure_is_swallowed_but_agent_failure_propagates():
+    class FailingObservation:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc_value, traceback):
+            raise RuntimeError("sdk export failed")
+
+        def update(self, **kwargs):
+            pass
+
+    class Client:
+        def start_as_current_observation(self, **kwargs):
+            return FailingObservation()
+
+    observer = create_observability(
+        {**DEFAULT_CONFIG, "observability": {"enabled": True, "provider": "langfuse"}},
+        client_factory=lambda _: Client(),
+    )
+    with observer.run("id", "goal"):
+        pass
+    with pytest.raises(ValueError, match="agent"), observer.run("id", "goal"):
+        raise ValueError("agent")

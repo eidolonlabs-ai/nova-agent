@@ -7,6 +7,7 @@ import contextvars
 import logging
 import os
 import random
+import re
 from collections.abc import Callable, Iterator
 from typing import Any
 
@@ -15,7 +16,20 @@ _MAX_PREVIEW = 1000
 _MAX_AGGREGATE = 4000
 _MAX_DEPTH = 8
 _MAX_ITEMS = 100
-_SECRET_KEYS = {"api_key", "secret_key", "password", "token", "authorization", "access_token"}
+_SECRET_KEYS = {
+    "apikey",
+    "secretkey",
+    "password",
+    "token",
+    "authorization",
+    "accesstoken",
+    "clientsecret",
+    "privatekey",
+    "cookie",
+}
+_BEARER_VALUE = re.compile(
+    r"^(?P<prefix>\s*Bearer\s+)(?P<token>\S+)(?P<suffix>\s*)$", re.IGNORECASE
+)
 
 
 def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
@@ -33,13 +47,16 @@ def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
                 key_string = str(key)
                 result[key_string] = (
                     "[REDACTED]"
-                    if key_string.lower() in _SECRET_KEYS
+                    if re.sub(r"[^a-z0-9]", "", key_string.lower()) in _SECRET_KEYS
                     else _redact(child, depth + 1)
                 )
             return result
         if isinstance(item, (list, tuple, set)):
             return [_redact(child, depth + 1) for child in list(item)[:_MAX_ITEMS]]
         if isinstance(item, str):
+            bearer = _BEARER_VALUE.fullmatch(item)
+            if bearer:
+                return f"{bearer.group('prefix')}[REDACTED]{bearer.group('suffix')}"
             available = max(0, min(len(item), budget[0], limit - len("[TRUNCATED]")))
             budget[0] -= available
             return item[:available] + ("[TRUNCATED]" if available < len(item) else "")
@@ -118,11 +135,15 @@ class LangfuseObservability(NoOpObservability):
             logger.warning("Langfuse observation failed: %s", type(exc).__name__)
             yield None
             return
+        body_exception: BaseException | None = None
         try:
             # The SDK owns enter/exit and returns the actual observation from __enter__.
             with context_manager as observation:
                 try:
                     yield observation
+                except BaseException as exc:
+                    body_exception = exc
+                    raise
                 finally:
                     if observation is not None:
                         try:
@@ -139,7 +160,10 @@ class LangfuseObservability(NoOpObservability):
                             )
         except BaseException as exc:
             logger.warning("Langfuse observation failed: %s", type(exc).__name__)
-            raise
+            if body_exception is not None:
+                if exc is body_exception:
+                    raise
+                raise body_exception.with_traceback(body_exception.__traceback__) from None
 
     @contextlib.contextmanager
     def run(self, run_id: str, goal: str, *, session_id: str | None = None) -> Iterator[Any]:

@@ -287,6 +287,13 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
             user_config = copy.deepcopy(user_config)
             for key in ("permissions", "mcp", "delegation"):
                 user_config.pop(key, None)
+            if isinstance(user_config.get("observability"), dict):
+                observability = user_config["observability"]
+                for key in ("enabled", "capture_input", "capture_output"):
+                    observability.pop(key, None)
+                if isinstance(observability.get("langfuse"), dict):
+                    for key in ("public_key", "secret_key", "base_url"):
+                        observability["langfuse"].pop(key, None)
             if isinstance(user_config.get("llm"), dict):
                 user_config["llm"].pop("api_key", None)
                 user_config["llm"].pop("base_url", None)

@@ -16,6 +16,8 @@ from nova.tools.registry import registry
 
 
 def _verify_write(args: dict[str, Any], result: Any, **kwargs: Any) -> VerificationResult:
+    if not isinstance(result, str) or not result.startswith("Successfully wrote"):
+        return VerificationResult("failed", reason="write tool did not report success")
     path = Path(args.get("path", "")).expanduser()
     content = args.get("content")
     if isinstance(content, str) and path.is_file():
@@ -27,8 +29,8 @@ def _verify_write(args: dict[str, Any], result: Any, **kwargs: Any) -> Verificat
 
 
 def _verify_patch(args: dict[str, Any], result: Any, **kwargs: Any) -> VerificationResult:
-    if isinstance(result, str) and result.startswith("Error:"):
-        return VerificationResult("failed", reason="patch reported an error")
+    if not isinstance(result, str) or not result.startswith("Successfully patched"):
+        return VerificationResult("failed", reason="patch tool did not report success")
     path = Path(args.get("path", "")).expanduser()
     if path.is_file():
         actual = path.read_text(encoding="utf-8")
