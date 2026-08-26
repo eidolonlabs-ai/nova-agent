@@ -6,6 +6,7 @@ context compression, and session management.
 
 from __future__ import annotations
 
+import contextvars
 import copy
 import json
 import logging
@@ -556,14 +557,24 @@ class NovaAgent:
         result = ""
         for attempt in range(max_retries + 1):
             # Pass config, wiki, and agent reference to tool handlers via kwargs
-            result = registry.dispatch(
-                name,
-                arguments,
-                config=self.config,
-                wiki=self.wiki,
-                session_store=self.session_store,
-                agent=self,
-            )
+            try:
+                result = registry.dispatch(
+                    name,
+                    arguments,
+                    config=self.config,
+                    wiki=self.wiki,
+                    session_store=self.session_store,
+                    agent=self,
+                )
+            except Exception as exc:
+                result = f"Error: Tool '{name}' failed: {type(exc).__name__}"
+                self.observability.tool(
+                    name, input_data=arguments, output_data=result, retries=attempt
+                )
+                self.observability.verification(
+                    name, status="failed", error_type=type(exc).__name__
+                )
+                return result
 
             # Fire post_tool_call hook
             hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=arguments, result=result)
@@ -659,7 +670,10 @@ class NovaAgent:
             max_workers = min(len(read_only_calls), 4)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 future_to_idx = {
-                    executor.submit(self._execute_tool_call, tc): idx for idx, tc in read_only_calls
+                    executor.submit(
+                        contextvars.copy_context().run, self._execute_tool_call, tc
+                    ): idx
+                    for idx, tc in read_only_calls
                 }
 
                 for future in as_completed(future_to_idx):

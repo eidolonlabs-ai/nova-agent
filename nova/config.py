@@ -96,11 +96,11 @@ DEFAULT_CONFIG = {
         "capture_output": False,
         "environment": "",
         "release": "",
-        "flush_at_shutdown": True,
         "langfuse": {
             "public_key": "",
             "secret_key": "",
             "base_url": "https://cloud.langfuse.com",
+            "flush_at_shutdown": True,
         },
     },
     "microcompact": {
@@ -167,6 +167,17 @@ def _validate_config(config: dict[str, Any]) -> None:
     langfuse = observability.get("langfuse", {})
     if not isinstance(langfuse, dict):
         raise ConfigError("observability.langfuse must be a mapping")
+    for name in ("enabled", "capture_input", "capture_output"):
+        if not isinstance(observability.get(name, False), bool):
+            raise ConfigError(f"observability.{name} must be a boolean")
+    for name in ("provider", "environment", "release"):
+        if name in observability and not isinstance(observability[name], str):
+            raise ConfigError(f"observability.{name} must be a string")
+    for name in ("public_key", "secret_key", "base_url"):
+        if name in langfuse and not isinstance(langfuse[name], str):
+            raise ConfigError(f"observability.langfuse.{name} must be a string")
+    if not isinstance(langfuse.get("flush_at_shutdown", True), bool):
+        raise ConfigError("observability.langfuse.flush_at_shutdown must be a boolean")
 
     retry = config["retry"]
     if not isinstance(retry.get("max_retries"), int) or not 0 <= retry["max_retries"] <= 10:
@@ -317,6 +328,19 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
         firecrawl_api_key = ""
     if not firecrawl_api_key:
         web["firecrawl_api_key"] = os.environ.get("FIRECRAWL_API_KEY", "")
+
+    observability = config.get("observability", {})
+    if isinstance(observability, dict) and isinstance(observability.get("langfuse"), dict):
+        langfuse = observability["langfuse"]
+        for key, env_name in (
+            ("public_key", "LANGFUSE_PUBLIC_KEY"),
+            ("secret_key", "LANGFUSE_SECRET_KEY"),
+            ("base_url", "LANGFUSE_BASE_URL"),
+        ):
+            if not langfuse.get(key) or (
+                isinstance(langfuse.get(key), str) and re.fullmatch(r"\$\{?\w+\}?", langfuse[key])
+            ):
+                langfuse[key] = os.environ.get(env_name, langfuse.get(key, ""))
 
     _validate_config(config)
     return config

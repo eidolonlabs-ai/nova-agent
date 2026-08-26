@@ -144,4 +144,17 @@ microcompact:
 retry:
   max_retries: 3                  # Max retry attempts for transient errors
   base_delay: 1.0                 # Initial delay in seconds (exponential backoff)
-  max_delay: 60.0                 # Maximum delay cap in seconds
+  max_delay: 60.0                 # Maximum delay cap
+
+# Optional Langfuse observability (disabled by default)
+observability:
+  enabled: false
+  provider: langfuse
+  sample_rate: 1.0
+  capture_input: false
+  capture_output: false
+  langfuse:
+    public_key: "${LANGFUSE_PUBLIC_KEY}"
+    secret_key: "${LANGFUSE_SECRET_KEY}"
+    base_url: "${LANGFUSE_BASE_URL}"
+    flush_at_shutdown: true

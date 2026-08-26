@@ -129,8 +129,11 @@ def cmd_ask(args):
     """Ask a one-shot question."""
     config = load_config()
     agent = NovaAgent(config=config, confirmation_callback=_confirm_tool)
-    response = agent.run(args.question, stream=False)
-    print(response)
+    try:
+        response = agent.run(args.question, stream=False)
+        print(response)
+    finally:
+        agent.close()
 
 
 def cmd_acp(args):

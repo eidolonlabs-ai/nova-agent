@@ -282,3 +282,74 @@ def test_root_observation_is_named_run():
     with observer.run("id", "goal"):
         pass
     assert client.start_as_current_observation.call_args_list[0].kwargs["as_type"] == "span"
+
+
+def test_verification_does_not_capture_result_when_output_capture_is_disabled():
+    client = MagicMock()
+    observer = create_observability(
+        {**DEFAULT_CONFIG, "observability": {"enabled": True, "provider": "langfuse"}},
+        client_factory=lambda _: client,
+    )
+    with observer.run("id", "goal"):
+        observer.verification("tool", status="failed", result="secret tool output")
+    assert "secret tool output" not in str(client.start_as_current_observation.call_args_list)
+
+
+def test_sampling_is_decided_for_each_run(monkeypatch):
+    client = MagicMock()
+    monkeypatch.setattr("nova.observability.random.random", lambda: 0.5)
+    observer = create_observability(
+        {
+            **DEFAULT_CONFIG,
+            "observability": {"enabled": True, "provider": "langfuse", "sample_rate": 0.75},
+        },
+        client_factory=lambda _: client,
+    )
+    with observer.run("one", "goal"):
+        pass
+    with observer.run("two", "goal"):
+        pass
+    assert client.start_as_current_observation.call_count == 2
+
+
+def test_real_context_manager_uses_entered_object_and_exception_tuple():
+    class Entered:
+        def __init__(self):
+            self.updated = False
+            self.ended = False
+
+        def update(self, **kwargs):
+            self.updated = True
+
+        def end(self):
+            self.ended = True
+
+    class Observation:
+        def __init__(self):
+            self.entered = Entered()
+            self.exit_args = None
+
+        def __enter__(self):
+            return self.entered
+
+        def __exit__(self, *args):
+            self.exit_args = args
+
+    class Client:
+        def __init__(self):
+            self.observation = Observation()
+
+        def start_as_current_observation(self, **kwargs):
+            return self.observation
+
+    client = Client()
+    observer = create_observability(
+        {**DEFAULT_CONFIG, "observability": {"enabled": True, "provider": "langfuse"}},
+        client_factory=lambda _: client,
+    )
+    with pytest.raises(RuntimeError), observer.run("id", "goal"):
+        raise RuntimeError("boom")
+    assert client.observation.entered.updated
+    assert client.observation.entered.ended
+    assert client.observation.exit_args is not None
+    assert client.observation.exit_args[0] is RuntimeError
