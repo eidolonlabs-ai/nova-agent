@@ -9,7 +9,7 @@
 
 Add an explicit reliability layer around Nova's existing LLM/tool loop so that tool execution is observable, important side effects can be independently verified, and final responses distinguish verified completion from attempted or inconclusive work.
 
-This specification deliberately extends Nova's current architecture. It does not introduce a workflow engine, external telemetry dependency, or a second agent loop.
+This specification deliberately extends Nova's current architecture. It does not introduce a workflow engine or a second agent loop. It permits optional Langfuse telemetry as the external observability sink; telemetry failure must never block the agent.
 
 ## 2. Design Mapping
 
@@ -45,7 +45,8 @@ This specification deliberately extends Nova's current architecture. It does not
 - LLM-based verification as a substitute for executable checks.
 - Automatic verification of arbitrary shell commands.
 - Automatic read-back of arbitrary external API mutations.
-- Persisting traces to a new database or sending them to an external observability vendor.
+- Persisting traces to a new database.
+- Sending telemetry to Langfuse is specified below as an optional observability sink.
 - Changing existing tool schemas or permission semantics.
 - Treating a successful HTTP status alone as proof of a business-level mutation.
 
@@ -115,7 +116,43 @@ class RunTrace:
 
 The collector is in-memory and owned by `NovaAgent`. It is available for callbacks and tests, but is not persisted in this version.
 
-### 5.2 Registry-level verifier contract
+### 5.2 Optional Langfuse telemetry sink
+
+Add `langfuse>=3.0,<5` as an optional runtime dependency, installed by the project's observability extra. The integration uses the Langfuse Python SDK v3/v4 observation API (`get_client()` / `start_as_current_observation`) rather than hand-written HTTP calls.
+
+Configuration is opt-in and layered with the existing config loader:
+
+```yaml
+observability:
+  enabled: true
+  provider: langfuse
+  sample_rate: 1.0
+  capture_input: false
+  capture_output: false
+  environment: production
+  release: "2026.08"
+  langfuse:
+    public_key: "${LANGFUSE_PUBLIC_KEY}"
+    secret_key: "${LANGFUSE_SECRET_KEY}"
+    base_url: "${LANGFUSE_BASE_URL}"
+    flush_at_shutdown: true
+```
+
+Required behavior:
+
+- `observability.enabled` defaults to `false`; no credentials are required when disabled.
+- Langfuse is initialized only when enabled, provider is `langfuse`, and both keys are available.
+- `base_url` defaults to `https://cloud.langfuse.com` and supports self-hosted deployments.
+- `sample_rate` is bounded to `0.0..1.0`; `0.0` sends nothing and `1.0` sends every run.
+- Credentials may come from `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, and `LANGFUSE_BASE_URL`; secrets must not be logged or included in traces.
+- Capture of user prompts, context, tool arguments, and final outputs defaults to `false`. When disabled, send metadata, names, statuses, timings, token counts, and bounded non-sensitive error classifications only.
+- When enabled, telemetry is best-effort. SDK initialization, export, flush, or shutdown errors are logged locally and never change tool results or the agent's final answer.
+- Create one root observation per run, child generation observations for LLM calls, and child span observations for policy/tool/verification operations. Include session ID, model, run ID, status, latency, retries, token usage, and cost where available.
+- Flush on shutdown for CLI/short-lived processes; do not flush synchronously after every observation.
+
+Langfuse's SDK is an adapter behind this contract. Core harness traces and tests must work with no Langfuse package installed, using a no-op client when the optional dependency or configuration is absent.
+
+### 5.3 Registry-level verifier contract
 
 Extend `ToolEntry` with an optional verifier callback. The callback receives the original arguments and tool result and returns `VerificationResult | None`.
 
@@ -169,7 +206,9 @@ The existing returned response remains a string for API compatibility. The struc
 
 ## 7. Configuration
 
-No new configuration is required for the first implementation. Verification is enabled for the built-in verifier set by default. Future configuration may disable selected verifiers, but disabling verification must not silently turn a failed verifier into a successful claim.
+Verification is enabled for the built-in verifier set by default. Future configuration may disable selected verifiers, but disabling verification must not silently turn a failed verifier into a successful claim.
+
+The optional Langfuse configuration is defined in section 5.2. It is disabled by default and must remain safe when the SDK is not installed or credentials are absent.
 
 ## 8. Security and Privacy
 
@@ -198,6 +237,11 @@ No new configuration is required for the first implementation. Verification is e
 - [ ] Ordinary chat remains backward-compatible and returns a string.
 - [ ] Existing full test suite, ruff, and mypy pass.
 - [ ] Documentation explains what is and is not verified.
+- [ ] Langfuse is an optional dependency and configuration is disabled by default.
+- [ ] Langfuse receives run, LLM, tool, policy, and verification telemetry when enabled.
+- [ ] Input/output capture is opt-in and disabled by default.
+- [ ] Langfuse export failures are isolated from agent execution.
+- [ ] Shutdown flush is covered by tests or a deterministic integration test seam.
 
 ## 11. Residual Gaps
 
