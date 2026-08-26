@@ -7,6 +7,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from nova.observability import redact
+
 VerificationStatus = Literal["verified", "failed", "inconclusive"]
 RunStatus = Literal["verified", "completed", "failed", "inconclusive"]
 ToolOutcome = Literal["completed", "failed", "denied"]
@@ -78,7 +80,7 @@ class HarnessTrace:
         result: Any = "",
         verification: VerificationResult | None = None,
     ) -> None:
-        text = str(result)
+        text = str(redact(result))
         with self._lock:
             trace.completed_at = time.monotonic()
             trace.outcome = outcome
@@ -126,7 +128,7 @@ __all__.append("new_run_trace")
 
 
 def bounded_preview(value: Any, limit: int = 1000) -> str:
-    return str(value)[:limit]
+    return str(redact(value))[:limit]
 
 
 __all__.append("bounded_preview")

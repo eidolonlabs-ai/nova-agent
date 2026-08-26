@@ -70,6 +70,27 @@ def test_redact_handles_normalized_secret_names_and_headers():
     assert result["safe"] == "ok"
 
 
+def test_redact_masks_secret_patterns_embedded_in_text():
+    text = (
+        "api_key=secret-one password: pass-two client_secret = 'secret three' "
+        "Authorization: Bearer bearer-token ordinary text"
+    )
+
+    result = redact(text)
+
+    assert "secret-one" not in result
+    assert "pass-two" not in result
+    assert "secret three" not in result
+    assert "bearer-token" not in result
+    assert "ordinary text" in result
+    assert "api_key=[REDACTED]" in result
+    assert "Authorization: Bearer [REDACTED]" in result
+
+
+def test_redact_preserves_ordinary_bearer_text():
+    assert redact("Bearer is an ordinary word here") == "Bearer is an ordinary word here"
+
+
 def test_adapter_emits_run_llm_tool_policy_and_verification_observations():
     client = MagicMock()
     root = MagicMock()

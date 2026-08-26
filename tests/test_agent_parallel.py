@@ -141,6 +141,27 @@ def test_execute_tool_calls_invalid_json(minimal_config, mock_session_store):
     assert "Error" in results[0] or "error" in results[0].lower()
 
 
+def test_invalid_json_error_redacts_embedded_credentials(minimal_config, mock_session_store):
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=MagicMock(spec=OpenAI),
+        session_store=mock_session_store,
+    )
+
+    result = agent._execute_tool_call(
+        {
+            "id": "call_secret",
+            "function": {
+                "name": "terminal",
+                "arguments": '{"api_key":"leaked-key", invalid}',
+            },
+        }
+    )
+
+    assert result == 'Error: Invalid JSON arguments: {"api_key":"[REDACTED]", invalid}'
+    assert "leaked-key" not in result
+
+
 def test_execute_tool_call_unknown_tool(minimal_config, mock_session_store):
     """Test handling of unknown tool names."""
     mock_client = MagicMock(spec=OpenAI)

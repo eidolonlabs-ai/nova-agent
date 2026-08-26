@@ -580,7 +580,7 @@ class NovaAgent:
             arguments = json.loads(arguments_str)
         except json.JSONDecodeError:
             self.observability.tool(name, output_data="invalid_json")
-            return f"Error: Invalid JSON arguments: {arguments_str}"
+            return f"Error: Invalid JSON arguments: {redact(arguments_str)}"
 
         arguments = self._apply_workspace_defaults(name, arguments)
 

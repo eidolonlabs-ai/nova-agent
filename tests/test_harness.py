@@ -18,6 +18,20 @@ def test_harness_records_tool_policy_result_and_verification():
     assert result.status == "verified"
 
 
+def test_harness_result_preview_redacts_textual_credentials():
+    trace = HarnessTrace("run-secret", "inspect output")
+    tool = trace.start_tool("call-secret", "http_client", {})
+    trace.finish_tool(
+        tool,
+        outcome="completed",
+        result="status=ok api_key=leaked-key Authorization: Bearer leaked-token",
+    )
+
+    assert tool.result_preview == ("status=ok api_key=[REDACTED] Authorization: Bearer [REDACTED]")
+    assert "leaked-key" not in tool.result_preview
+    assert "leaked-token" not in tool.result_preview
+
+
 def test_failed_verification_wins_over_successful_tool_result():
     trace = HarnessTrace("run-2", "patch")
     tool = trace.start_tool("call-2", "patch_file", {})

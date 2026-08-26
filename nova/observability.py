@@ -48,6 +48,32 @@ _SECRET_KEYS = {
 _BEARER_VALUE = re.compile(
     r"^(?P<prefix>\s*Bearer\s+)(?P<token>\S+)(?P<suffix>\s*)$", re.IGNORECASE
 )
+_SECRET_TEXT = re.compile(
+    r"(?P<key>\b(?:api[_-]?(?:key|token)|auth[_-]?token|access[_-]?(?:key|token)|"
+    r"x[-_]?(?:api[-_]?key|api[-_]?token|auth[-_]?token)|password|secret(?:[_-]?key)?|"
+    r"client[_-]?secret|private[_-]?key|authorization|cookie|credential(?:s)?))\b"
+    r"(?P<key_quote>[\"']?)(?P<separator>\s*[:=]\s*)(?P<prefix>Bearer\s+)?"
+    r"(?P<value>\"[^\"]*\"|'[^']*'|[^\s,;}]*)",
+    re.IGNORECASE,
+)
+
+
+def _redact_text(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        value = match.group("value")
+        quote = value[0] if len(value) >= 2 and value[0] == value[-1] else ""
+        return (
+            f"{match.group('key')}{match.group('key_quote')}"
+            f"{match.group('separator')}{match.group('prefix') or ''}"
+            f"{quote}[REDACTED]{quote}"
+        )
+
+    return _SECRET_TEXT.sub(replace, value)
+
+
+def redact_text(value: str) -> str:
+    """Mask common credentials embedded in otherwise unstructured text."""
+    return _redact_text(value)
 
 
 def _normalize_key(key: str) -> str:
@@ -79,9 +105,10 @@ def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
             bearer = _BEARER_VALUE.fullmatch(item)
             if bearer:
                 return f"{bearer.group('prefix')}[REDACTED]{bearer.group('suffix')}"
-            available = max(0, min(len(item), budget[0], limit - len("[TRUNCATED]")))
+            redacted = redact_text(item)
+            available = max(0, min(len(redacted), budget[0], limit - len("[TRUNCATED]")))
             budget[0] -= available
-            return item[:available] + ("[TRUNCATED]" if available < len(item) else "")
+            return redacted[:available] + ("[TRUNCATED]" if available < len(redacted) else "")
         if item is None or isinstance(item, (bool, int, float)):
             return item
         return _redact(str(item), depth + 1)
@@ -330,5 +357,6 @@ __all__ = [
     "NoOpObservability",
     "create_observability",
     "redact",
+    "redact_text",
     "should_sample",
 ]
