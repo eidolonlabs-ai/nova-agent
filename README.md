@@ -44,7 +44,8 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | OpenRouter API | ✅ Active | 100+ models via OpenRouter |
 | Streaming responses | ✅ Active | Rich terminal UI |
 | Wiki memory (Obsidian-compatible) | ✅ Active | Persistent markdown notes with `[[wikilinks]]`, tags, `Core/` auto-inject |
-| Web search | ✅ Active | Bing RSS — zero dependencies, zero API key |
+| Web search | ✅ Active | Firecrawl Search API v2 — optional API key, anonymous requests supported |
+| Harness verification | 📋 Proposed | See [SPEC-001-HARNESS_ENGINEERING](docs/SPEC-001-HARNESS_ENGINEERING.md) |
 
 ## Built-in Tools
 

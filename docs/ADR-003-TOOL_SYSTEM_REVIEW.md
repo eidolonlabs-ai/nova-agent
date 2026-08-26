@@ -1,7 +1,7 @@
 # Nova Agent Tool System — Code Review & Design Analysis
 
 **Status:** ✅ Active  
-**Last Updated:** May 2026  
+**Last Updated:** August 2026
 **Type:** ADR (Architecture Decision Record)  
 **Scope:** Comparison with Claude Code, Hermes, OpenClaw, LangGraph, AutoGen, and OpenAI Swarm  
 **Verdict:** Robust foundation with strategic advantages in token budgeting, delegation, and permissions. Strong core, narrow tool breadth.

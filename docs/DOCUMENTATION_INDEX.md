@@ -49,6 +49,14 @@
 
 ---
 
+## 📐 Technical Specifications (SPEC-NNN)
+
+| Document | Status | What It Covers |
+|----------|--------|----------------|
+| [SPEC-001-HARNESS_ENGINEERING](SPEC-001-HARNESS_ENGINEERING.md) | 📋 Proposed | Harness engineering: verification, acceptance states, and unified traces |
+
+---
+
 ## 📋 Reports (REPORT-NNN)
 
 | Document | Status | What It Covers |
