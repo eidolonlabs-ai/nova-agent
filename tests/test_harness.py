@@ -32,6 +32,55 @@ def test_harness_result_preview_redacts_textual_credentials():
     assert "leaked-token" not in tool.result_preview
 
 
+def test_harness_redacts_run_fields_and_tool_arguments():
+    trace = HarnessTrace(
+        "run-secret",
+        "use api_key=goal-key password: goal-password Authorization: " + "Bearer goal-token",
+    )
+    tool = trace.start_tool(
+        "call-secret",
+        "http_client",
+        {
+            "api_key": "argument-key",
+            "password": "argument-password",
+            "headers": {"Authorization": "Bearer argument-token"},
+        },
+    )
+    trace.finish_tool(
+        tool,
+        outcome="completed",
+        result={"evidence": "password=preview-password Authorization: " + "Bearer preview-token"},
+        verification=VerificationResult(
+            "verified",
+            "Authorization: " + "Bearer verification-token",
+            "password=verification-password",
+        ),
+    )
+    result = trace.finish(
+        status="verified",
+        output="api_key=output-key password: output-password Authorization: "
+        + "Bearer output-token",
+    )
+
+    stored = str(result) + str(tool.arguments) + str(tool.verification)
+    for secret in (
+        "goal-key",
+        "goal-password",
+        "goal-token",
+        "argument-key",
+        "argument-password",
+        "argument-token",
+        "preview-password",
+        "preview-token",
+        "verification-token",
+        "verification-password",
+        "output-key",
+        "output-password",
+        "output-token",
+    ):
+        assert secret not in stored
+
+
 def test_failed_verification_wins_over_successful_tool_result():
     trace = HarnessTrace("run-2", "patch")
     tool = trace.start_tool("call-2", "patch_file", {})

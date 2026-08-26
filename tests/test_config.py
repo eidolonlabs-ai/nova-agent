@@ -30,6 +30,41 @@ def test_firecrawl_api_key_supports_environment_interpolation():
     assert config["web"]["firecrawl_api_key"] == "firecrawl-secret"
 
 
+def test_langfuse_credentials_support_environment_interpolation():
+    with tempfile.TemporaryDirectory() as tmp:
+        config_file = Path(tmp) / "config.yaml"
+        config_file.write_text(
+            "observability:\n"
+            "  langfuse:\n"
+            "    public_key: ${LANGFUSE_PUBLIC_KEY}\n"
+            "    secret_key: ${LANGFUSE_SECRET_KEY}\n"
+        )
+        with patch.dict(
+            os.environ,
+            {"LANGFUSE_PUBLIC_KEY": "valid-pk", "LANGFUSE_SECRET_KEY": "valid-sk"},
+        ):
+            config = load_config(config_file)
+
+    assert config["observability"]["langfuse"]["public_key"] == "valid-pk"
+    assert config["observability"]["langfuse"]["secret_key"] == "valid-sk"
+
+
+def test_missing_langfuse_placeholders_are_empty():
+    with tempfile.TemporaryDirectory() as tmp:
+        config_file = Path(tmp) / "config.yaml"
+        config_file.write_text(
+            "observability:\n"
+            "  langfuse:\n"
+            "    public_key: ${MISSING_PK}\n"
+            "    secret_key: ${MISSING_SK}\n"
+        )
+        with patch.dict(os.environ, {}, clear=True):
+            config = load_config(config_file)
+
+    assert config["observability"]["langfuse"]["public_key"] == ""
+    assert config["observability"]["langfuse"]["secret_key"] == ""
+
+
 def test_deep_merge():
     base = {"a": 1, "b": {"c": 2, "d": 3}}
     override = {"b": {"c": 10, "e": 5}}

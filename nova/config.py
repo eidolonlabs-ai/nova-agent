@@ -353,7 +353,8 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
             if not langfuse.get(key) or (
                 isinstance(langfuse.get(key), str) and re.fullmatch(r"\$\{?\w+\}?", langfuse[key])
             ):
-                langfuse[key] = os.environ.get(env_name, langfuse.get(key, ""))
+                default = "https://cloud.langfuse.com" if key == "base_url" else ""
+                langfuse[key] = os.environ.get(env_name, default)
 
     _validate_config(config)
     return config

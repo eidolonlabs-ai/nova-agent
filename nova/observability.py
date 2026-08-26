@@ -56,6 +56,7 @@ _SECRET_TEXT = re.compile(
     r"(?P<value>\"[^\"]*\"|'[^']*'|[^\s,;}]*)",
     re.IGNORECASE,
 )
+_UNRESOLVED_ENV = re.compile(r"^\$\{?\w+\}?$")
 
 
 def _redact_text(value: str) -> str:
@@ -324,6 +325,11 @@ def create_observability(
     if not isinstance(raw, dict):
         return NoOpObservability()
     langfuse_config = dict(raw)
+    unresolved_credentials = any(
+        isinstance(langfuse_config.get(key), str)
+        and _UNRESOLVED_ENV.fullmatch(langfuse_config[key])
+        for key in ("public_key", "secret_key")
+    )
     for key, env_name, default in (
         ("base_url", "LANGFUSE_BASE_URL", "https://cloud.langfuse.com"),
         ("public_key", "LANGFUSE_PUBLIC_KEY", ""),
@@ -333,6 +339,8 @@ def create_observability(
             key == "base_url" and langfuse_config.get(key) == "https://cloud.langfuse.com"
         ):
             langfuse_config[key] = os.environ.get(env_name, default)
+    if unresolved_credentials:
+        return NoOpObservability()
     normalized = {**settings, "langfuse": langfuse_config, "sample_rate": rate}
     try:
         if client_factory is not None:

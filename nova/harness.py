@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from nova.observability import redact
 
@@ -19,6 +19,10 @@ class VerificationResult:
     status: VerificationStatus
     evidence: str = ""
     reason: str = ""
+
+    def __post_init__(self) -> None:
+        self.evidence = str(redact(self.evidence))
+        self.reason = str(redact(self.reason))
 
 
 @dataclass
@@ -35,6 +39,9 @@ class ToolTrace:
     result_preview: str = ""
     verification: VerificationResult | None = None
 
+    def __post_init__(self) -> None:
+        self.arguments = cast(dict[str, Any], redact(self.arguments))
+
 
 @dataclass
 class RunTrace:
@@ -45,6 +52,11 @@ class RunTrace:
     status: RunStatus = "completed"
     tool_traces: list[ToolTrace] = field(default_factory=list)
     output: str | None = None
+
+    def __post_init__(self) -> None:
+        self.user_goal = str(redact(self.user_goal))
+        if self.output is not None:
+            self.output = str(redact(self.output))
 
 
 class HarnessTrace:
@@ -70,7 +82,7 @@ class HarnessTrace:
         with self._lock:
             trace.policy_allowed = allowed
             trace.policy_confirmation_required = confirmation_required
-            trace.policy_reason = reason
+            trace.policy_reason = str(redact(reason))
 
     def finish_tool(
         self,
@@ -91,7 +103,7 @@ class HarnessTrace:
         with self._lock:
             self.run.completed_at = time.monotonic()
             self.run.status = status
-            self.run.output = None if output is None else str(output)
+            self.run.output = None if output is None else str(redact(output))
             return self.run
 
 

@@ -229,6 +229,25 @@ def test_client_factory_receives_config():
     assert received[0]["base_url"] == "https://cloud.langfuse.com"
 
 
+def test_unresolved_langfuse_placeholders_do_not_initialize_client(monkeypatch):
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
+    factory = MagicMock()
+    observer = create_observability(
+        {
+            **DEFAULT_CONFIG,
+            "observability": {
+                "enabled": True,
+                "provider": "langfuse",
+                "langfuse": {"public_key": "${MISSING_PK}", "secret_key": "${MISSING_SK}"},
+            },
+        },
+        client_factory=factory,
+    )
+    assert isinstance(observer, NoOpObservability)
+    factory.assert_not_called()
+
+
 def test_provider_other_than_langfuse_is_noop():
     observer = create_observability(
         {**DEFAULT_CONFIG, "observability": {"enabled": True, "provider": "other"}}
