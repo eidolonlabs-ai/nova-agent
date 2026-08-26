@@ -120,6 +120,16 @@ ruff check . && mypy nova/ && pytest
 nova chat
 ```
 
+Nova can also be launched as an Agent Client Protocol (ACP) stdio server:
+
+```bash
+nova acp
+```
+
+ACP clients communicate with the process over stdin/stdout; diagnostics are
+kept off the protocol stream. Phase 1 supports session creation, text prompts
+with streamed assistant updates, and cancellation.
+
 Developer installs use the repo's local `.venv` and `config.yaml` in the project root. Changes to source code take effect immediately (editable install).
 
 ## Configuration
