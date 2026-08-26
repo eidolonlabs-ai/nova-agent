@@ -97,6 +97,43 @@ agent:
   top_p: 1.0                  # Nucleus sampling
 ```
 
+### Web Search
+
+Nova's `web_search` tool uses Firecrawl Search API v2. Anonymous requests are supported; set `FIRECRAWL_API_KEY` for higher rate limits:
+
+```yaml
+web:
+  firecrawl_api_key: "${FIRECRAWL_API_KEY}"
+```
+
+Keep the key in `~/.nova/config.yaml` or the environment. Automatically loaded project-local configuration cannot provide credentials.
+
+### Langfuse Observability
+
+Langfuse telemetry is optional and disabled by default. Install the extra before enabling it:
+
+```bash
+pip install -e ".[observability]"
+```
+
+```yaml
+observability:
+  enabled: true
+  provider: langfuse
+  sample_rate: 1.0
+  capture_input: false
+  capture_output: false
+  environment: production
+  release: "2026.08"
+  langfuse:
+    public_key: "${LANGFUSE_PUBLIC_KEY}"
+    secret_key: "${LANGFUSE_SECRET_KEY}"
+    base_url: "${LANGFUSE_BASE_URL}"
+    flush_at_shutdown: true
+```
+
+Set `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`. `LANGFUSE_BASE_URL` defaults to `https://cloud.langfuse.com` and can point to self-hosted Langfuse. Sampling is per run. Input/output capture is opt-in; when disabled, Nova sends operational metadata without prompts, responses, tool arguments, or raw tool output. Langfuse failures never block agent execution.
+
 ## SOUL.md — Agent Personality
 
 `SOUL.md` in `~/.nova/` defines the agent's identity, tone, and behavior. Nova loads this as the first section of the system prompt before any project context.
@@ -197,7 +234,8 @@ Nova comes with 16 built-in tools:
 | `write_file` | file | ✅ Active | Write/overwrite files with atomic saves |
 | `patch_file` | file | ✅ Active | Search/replace patches for targeted edits |
 | `search_files` | file | ✅ Active | Grep/regex search across project files |
-| `web_search` | web | ✅ Active | Web search via Bing RSS (zero dependencies) |
+| `web_search` | web | ✅ Active | Firecrawl Search API v2 web search (optional API key) |
+| `harness` | internal | ✅ Active | In-memory run/tool traces and write/patch postcondition verification |
 | `skills_list` | skills | ✅ Active | List all available skills by category |
 | `skill_view` | skills | ✅ Active | Load a skill's full instructions |
 | `skill_manage` | skills | ✅ Active | Create, update, or delete skills |
@@ -305,6 +343,10 @@ AGENTS.md               # Agent instructions (optional)
 | Variable | Description |
 |----------|-------------|
 | `LLM_API_KEY` | Your API key (alternative to config.yaml); `OPENROUTER_API_KEY` also accepted for backward compatibility |
+| `FIRECRAWL_API_KEY` | Optional Firecrawl Search API key for higher web-search rate limits |
+| `LANGFUSE_PUBLIC_KEY` | Langfuse public key when observability is enabled |
+| `LANGFUSE_SECRET_KEY` | Langfuse secret key when observability is enabled |
+| `LANGFUSE_BASE_URL` | Optional Langfuse endpoint; defaults to `https://cloud.langfuse.com` |
 | `GITHUB_TOKEN` | GitHub personal access token (for MCP GitHub server) |
 
 ## Permissions

@@ -6,6 +6,8 @@
 
 > Nova Agent includes a lightweight hook/callback system for lifecycle events. Enables audit logging, custom tool result transformation, and plugin development without modifying core code.
 
+For external telemetry, Nova provides an optional Langfuse adapter. Hooks remain available for local extensions; see [SPEC-001-HARNESS_ENGINEERING](SPEC-001-HARNESS_ENGINEERING.md#52-optional-langfuse-telemetry-sink) for the telemetry configuration and privacy contract.
+
 ## Quick Start
 
 Hooks are registered programmatically. Add to your startup script or custom agent wrapper:

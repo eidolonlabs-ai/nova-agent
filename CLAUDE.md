@@ -26,7 +26,7 @@ Nova Agent is a minimalist personal AI agent with explicit token budgets and sma
   - `terminal.py` — Shell command execution with timeout and output truncation
   - `file_ops.py` — read_file, write_file, patch_file tools
   - `search_files.py` — Grep/regex search across project files
-  - `web.py` — Bing RSS web search (zero dependencies, zero API key)
+  - `web.py` — Firecrawl Search API v2 web search (optional API key)
   - `skills_tool.py` — skills_list, skill_view, skill_manage tools
   - `wiki_tool.py` — wiki tool (write/append/read/search/list/delete/maintenance)
 

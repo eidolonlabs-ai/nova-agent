@@ -45,7 +45,8 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | Streaming responses | ✅ Active | Rich terminal UI |
 | Wiki memory (Obsidian-compatible) | ✅ Active | Persistent markdown notes with `[[wikilinks]]`, tags, `Core/` auto-inject |
 | Web search | ✅ Active | Firecrawl Search API v2 — optional API key, anonymous requests supported |
-| Harness verification | 📋 Proposed | See [SPEC-001-HARNESS_ENGINEERING](docs/SPEC-001-HARNESS_ENGINEERING.md) |
+| Harness verification | ✅ Active | Tool postcondition verification and structured run traces — see [SPEC-001-HARNESS_ENGINEERING](docs/SPEC-001-HARNESS_ENGINEERING.md) |
+| Langfuse observability | ✅ Active | Optional telemetry for runs, LLM calls, tools, policy, verification, timing, and usage |
 
 ## Built-in Tools
 
@@ -56,7 +57,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `write_file` | Write/overwrite files with atomic saves |
 | `patch_file` | Search/replace patches for targeted edits |
 | `search_files` | Grep/regex search across project files |
-| `web_search` | Web search via Bing RSS (zero dependencies, zero API key) |
+| `web_search` | Web search via Firecrawl Search API v2 (optional API key) |
 | `skills_list` | List all available skills by category |
 | `skill_view` | Load a skill's full instructions |
 | `skill_manage` | Create, update, or delete skills |
@@ -133,6 +134,10 @@ creation/loading, text prompts, streamed assistant and tool-call updates, and
 cancellation.
 
 Developer installs use the repo's local `.venv` and `config.yaml` in the project root. Changes to source code take effect immediately (editable install).
+
+### Optional Langfuse observability
+
+Install the optional integration with `pip install -e ".[observability]"`. Telemetry is disabled by default. Enable it in `~/.nova/config.yaml` and provide `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`; `LANGFUSE_BASE_URL` is optional and defaults to `https://cloud.langfuse.com`. Input/output capture is opt-in. See [Customizing Nova](docs/GUIDE-003-CUSTOMIZING.md#langfuse-observability) and [SPEC-001](docs/SPEC-001-HARNESS_ENGINEERING.md#52-optional-langfuse-telemetry-sink).
 
 ## Configuration
 
@@ -297,7 +302,7 @@ nova/
     terminal.py     # Shell command execution with timeout
     file_ops.py     # read_file, write_file, patch_file
     search_files.py # Grep/regex search across project files
-    web.py          # Bing RSS web search
+    web.py          # Firecrawl Search API v2 web search
     skills_tool.py  # skills_list, skill_view, skill_manage
     wiki_tool.py    # wiki tool (write/append/read/search/list/delete/maintenance)
     delegate_tool.py # delegate_task sub-agent spawning (opt-in)

@@ -1,6 +1,6 @@
 # Nova Agent Harness Engineering
 
-**Status:** 📋 Proposed
+**Status:** ✅ Active
 **Last Updated:** August 2026
 **Type:** SPEC (Technical Specification)
 **Owner:** Eidolon Labs LLC
@@ -20,8 +20,8 @@ This specification deliberately extends Nova's current architecture. It does not
 | LLM reasoning | `NovaAgent._call_llm()` and streaming loop | ✅ Existing |
 | Policy gate | `PermissionChecker` before registry dispatch | ✅ Existing |
 | Tools/runtime | Registry, tool handlers, workspace defaults, retries, read-only parallelism | ✅ Existing |
-| Verification | Tool-specific postconditions and final acceptance state | 📋 This specification |
-| Accepted result | Structured completion status plus final response | 📋 This specification |
+| Verification | Tool-specific postconditions and final acceptance state | ✅ Implemented |
+| Accepted result | Structured completion status plus final response | ✅ Implemented |
 | Observability | Unified in-memory run/tool traces exposed through existing hooks; optional Langfuse sink | ✅ Implemented (opt-in) |
 
 ## 3. Scope
@@ -238,7 +238,7 @@ The optional Langfuse configuration is defined in section 5.2. It is disabled by
 - [ ] Permission denials are traced without leaking sensitive arguments.
 - [ ] Ordinary chat remains backward-compatible and returns a string.
 - [ ] Existing full test suite, ruff, and mypy pass.
-- [ ] Documentation explains what is and is not verified.
+- [x] Documentation explains what is and is not verified.
 - [x] Langfuse is an optional dependency and configuration is disabled by default.
 - [x] Langfuse receives run, LLM, tool, policy, and verification telemetry when enabled.
 - [x] Input/output capture is opt-in and disabled by default.

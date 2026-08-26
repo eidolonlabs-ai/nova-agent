@@ -31,7 +31,7 @@ Made Nova safe to run and extensible for real-world use.
 - ✅ Sub-agent delegation (worker thread with own budget and timeout)
 - ✅ Automatic retry (exponential backoff + jitter)
 - ✅ Prompt mode gating (full for main agent, minimal for sub-agents)
-- ✅ Web search via Bing RSS (zero dependencies, zero API key)
+- ✅ Web search via Firecrawl Search API v2 (optional API key)
 - ✅ Obsidian-compatible wiki memory (markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance)
 - ✅ ACP stdio server (session lifecycle, workspace isolation, tool-call progress)
 
@@ -45,6 +45,7 @@ Making Nova production-ready for teams and long sessions.
 - 📋 **Structured output mode** — force JSON responses for tool-heavy workflows
 - 📋 **Plugin system** — third-party tool/skill marketplace
 - ✅ **Parallel tool execution** — run independent read-only tools concurrently
+- ✅ **Harness observability** — optional Langfuse telemetry, secret-safe traces, and file postcondition verification
 
 ## Phase 4: Team Features 📋 Planned (Sep–Dec 2026)
 

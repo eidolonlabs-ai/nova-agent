@@ -27,9 +27,9 @@ Nova Agent implements a **principled tool architecture** centered on explicit to
 - ❌ **Limited async support**—concurrent.futures only, no native async/await
 - ❌ **No tool versioning or deprecation** lifecycle
 - ❌ **File ops tool lacks advanced features**—no glob patterns, no batch operations
-- ❌ **Web search is Bing-only**—no fallback or provider abstraction
+- ✅ **Web search migrated to Firecrawl Search API v2** with optional API-key configuration
 - ❌ **No structured output enforcement** for tool results
-- ❌ **No observability hooks** for tool latency, cost per tool, call frequency
+- ✅ **Observability integration** via hooks and optional Langfuse telemetry; see [SPEC-001](SPEC-001-HARNESS_ENGINEERING.md)
 
 ---
 
@@ -161,11 +161,11 @@ def _execute_tool_calls_parallel(self, tool_calls):
   - Single regex at a time (no AND/OR)
   - No inverted search (exclude pattern)
 
-**web_search** (⭐⭐⭐)
-- Zero dependencies (no API key required—Bing RSS)
+**web_search** (⭐⭐⭐⭐)
+- Firecrawl Search API v2 with anonymous requests and optional API key
 - Result count limit (25 default)
 - **Gaps:**
-  - Bing-only (no fallback, no choice)
+  - Provider selection is intentionally not exposed; Firecrawl is the current implementation
   - RSS-based (fragile; relies on undocumented API)
   - No caching
   - No result filtering (date, domain, language)
@@ -348,9 +348,9 @@ def _stream_response(self, payload, callback=None, reasoning_callback=None):
    - `read_file` only reads single file; agents waste calls for `ls` + loop
    - **Recommendation:** Add `glob_pattern` parameter; return list of matching files
 
-4. **Web search Bing-only**
-   - RSS is fragile; no fallback
-   - **Recommendation:** Abstract provider, allow fallback to DuckDuckGo or Google News (with API key optional)
+4. **Web search provider abstraction**
+   - ✅ Bing RSS was replaced with Firecrawl Search API v2; anonymous requests and optional API-key configuration are supported
+   - **Residual:** provider selection and fallback are intentionally not exposed
 
 ### Important Gaps (Nice to Have)
 

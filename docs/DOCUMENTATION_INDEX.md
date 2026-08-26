@@ -53,7 +53,7 @@
 
 | Document | Status | What It Covers |
 |----------|--------|----------------|
-| [SPEC-001-HARNESS_ENGINEERING](SPEC-001-HARNESS_ENGINEERING.md) | 📋 Proposed | Harness engineering: verification, acceptance states, and unified traces |
+| [SPEC-001-HARNESS_ENGINEERING](SPEC-001-HARNESS_ENGINEERING.md) | ✅ Active | Harness engineering: verification, acceptance states, unified traces, and optional Langfuse telemetry |
 
 ---
 

@@ -109,7 +109,7 @@ New modules account for ~26% of total codebase.
 | `write_file` | file | Write files with atomic saves |
 | `patch_file` | file | Search/replace patches |
 | `search_files` | file | Grep/regex search |
-| `web_search` | web | Bing RSS web search |
+| `web_search` | web | Firecrawl Search API v2 web search |
 | `skills_list` | skills | List skills by category |
 | `skill_view` | skills | Load skill instructions |
 | `skill_manage` | skills | Create/update/delete skills |
