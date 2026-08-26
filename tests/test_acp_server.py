@@ -28,6 +28,19 @@ class StreamingAgent:
         self.closed = True
 
 
+class LifecycleAgent(StreamingAgent):
+    def __init__(self, events: list[tuple[str, str, str, str | None]]) -> None:
+        super().__init__([])
+        self.events = events
+
+    def run(self, message: str, stream: bool, stream_callback) -> str:
+        callback = getattr(self, "_tool_lifecycle_callback", None)
+        assert callback is not None
+        for event in self.events:
+            callback(*event)
+        return ""
+
+
 @pytest.mark.asyncio
 async def test_prompt_streams_updates_through_the_connected_client() -> None:
     nova_agent = StreamingAgent(["hello", " world"])
@@ -57,6 +70,143 @@ async def test_prompt_streams_updates_through_the_connected_client() -> None:
     assert [
         call.kwargs["update"].content.text for call in client.session_update.call_args_list
     ] == ["hello", " world"]
+
+
+@pytest.mark.asyncio
+async def test_prompt_reports_successful_tool_lifecycle_with_stable_id() -> None:
+    agent = LifecycleAgent(
+        [
+            ("call-1", "read_file", "start", None),
+            ("call-1", "read_file", "completed", "file contents"),
+        ]
+    )
+    client = MagicMock()
+    client.session_update = MagicMock(side_effect=lambda **kwargs: asyncio.sleep(0))
+    adapter = NovaAcpAgent(config={}, agent_factory=MagicMock(return_value=agent))
+    adapter.on_connect(client)
+    session = await adapter.new_session(cwd="/tmp", mcp_servers=[])
+
+    await adapter.prompt(session.session_id, [text_block("read it")])
+
+    updates = [call.kwargs["update"] for call in client.session_update.call_args_list]
+    assert [update.session_update for update in updates] == [
+        "tool_call",
+        "tool_call_update",
+        "tool_call_update",
+    ]
+    assert [update.tool_call_id for update in updates] == ["call-1"] * 3
+    assert updates[0].kind == "read"
+    assert updates[1].status == "in_progress"
+    assert updates[2].status == "completed"
+    assert updates[2].raw_output == "file contents"
+
+
+@pytest.mark.asyncio
+async def test_prompt_reports_failed_tool_call() -> None:
+    agent = LifecycleAgent(
+        [("call-1", "terminal", "start", None), ("call-1", "terminal", "failed", "Error: denied")]
+    )
+    client = MagicMock()
+    client.session_update = MagicMock(side_effect=lambda **kwargs: asyncio.sleep(0))
+    adapter = NovaAcpAgent(config={}, agent_factory=MagicMock(return_value=agent))
+    adapter.on_connect(client)
+    session = await adapter.new_session(cwd="/tmp", mcp_servers=[])
+
+    await adapter.prompt(session.session_id, [text_block("run it")])
+
+    updates = [call.kwargs["update"] for call in client.session_update.call_args_list]
+    assert updates[-1].status == "failed"
+    assert updates[-1].kind == "execute"
+    assert updates[-1].raw_output == "Error: denied"
+
+
+@pytest.mark.asyncio
+async def test_prompt_reports_multiple_calls_and_maps_tool_kinds() -> None:
+    events = [
+        ("read-id", "read_file", "start", None),
+        ("read-id", "read_file", "completed", "ok"),
+        ("edit-id", "patch_file", "start", None),
+        ("edit-id", "patch_file", "completed", "ok"),
+        ("search-id", "search_files", "start", None),
+        ("search-id", "search_files", "completed", "ok"),
+        ("fetch-id", "web_search", "start", None),
+        ("fetch-id", "web_search", "completed", "ok"),
+        ("other-id", "wiki", "start", None),
+        ("other-id", "wiki", "completed", "ok"),
+    ]
+    agent = LifecycleAgent(events)
+    client = MagicMock()
+    client.session_update = MagicMock(side_effect=lambda **kwargs: asyncio.sleep(0))
+    adapter = NovaAcpAgent(config={}, agent_factory=MagicMock(return_value=agent))
+    adapter.on_connect(client)
+    session = await adapter.new_session(cwd="/tmp", mcp_servers=[])
+
+    await adapter.prompt(session.session_id, [text_block("tools")])
+
+    updates = [call.kwargs["update"] for call in client.session_update.call_args_list]
+    lifecycle = [update for update in updates if update.session_update != "agent_message_chunk"]
+    assert [update.tool_call_id for update in lifecycle] == [
+        "read-id",
+        "read-id",
+        "read-id",
+        "edit-id",
+        "edit-id",
+        "edit-id",
+        "search-id",
+        "search-id",
+        "search-id",
+        "fetch-id",
+        "fetch-id",
+        "fetch-id",
+        "other-id",
+        "other-id",
+        "other-id",
+    ]
+    assert [lifecycle[index].kind for index in (0, 3, 6, 9, 12)] == [
+        "read",
+        "edit",
+        "search",
+        "fetch",
+        "other",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_prompt_reports_failed_cancelled_tool_call() -> None:
+    started = threading.Event()
+    released = threading.Event()
+
+    class BlockingLifecycleAgent(LifecycleAgent):
+        def run(self, message: str, stream: bool, stream_callback) -> str:
+            callback = getattr(self, "_tool_lifecycle_callback", None)
+            assert callback is not None
+            callback("cancel-id", "write_file", "start", None)
+            started.set()
+            interrupt_check = self._interrupt_check
+            assert interrupt_check is not None
+            while not interrupt_check():
+                released.wait(0.01)
+            callback("cancel-id", "write_file", "failed", "[Interrupted]")
+            return "[Interrupted]"
+
+    agent = BlockingLifecycleAgent([])
+    client = MagicMock()
+    client.session_update = MagicMock(side_effect=lambda **kwargs: asyncio.sleep(0))
+    adapter = NovaAcpAgent(config={}, agent_factory=MagicMock(return_value=agent))
+    adapter.on_connect(client)
+    session = await adapter.new_session(cwd="/tmp", mcp_servers=[])
+
+    prompt_task = asyncio.create_task(adapter.prompt(session.session_id, [text_block("cancel")]))
+    await asyncio.to_thread(started.wait, 1)
+    await adapter.cancel(session.session_id)
+    response = await asyncio.wait_for(prompt_task, timeout=1)
+    released.set()
+
+    updates = [call.kwargs["update"] for call in client.session_update.call_args_list]
+    assert updates[-1].tool_call_id == "cancel-id"
+    assert updates[-1].status == "failed"
+    assert updates[-1].raw_output == "[Interrupted]"
+    assert response.stop_reason == "cancelled"
 
 
 @pytest.mark.asyncio

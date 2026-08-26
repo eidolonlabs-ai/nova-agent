@@ -211,7 +211,7 @@ stripe.api_key = os.environ["STRIPE_SECRET_KEY"]
 
 ```python
 intent = stripe.PaymentIntent.create(
-    amount=2000,          # Amount in cents
+    amount=2000,  # Amount in cents
     currency="usd",
     automatic_payment_methods={"enabled": True},
     metadata={"order_id": order_id},

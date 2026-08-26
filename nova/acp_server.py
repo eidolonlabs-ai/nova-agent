@@ -20,7 +20,15 @@ from acp import (
     update_user_message,
 )
 from acp.interfaces import Client
-from acp.schema import AgentCapabilities, Implementation, PromptCapabilities, TextContentBlock
+from acp.schema import (
+    AgentCapabilities,
+    Implementation,
+    PromptCapabilities,
+    TextContentBlock,
+    ToolCallProgress,
+    ToolCallStart,
+    ToolKind,
+)
 
 from nova import __version__
 from nova.agent import NovaAgent
@@ -125,6 +133,9 @@ class NovaAcpAgent:
         async with state.prompt_lock:
             state.cancel_event.clear()
             state.agent._interrupt_check = state.cancel_event.is_set
+            state.agent._tool_lifecycle_callback = self._tool_lifecycle_callback(
+                client, session_id, loop=asyncio.get_running_loop()
+            )
             loop = asyncio.get_running_loop()
 
             def stream_callback(chunk: str) -> None:
@@ -144,6 +155,7 @@ class NovaAcpAgent:
                 )
             finally:
                 state.agent._interrupt_check = None
+                state.agent._tool_lifecycle_callback = None
 
             if state.cancel_event.is_set():
                 return PromptResponse(stop_reason="cancelled")
@@ -156,6 +168,62 @@ class NovaAcpAgent:
         for state in self._sessions.values():
             state.agent.close()
         self._sessions.clear()
+
+    def _tool_lifecycle_callback(
+        self, client: Client, session_id: str, *, loop: asyncio.AbstractEventLoop
+    ) -> Callable[[str, str, str, str | None], None]:
+        def report(call_id: str, name: str, status: str, result: str | None) -> None:
+            kind = self._tool_kind(name)
+            if status == "start":
+                update: Any = ToolCallStart(
+                    tool_call_id=call_id,
+                    title=name,
+                    kind=kind,
+                    status="pending",
+                    session_update="tool_call",
+                )
+                progress: Any = ToolCallProgress(
+                    tool_call_id=call_id,
+                    kind=kind,
+                    title=name,
+                    status="in_progress",
+                    session_update="tool_call_update",
+                )
+                for event in (update, progress):
+                    future = asyncio.run_coroutine_threadsafe(
+                        client.session_update(session_id=session_id, update=event), loop
+                    )
+                    future.result()
+                return
+
+            update = ToolCallProgress(
+                tool_call_id=call_id,
+                kind=kind,
+                title=name,
+                status=cast(Any, status),
+                raw_output=result,
+                session_update="tool_call_update",
+            )
+            future = asyncio.run_coroutine_threadsafe(
+                client.session_update(session_id=session_id, update=update), loop
+            )
+            future.result()
+
+        return report
+
+    @staticmethod
+    def _tool_kind(name: str) -> ToolKind:
+        if name == "read_file":
+            return "read"
+        if name in {"write_file", "patch_file"}:
+            return "edit"
+        if name in {"search_files", "list_files"}:
+            return "search"
+        if name == "terminal":
+            return "execute"
+        if name in {"web_search", "http_request"}:
+            return "fetch"
+        return "other"
 
     def _get_session(self, session_id: str) -> _Session:
         try:

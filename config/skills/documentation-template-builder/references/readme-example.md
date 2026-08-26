@@ -18,7 +18,7 @@
 - **Model agnostic** — OpenRouter-compatible; switch models in config
 - **Local first** — No cloud lock-in; your data stays on your machine
 - **Skill-based** — Extend with markdown skill files, not code
-- **Fast iteration** — 596 passing tests, type-safe Python
+- **Fast iteration** — a comprehensive passing test suite, type-safe Python
 
 ## Quick Start
 
@@ -60,7 +60,7 @@ nova chat
 
 ## Tests & Quality
 
-- **Test suite:** 596 tests, 75.69% coverage, all passing ✅
+- **Test suite:** Current test count and coverage are reported by CI, all passing ✅
 - **Type checking:** mypy clean (0 errors in 36 modules)
 - **Linting:** ruff compliant
 - **CI/CD:** GitHub Actions on every push

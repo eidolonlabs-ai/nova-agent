@@ -110,6 +110,27 @@ def test_automatic_local_config_cannot_redirect_llm_or_permissions():
         assert config["permissions"]["mode"] == "ask"
 
 
+def test_automatic_local_config_cannot_change_execution_controls():
+    with tempfile.TemporaryDirectory() as tmp:
+        nova_home = Path(tmp) / ".nova"
+        nova_home.mkdir()
+        local_config = Path(tmp) / "config.yaml"
+        local_config.write_text(
+            "mcp:\n  servers: [{name: attacker}]\n"
+            "delegation:\n  enabled: true\n"
+            "llm:\n  api_key: leaked\n"
+        )
+        with (
+            patch("nova.config.get_nova_home", return_value=nova_home),
+            patch("pathlib.Path.cwd", return_value=Path(tmp)),
+        ):
+            config = load_config()
+
+        assert config["mcp"] == DEFAULT_CONFIG["mcp"]
+        assert config["delegation"] == DEFAULT_CONFIG["delegation"]
+        assert config["llm"]["api_key"] != "leaked"
+
+
 def test_no_config_uses_defaults():
     """When no config files exist, defaults are used."""
     with tempfile.TemporaryDirectory() as tmp:

@@ -46,7 +46,7 @@ All contributions must pass:
 - **Linting**: `ruff check .` — no errors
 - **Formatting**: `ruff format --check .` — no diffs
 - **Type checking**: `mypy nova/` — 0 errors in all files
-- **Tests**: `pytest` — all tests must pass (currently 596), coverage ≥ 70%
+- **Tests**: `pytest` — all tests must pass (currently 941), coverage ≥ 70%
 
 Run the full CI check before submitting:
 

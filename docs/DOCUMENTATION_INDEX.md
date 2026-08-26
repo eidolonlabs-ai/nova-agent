@@ -54,7 +54,7 @@
 | Document | Status | What It Covers |
 |----------|--------|----------------|
 | [REPORT-001-PROJECT_STATUS_2026-05-02](REPORT-001-PROJECT_STATUS_2026-05-02.md) | ✅ Active | Test coverage baseline, CI status, open work as of May 2026 |
-| [REPORT-002-ACP_IMPLEMENTATION_HANDOFF](REPORT-002-ACP_IMPLEMENTATION_HANDOFF.md) | 🟡 In Progress | ACP implementation state, decisions, verification, and next patch |
+| [REPORT-002-ACP_IMPLEMENTATION_HANDOFF](REPORT-002-ACP_IMPLEMENTATION_HANDOFF.md) | ✅ Active | ACP implementation state, decisions, verification, and follow-on work |
 
 ---
 

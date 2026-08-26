@@ -1,6 +1,6 @@
 # REPORT-002: ACP Implementation Handoff
 
-**Status:** 🟡 In Progress
+**Status:** ✅ Active
 **Last Updated:** August 2026
 **Type:** REPORT (Development Handoff)
 
@@ -11,11 +11,11 @@
 | Item | Current State |
 |------|---------------|
 | Branch | `main` |
-| Latest ACP commit | `e60caf2` — honor ACP session workspaces |
-| Remote relationship | Local `main` is ahead of `origin/main`; no push performed after reconciliation |
-| Test baseline | 933 tests passing, 84.42% coverage |
-| Quality gates | Ruff, formatting, mypy, and pytest passing |
-| Next patch | ACP tool-call lifecycle reporting |
+| Latest ACP commit | `b00c0dc` — session migration and release hardening |
+| Remote relationship | `main` is synced with `origin/main` |
+| Test baseline | 941 tests passing, 84.52% coverage |
+| Quality gates | Ruff, formatting, mypy, and pytest passing locally |
+| Next patch | ACP permission bridging and client-provided MCP configuration |
 
 ## Goal
 
@@ -61,14 +61,14 @@ Make Nova Agent interoperable with ACP-compatible editors through the official `
 | Ruff | ✅ Pass |
 | Format check | ✅ Pass |
 | Mypy | ✅ Pass |
-| Pytest | ✅ 933 passed |
+| Pytest | ✅ 941 passed |
 | Coverage | ✅ 84.42% |
 | Session replay smoke | ✅ User and assistant history replayed in order |
 | Workspace smoke | ✅ Distinct context and relative-write isolation |
 
-## Next Patch: Tool-Call Lifecycle Reporting
+## Completed Patch: Tool-Call Lifecycle Reporting
 
-Implement one scoped change with tests written first:
+Implemented with public adapter tests:
 
 1. Emit ACP `tool_call` before execution.
 2. Emit `tool_call_update` with `in_progress`.
@@ -82,7 +82,7 @@ Implement one scoped change with tests written first:
    - web and HTTP → `fetch`
    - other tools → `other`
 6. Test success, failure, multiple calls, and cancellation through the public ACP adapter.
-7. Run full quality gates and a real stdio process smoke test.
+7. Full quality gates pass; stdio transport remains an integration-test follow-up.
 
 ## Planned Follow-On Patches
 

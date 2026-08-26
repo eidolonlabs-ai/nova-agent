@@ -483,16 +483,18 @@ Nova Agent is **not** trying to be a general-purpose agent framework. It's optim
 
 ## Actionable Next Steps (Priority Order)
 
+The original recommendations below are retained as future design work. The tool
+registry, HTTP client, Git wrapper, list-files tool, retries, and parallel
+read-only dispatch are already implemented and are not repeated as open work.
+
 ### P0 (Critical)
-- [ ] Add `glob_patterns` parameter to `read_file` / add `list_files` tool
 - [ ] Add structured output validation for tools (optional `output_schema`)
-- [ ] Add automatic retry logic for transient tool failures
+- [ ] Add a tool composition abstraction for dependent tool calls
 
 ### P1 (Important)
-- [ ] Add HTTP client tool (for REST API calls)
-- [ ] Add per-tool cost tracking in CostTracker
-- [ ] Add `git` tool wrapper (common for dev agents)
-- [ ] Refactor web_search to support multiple providers
+- [ ] Add per-tool cost and latency tracking in `CostTracker`
+- [ ] Refactor web search behind a provider interface with a fallback
+- [ ] Add glob/batch support for file operations
 
 ### P2 (Nice-to-Have)
 - [ ] Async tool registry variant

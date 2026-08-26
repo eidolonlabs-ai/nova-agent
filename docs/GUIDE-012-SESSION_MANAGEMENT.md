@@ -27,14 +27,14 @@ Every conversation with Nova is a **session** — a self-contained thread of mes
 ### Session Lifecycle
 
 ```
-Create → Active → Compact → Archived / Resumed / Deleted
+Create → Active → Compact → Persisted / Resumed / Deleted
 ```
 
 1. **Create** — A new session starts when you run `nova chat` or call `/new`. Each session gets a UUID.
 2. **Active** — Messages flow in and out. The session accumulates history, token usage, and tool call records.
 3. **Compact** — When the context approaches its budget, Nova runs microcompact or LLM compression (see [GUIDE-011](GUIDE-011-CONTEXT_COMPRESSION.md)).
-4. **Archived** — The session is saved to disk. It persists even after the chat ends.
-5. **Resumed** — You can pick up an archived session later with `/resume`.
+4. **Persisted** — The session is saved to disk. It remains available after the chat ends.
+5. **Resumed** — You can pick up a persisted session later with `/resume`.
 
 ### Storage
 
@@ -108,7 +108,7 @@ Continues a previous session. The full message history is loaded and the convers
 
 ### `/new` / `/reset`
 
-Starts a new session. The previous session is archived (not deleted) and can be resumed later.
+Starts a new session. The previous session is persisted (not deleted) and can be resumed later.
 
 ```
 /new

@@ -60,8 +60,16 @@ The `terminal` tool executes shell commands with the user's privileges. Be aware
 ### File Operations
 
 - `read_file`, `write_file`, and `patch_file` operate with the user's file permissions
-- No path traversal protection is applied — the agent can read/write any accessible file
+- Paths are resolved before access, preventing traversal and symlink escapes outside known workspaces
+- Known workspaces are the user's home directory, the system temporary directory, and the current working directory
+- Sensitive directories such as `.ssh`, `.aws`, `.gnupg`, `.kube`, and `.docker` are blocked
+- Protected system paths such as `/etc`, `/proc`, `/sys`, and `/dev` are blocked
+- Workspace restrictions do not sandbox the `terminal` tool, which can access any file the user can access
 - `write_file` uses atomic writes (temp file + rename) to prevent corruption
+
+Automatically loaded project-local `config.yaml` files are treated as untrusted preferences. They cannot override
+permissions, MCP, or delegation settings, and cannot redirect the LLM endpoint or supply an API key. Use an explicit
+config path when those settings are intentionally supplied by a trusted operator.
 
 ### Session Data
 

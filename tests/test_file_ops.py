@@ -85,6 +85,22 @@ class TestPathSafety:
         path = Path.cwd() / "test.txt"
         assert _is_path_safe(path) is None
 
+    def test_outside_known_workspaces_is_denied(self):
+        """Paths outside the home, temp, and current workspaces are denied."""
+        error = _is_path_safe(Path("/usr/bin/env"))
+        assert error is not None
+        assert "outside known workspaces" in error.lower()
+
+    def test_symlink_to_protected_path_is_denied(self, tmp_path):
+        """Resolving symlinks prevents access to protected targets."""
+        link = tmp_path / "passwd"
+        link.symlink_to("/etc/passwd")
+
+        error = _is_path_safe(link)
+
+        assert error is not None
+        assert "protected" in error.lower()
+
 
 class TestValidateOffsetLimit:
     def test_valid_offset_limit(self):

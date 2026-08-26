@@ -122,6 +122,7 @@ class NovaAgent:
         self._system_prompt: str | None = None
         self._interrupt_check: Callable[[], bool] | None = None
         self._confirmation_callback = confirmation_callback
+        self._tool_lifecycle_callback: Callable[[str, str, str, str | None], None] | None = None
         self.workspace = workspace.resolve() if workspace else Path.cwd().resolve()
         # Token estimate cache: hash(content) → token_count (bounded to 2048 entries)
         self._token_cache: dict[int, int] = {}
@@ -618,6 +619,9 @@ class NovaAgent:
 
         results: list[str | None] = [None] * len(tool_calls)
 
+        for tc in tool_calls:
+            self._report_tool_start(tc)
+
         # Execute read-only tools in parallel
         if read_only_calls:
             max_workers = min(len(read_only_calls), 4)
@@ -635,6 +639,8 @@ class NovaAgent:
                         logger.error("Parallel tool call '%s' failed: %s", fn_name, e)
                         results[idx] = f"Error: Tool '{fn_name}' failed: {e}"
 
+                    self._report_tool_result(tool_calls[idx], results[idx] or "")
+
                     # Report tool name to UI callback
                     tool_cb = getattr(self, "_tool_callback", None)
                     if tool_cb:
@@ -650,8 +656,26 @@ class NovaAgent:
                 if fn_name:
                     tool_cb(fn_name)
             results[idx] = self._execute_tool_call(tc)
+            self._report_tool_result(tc, results[idx] or "")
 
         return [r if r is not None else "Error: Unexpected None result" for r in results]
+
+    def _report_tool_start(self, tool_call: dict) -> None:
+        call_id = tool_call.get("id", "")
+        name = tool_call.get("function", {}).get("name", "")
+        if call_id and name and self._tool_lifecycle_callback:
+            self._tool_lifecycle_callback(call_id, name, "start", None)
+
+    def _report_tool_result(self, tool_call: dict, result: str) -> None:
+        call_id = tool_call.get("id", "")
+        name = tool_call.get("function", {}).get("name", "")
+        if call_id and name and self._tool_lifecycle_callback:
+            status = (
+                "failed"
+                if result.startswith("Error:") or result.startswith("[Interrupted")
+                else "completed"
+            )
+            self._tool_lifecycle_callback(call_id, name, status, result)
 
     def _estimate_messages_tokens_cached(self, messages: list[dict[str, Any]]) -> int:
         """Estimate message list tokens using a per-agent content cache.
@@ -903,6 +927,7 @@ class NovaAgent:
                     call_id = tool_call.get("id", "")
                     if not call_id:
                         continue
+                    self._report_tool_start(tool_call)
                     interrupted_result = {
                         "role": "tool",
                         "content": "[Interrupted by user before tool execution]",
@@ -915,6 +940,7 @@ class NovaAgent:
                         interrupted_result["content"],
                         tool_call_id=call_id,
                     )
+                    self._report_tool_result(tool_call, interrupted_result["content"])
                 return "[Interrupted]"
 
             # Execute tool calls — parallelize independent calls

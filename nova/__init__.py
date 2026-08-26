@@ -1,3 +1,3 @@
 """Nova Agent — A minimalist personal AI agent."""
 
-__version__ = "0.1.0"
+from nova._version import __version__ as __version__

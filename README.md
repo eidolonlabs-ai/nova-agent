@@ -4,8 +4,8 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/eidolonlabs-ai/nova-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/eidolonlabs-ai/nova-agent/actions/workflows/ci.yml)
 
-**Status:** ✅ Active — production ready  
-**Last Updated:** May 2026  
+**Status:** 🟡 Active — release hardening
+**Last Updated:** August 2026
 **By:** [Eidolon Labs LLC](https://github.com/eidolonlabs-ai)
 
 > A minimalist personal AI agent with explicit token budgets and smart context management.
@@ -127,8 +127,9 @@ nova acp
 ```
 
 ACP clients communicate with the process over stdin/stdout; diagnostics are
-kept off the protocol stream. Phase 1 supports session creation, text prompts
-with streamed assistant updates, and cancellation.
+kept off the protocol stream. The current implementation supports session
+creation/loading, text prompts, streamed assistant and tool-call updates, and
+cancellation.
 
 Developer installs use the repo's local `.venv` and `config.yaml` in the project root. Changes to source code take effect immediately (editable install).
 
@@ -302,8 +303,8 @@ nova/
     task_tools.py   # Background task tools (create/status/output/stop/list)
 config/
   SOUL.md.example   # Agent personality template
-  .nova.md.example  # Project instructions template
-  skills/           # 3 starter skills
+  NOVA.md.example   # Project instructions template
+  skills/           # 7 starter skills
     python-coding/
     git-workflow/
     file-editing/
@@ -332,7 +333,7 @@ pip install -e ".[dev]"
 # Run all checks
 ruff check .          # Lint
 mypy nova/            # Type check
-pytest                # Tests (768 passing)
+ pytest                # Tests (941 passing, 84% coverage)
 
 # Full CI check
 ruff check . && mypy nova/ && pytest

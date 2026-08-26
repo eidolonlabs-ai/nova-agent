@@ -1,8 +1,8 @@
 # Nova Agent — Project Roadmap
 
-**Updated:** May 2026  
-**Current Phase:** Phase 3 — Reliability & Scale  
-**Overall Progress:** 70% complete (14/20 features)
+**Updated:** August 2026
+**Current Phase:** Release hardening
+**Overall Progress:** ACP integration complete; release hardening in progress
 
 ---
 
@@ -33,6 +33,7 @@ Made Nova safe to run and extensible for real-world use.
 - ✅ Prompt mode gating (full for main agent, minimal for sub-agents)
 - ✅ Web search via Bing RSS (zero dependencies, zero API key)
 - ✅ Obsidian-compatible wiki memory (markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance)
+- ✅ ACP stdio server (session lifecycle, workspace isolation, tool-call progress)
 
 ## Phase 3: Reliability & Scale 🟡 In Progress (Jun–Aug 2026)
 
@@ -40,10 +41,10 @@ Making Nova production-ready for teams and long sessions.
 
 - 🟡 **Context window optimization** — adaptive compression based on session length
 - 🟡 **Multi-model fallback** — if one model fails, try another automatically
-- 📋 **Session archival** — move old sessions to cold storage
+- 📋 **Session archival** — move old persisted sessions to cold storage
 - 📋 **Structured output mode** — force JSON responses for tool-heavy workflows
 - 📋 **Plugin system** — third-party tool/skill marketplace
-- 📋 **Parallel tool execution** — run independent tools simultaneously
+- ✅ **Parallel tool execution** — run independent read-only tools concurrently
 
 ## Phase 4: Team Features 📋 Planned (Sep–Dec 2026)
 
@@ -63,7 +64,7 @@ Collaboration and enterprise readiness.
 |-------|--------|--------|-----------------|
 | Phase 1 | Mar 2026 | ✅ Complete | Core agent, tools, skills |
 | Phase 2 | May 2026 | ✅ Complete | Permissions, hooks, MCP, delegation |
-| Phase 3 | Aug 2026 | 🟡 50% | Context optimization, multi-model fallback |
+| Phase 3 | Aug 2026 | 🟡 In progress | Context optimization, multi-model fallback, release hardening |
 | Phase 4 | Dec 2026 | 📋 Planned | Shared sessions, RBAC, audit logs |
 
 ---
@@ -81,9 +82,9 @@ The following are explicitly **not** on the roadmap (trade-offs, not oversights)
 
 ## Next Steps
 
-1. **Context window optimization** — adaptive compression unblocks long-session reliability
-2. **Multi-model fallback** — reduces outage risk from OpenRouter downtime
-3. **Plugin system design** — community contributions will accelerate Phase 4
+1. **Release hardening** — validate security boundaries, supported Python versions, and installation paths
+2. **Context window optimization** — adaptive compression unblocks long-session reliability
+3. **Multi-model fallback** — reduces outage risk from OpenRouter downtime
 
 ---
 
@@ -91,8 +92,8 @@ The following are explicitly **not** on the roadmap (trade-offs, not oversights)
 
 | Document | Purpose |
 |----------|---------|
-| [Documentation Index](docs/DOCUMENTATION_INDEX.md) | Full inventory of all docs |
-| [REPORT-001 Project Status](docs/REPORT-001-PROJECT_STATUS_2026-05-02.md) | Latest project snapshot |
-| [ADR-001 Sub-Agent Comparison](docs/ADR-001-SUBAGENT_COMPARISON.md) | Architecture decision for delegation |
-| [ADR-002 Sub-Agent Design](docs/ADR-002-SUBAGENT_DESIGN.md) | Implementation approach |
-| [CONTRIBUTING](CONTRIBUTING.md) | How to contribute to Nova |
+| [Documentation Index](DOCUMENTATION_INDEX.md) | Full inventory of all docs |
+| [REPORT-002 ACP Handoff](REPORT-002-ACP_IMPLEMENTATION_HANDOFF.md) | ACP implementation and verification |
+| [ADR-001 Sub-Agent Comparison](ADR-001-SUBAGENT_COMPARISON.md) | Architecture decision for delegation |
+| [ADR-002 Sub-Agent Design](ADR-002-SUBAGENT_DESIGN.md) | Implementation approach |
+| [CONTRIBUTING](../CONTRIBUTING.md) | How to contribute to Nova |

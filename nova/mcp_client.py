@@ -18,6 +18,8 @@ from typing import Any, Union
 
 import httpx
 
+from nova import __version__
+
 logger = logging.getLogger(__name__)
 
 # JSON-RPC protocol version
@@ -155,7 +157,7 @@ class _StdioTransport:
             "params": {
                 "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": {"name": "nova-agent", "version": "0.1.0"},
+                "clientInfo": {"name": "nova-agent", "version": __version__},
             },
         }
         self._send(init_request)
@@ -257,7 +259,7 @@ class _HttpTransport:
             "params": {
                 "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": {"name": "nova-agent", "version": "0.1.0"},
+                "clientInfo": {"name": "nova-agent", "version": __version__},
             },
         }
         headers = dict(self.config.headers)

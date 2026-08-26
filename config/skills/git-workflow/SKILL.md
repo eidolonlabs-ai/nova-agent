@@ -29,7 +29,7 @@ feat: add semantic symbol search tool
 fix: handle empty context files gracefully
 test: expand CLI coverage to 82%
 refactor: extract token budget logic into tokens.py
-docs: update test counts to reflect 596 tests
+docs: update test counts to reflect the current baseline
 ```
 
 ## Pre-Commit Checklist
@@ -71,7 +71,7 @@ gh pr create --title "feat: add X" --body "$(cat <<'EOF'
 - What changed and why
 
 ## Test plan
-- [ ] All 596 tests pass (`pytest`)
+- [ ] All 941 tests pass (`pytest`)
 - [ ] Lint clean (`ruff check .`)
 - [ ] Format clean (`ruff format --check .`)
 - [ ] Types clean (`mypy nova/`)
