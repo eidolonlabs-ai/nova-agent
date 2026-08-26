@@ -10,6 +10,7 @@ import copy
 import json
 import logging
 import time
+import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -30,6 +31,7 @@ from nova.hooks import (
 )
 from nova.microcompact import microcompact_messages
 from nova.model_metadata import get_model_context_window
+from nova.observability import create_observability
 from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
 from nova.retry import retry_with_backoff
@@ -180,6 +182,7 @@ class NovaAgent:
             self.cost_tracker: CostTracker | None = None
             if cost_cfg.get("enabled", True):
                 self.cost_tracker = CostTracker(model=self.config["llm"]["model"])
+            self.observability = create_observability(self.config)
 
             # Create or load session (tools discovered above, so _build_system_prompt
             # will include tool summaries from the start)
@@ -197,6 +200,9 @@ class NovaAgent:
 
     def close(self) -> None:
         """Close the HTTP client and release resources."""
+        observer = getattr(self, "observability", None)
+        if observer is not None:
+            observer.shutdown()
         if self._owns_client and hasattr(self.client, "close"):
             self.client.close()
 
@@ -358,6 +364,13 @@ class NovaAgent:
                 max_delay=max_delay,
             )
 
+        self.observability.llm(
+            llm_config["model"],
+            input_data=messages,
+            output_data=response_data,
+            usage=extract_usage_from_response(response_data),
+        )
+
         # Track cost from response
         if self.cost_tracker:
             usage = extract_usage_from_response(response_data)
@@ -494,6 +507,7 @@ class NovaAgent:
         try:
             arguments = json.loads(arguments_str)
         except json.JSONDecodeError:
+            self.observability.tool(name, output_data="invalid_json")
             return f"Error: Invalid JSON arguments: {arguments_str}"
 
         arguments = self._apply_workspace_defaults(name, arguments)
@@ -501,6 +515,7 @@ class NovaAgent:
         # Permission check
         entry = registry.get_tool(name)
         if entry is None:
+            self.observability.tool(name, input_data=arguments, output_data="unknown_tool")
             return f"Error: Unknown tool: {name}"
         is_read_only = entry.is_read_only if entry else False
 
@@ -514,9 +529,11 @@ class NovaAgent:
             file_path=file_path,
             command=command,
         )
+        self.observability.policy(name, allowed=perm_result.allowed, reason=perm_result.reason)
 
         if not perm_result.allowed:
             logger.warning("Tool call denied: %s — %s", name, perm_result.reason)
+            self.observability.tool(name, input_data=arguments, output_data="denied")
             return f"Error: {perm_result.reason}"
 
         if perm_result.requires_confirmation:
@@ -525,6 +542,9 @@ class NovaAgent:
             )
             if not approved:
                 logger.info("Tool '%s' denied because confirmation was not granted", name)
+                self.observability.tool(
+                    name, input_data=arguments, output_data="confirmation_denied"
+                )
                 return f"Error: Tool '{name}' requires confirmation"
 
         # Fire pre_tool_call hook (also fired in registry.dispatch, but we fire here
@@ -570,8 +590,20 @@ class NovaAgent:
                 continue
 
             # Success or permanent error — return
+            self.observability.tool(name, input_data=arguments, output_data=result, retries=attempt)
+            self.observability.verification(
+                name,
+                status="failed" if result.startswith("Error:") else "inconclusive",
+                result=result,
+            )
             return result
 
+        self.observability.tool(name, input_data=arguments, output_data=result, retries=max_retries)
+        self.observability.verification(
+            name,
+            status="failed" if result.startswith("Error:") else "inconclusive",
+            result=result,
+        )
         return result
 
     def _apply_workspace_defaults(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -746,6 +778,16 @@ class NovaAgent:
         return f"{head}\n\n[...{truncated_tokens:,} tokens truncated...]\n\n{tail}"
 
     def run(
+        self,
+        user_message: str,
+        stream: bool = True,
+        stream_callback: Callable[[str], None] | None = None,
+    ) -> str:
+        run_id = str(uuid.uuid4())
+        with self.observability.run(run_id, user_message, session_id=self.session_id):
+            return self._run(user_message, stream=stream, stream_callback=stream_callback)
+
+    def _run(
         self,
         user_message: str,
         stream: bool = True,

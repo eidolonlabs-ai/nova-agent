@@ -22,7 +22,7 @@ This specification deliberately extends Nova's current architecture. It does not
 | Tools/runtime | Registry, tool handlers, workspace defaults, retries, read-only parallelism | ✅ Existing |
 | Verification | Tool-specific postconditions and final acceptance state | 📋 This specification |
 | Accepted result | Structured completion status plus final response | 📋 This specification |
-| Observability | Unified in-memory run/tool traces exposed through existing hooks | 📋 This specification |
+| Observability | Unified in-memory run/tool traces exposed through existing hooks; optional Langfuse sink | ✅ Implemented (opt-in) |
 
 ## 3. Scope
 
@@ -237,11 +237,11 @@ The optional Langfuse configuration is defined in section 5.2. It is disabled by
 - [ ] Ordinary chat remains backward-compatible and returns a string.
 - [ ] Existing full test suite, ruff, and mypy pass.
 - [ ] Documentation explains what is and is not verified.
-- [ ] Langfuse is an optional dependency and configuration is disabled by default.
-- [ ] Langfuse receives run, LLM, tool, policy, and verification telemetry when enabled.
-- [ ] Input/output capture is opt-in and disabled by default.
-- [ ] Langfuse export failures are isolated from agent execution.
-- [ ] Shutdown flush is covered by tests or a deterministic integration test seam.
+- [x] Langfuse is an optional dependency and configuration is disabled by default.
+- [x] Langfuse receives run, LLM, tool, policy, and verification telemetry when enabled.
+- [x] Input/output capture is opt-in and disabled by default.
+- [x] Langfuse export failures are isolated from agent execution.
+- [x] Shutdown flush is covered by tests or a deterministic integration test seam.
 
 ## 11. Residual Gaps
 

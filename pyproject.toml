@@ -32,6 +32,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+observability = [
+    "langfuse>=3.0,<5",
+]
 dev = [
     "mypy>=1.0",
     "pip-audit>=2.7",

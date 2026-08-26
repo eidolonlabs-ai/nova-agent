@@ -88,6 +88,21 @@ DEFAULT_CONFIG = {
     "cost_tracking": {
         "enabled": True,
     },
+    "observability": {
+        "enabled": False,
+        "provider": "langfuse",
+        "sample_rate": 1.0,
+        "capture_input": False,
+        "capture_output": False,
+        "environment": "",
+        "release": "",
+        "flush_at_shutdown": True,
+        "langfuse": {
+            "public_key": "",
+            "secret_key": "",
+            "base_url": "https://cloud.langfuse.com",
+        },
+    },
     "microcompact": {
         "enabled": True,
         "keep_recent": 6,
@@ -136,6 +151,22 @@ def _validate_config(config: dict[str, Any]) -> None:
     microcompact = config["microcompact"]
     if not isinstance(microcompact.get("keep_recent"), int) or microcompact["keep_recent"] < 0:
         raise ConfigError("microcompact.keep_recent must be a non-negative integer")
+
+    observability = config.get("observability", {})
+    if not isinstance(observability, dict):
+        raise ConfigError("Config section 'observability' must be a mapping")
+    sample_rate = observability.get("sample_rate", 1.0)
+    if (
+        isinstance(sample_rate, bool)
+        or not isinstance(sample_rate, (int, float))
+        or not 0.0 <= sample_rate <= 1.0
+    ):
+        raise ConfigError("observability.sample_rate must be between 0.0 and 1.0")
+    if observability.get("provider", "langfuse") not in {"langfuse"}:
+        raise ConfigError("observability.provider must be 'langfuse'")
+    langfuse = observability.get("langfuse", {})
+    if not isinstance(langfuse, dict):
+        raise ConfigError("observability.langfuse must be a mapping")
 
     retry = config["retry"]
     if not isinstance(retry.get("max_retries"), int) or not 0 <= retry["max_retries"] <= 10:
