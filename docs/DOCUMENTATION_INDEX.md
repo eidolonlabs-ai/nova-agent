@@ -1,7 +1,7 @@
 # Nova Agent — Documentation Index
 
-**Last Updated:** May 2026  
-**Status:** ✅ Active  
+**Last Updated:** August 2026
+**Status:** ✅ Active
 **Maintainer:** [Eidolon Labs LLC](https://github.com/eidolonlabs-ai)
 
 > Systematic inventory of all Nova Agent documentation.
@@ -54,6 +54,7 @@
 | Document | Status | What It Covers |
 |----------|--------|----------------|
 | [REPORT-001-PROJECT_STATUS_2026-05-02](REPORT-001-PROJECT_STATUS_2026-05-02.md) | ✅ Active | Test coverage baseline, CI status, open work as of May 2026 |
+| [REPORT-002-ACP_IMPLEMENTATION_HANDOFF](REPORT-002-ACP_IMPLEMENTATION_HANDOFF.md) | 🟡 In Progress | ACP implementation state, decisions, verification, and next patch |
 
 ---
 
@@ -79,10 +80,10 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 |----------|-------|--------|
 | Guides (GUIDE-NNN) | 14 | ✅ All current |
 | ADRs (ADR-NNN) | 3 | ✅ All current |
-| Reports (REPORT-NNN) | 1 | ✅ Current |
+| Reports (REPORT-NNN) | 2 | 🟡 ACP work in progress |
 | Starter skills | 7 | ✅ All current |
 | Root docs (README, CONTRIBUTING, SECURITY) | 3 | ✅ All current |
-| **Total** | **28** | ✅ |
+| **Total** | **29** | 🟡 |
 
 **Supported doc type prefixes:** GUIDE · PRD · PERSONA · SPEC · ADR · RUN · RELEASE · STRATEGY · RESEARCH · GTM · REPORT
 
