@@ -1,7 +1,11 @@
-# Nova Agent — Codex Instructions
+# Nova Agent — Agent Instructions
 
 **Repository:** https://github.com/eidolonlabs-ai/nova-agent
 **Organization:** Eidolon Labs LLC
+
+This file is the canonical repository guidance for any coding agent. It is
+tool- and vendor-neutral; do not assume Claude Code, Codex, or another
+particular agent runtime.
 
 ## Overview
 
