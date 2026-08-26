@@ -107,6 +107,8 @@ class SessionStore:
             columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
             if "tool_call_id" not in columns:
                 conn.execute("ALTER TABLE messages ADD COLUMN tool_call_id TEXT")
+            if "reasoning_content" not in columns:
+                conn.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
 
     def _ensure_fts_trigram(self, conn: sqlite3.Connection) -> None:
         """Create or migrate session_search to use the FTS5 trigram tokenizer.

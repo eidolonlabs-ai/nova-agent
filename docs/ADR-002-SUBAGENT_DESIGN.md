@@ -143,34 +143,35 @@ DELEGATE_TASK_SCHEMA = {
 @dataclass
 class SubAgentConfig:
     """Configuration for a spawned sub-agent."""
-    
+
     # Identity
-    depth: int                          # 0=root, 1+=child
-    parent_task_id: str | None          # Parent's task_id for logging
-    
+    depth: int  # 0=root, 1+=child
+    parent_task_id: str | None  # Parent's task_id for logging
+
     # Execution
-    model: str                          # Model to use
-    max_iterations: int                 # Iteration limit (default 30)
-    timeout_seconds: int                # Hard timeout (default 60, max 300)
-    
+    model: str  # Model to use
+    max_iterations: int  # Iteration limit (default 30)
+    timeout_seconds: int  # Hard timeout (default 60, max 300)
+
     # Context
-    context_mode: str                   # "isolated" or "fork"
-    parent_transcript: list | None      # Parent's messages (if fork mode)
-    
+    context_mode: str  # "isolated" or "fork"
+    parent_transcript: list | None  # Parent's messages (if fork mode)
+
     # Budget
-    system_prompt_budget: int           # Tokens for system prompt
-    context_budget: int                 # Tokens for context files
-    tool_result_budget: int             # Tokens per tool result
-    
+    system_prompt_budget: int  # Tokens for system prompt
+    context_budget: int  # Tokens for context files
+    tool_result_budget: int  # Tokens per tool result
+
     # Toolset
     enabled_toolsets: list[str] | None  # Inherit from parent if None
-    disabled_toolsets: list[str]        # Always disable: delegate_task (if leaf)
+    disabled_toolsets: list[str]  # Always disable: delegate_task (if leaf)
 ```
 
 ### 3.3 Sub-Agent Spawning
 
 ```python
 # nova/subagent/spawn.py
+
 
 def spawn_subagent(
     task: str,
@@ -181,7 +182,7 @@ def spawn_subagent(
     context_mode: str = "isolated",
 ) -> dict:
     """Spawn a sub-agent to handle a task.
-    
+
     Returns:
         {
             "success": bool,
@@ -192,11 +193,11 @@ def spawn_subagent(
             "timeout": bool,            # True if timed out
         }
     """
-    
+
     # 1. Validate depth
     if parent_agent.depth >= parent_agent.config.get("delegation", {}).get("max_spawn_depth", 2):
         raise ValueError(f"Cannot spawn sub-agent at depth {parent_agent.depth}")
-    
+
     # 2. Build sub-agent config
     subagent_config = _build_subagent_config(
         parent_agent=parent_agent,
@@ -205,7 +206,7 @@ def spawn_subagent(
         timeout_seconds=timeout_seconds,
         context_mode=context_mode,
     )
-    
+
     # 3. Create sub-agent instance
     subagent = NovaAgent(
         config=subagent_config,
@@ -213,18 +214,18 @@ def spawn_subagent(
         session_store=parent_agent.session_store,  # Separate session
         memory_store=parent_agent.memory_store,  # Shared memory
     )
-    
+
     # 4. Run in worker thread with timeout
     result = _run_subagent_with_timeout(
         subagent=subagent,
         task=task,
         timeout_seconds=timeout_seconds,
     )
-    
+
     # 5. Aggregate costs
     parent_agent.iteration_count += result["iterations"]
     parent_agent.tokens_used += result["tokens_used"]
-    
+
     return result
 ```
 
@@ -233,9 +234,7 @@ def spawn_subagent(
 **Isolated Mode (default):**
 ```python
 # Sub-agent starts fresh
-messages = [
-    {"role": "user", "content": task}
-]
+messages = [{"role": "user", "content": task}]
 ```
 
 **Fork Mode:**
@@ -380,13 +379,15 @@ class NovaAgent:
 ```python
 # nova/tools/registry.py
 
+
 def _discover_tools(self):
     """Discover and register tools."""
     # ... existing tools ...
-    
+
     # NEW: Register delegation tool
     if not self.is_leaf_agent:
         from nova.tools.delegate_tool import register_delegate_tool
+
         register_delegate_tool(self)
 ```
 
@@ -561,10 +562,7 @@ Parent Agent (depth=0, orchestrator)
 
 ```python
 # If leaf agent tries to spawn:
-raise ValueError(
-    f"Cannot spawn sub-agent at depth {depth}. "
-    f"Max spawn depth is {max_spawn_depth}."
-)
+raise ValueError(f"Cannot spawn sub-agent at depth {depth}. Max spawn depth is {max_spawn_depth}.")
 ```
 
 ---
@@ -582,11 +580,13 @@ def test_spawn_subagent_basic():
     assert result["success"]
     assert result["result"] is not None
 
+
 def test_spawn_depth_limit():
     """Test depth limit enforcement."""
     leaf_agent = NovaAgent(config, _subagent_depth=2)
     with pytest.raises(ValueError):
         spawn_subagent("Task", leaf_agent)
+
 
 def test_subagent_timeout():
     """Test timeout handling."""
@@ -602,6 +602,7 @@ def test_parallel_delegation():
     """Test parallel sub-agent execution."""
     response = agent.chat("Run 3 tasks in parallel")
     assert "completed" in response.lower()
+
 
 def test_nested_delegation():
     """Test nested sub-agent spawning."""

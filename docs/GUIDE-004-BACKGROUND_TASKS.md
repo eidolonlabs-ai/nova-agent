@@ -126,9 +126,11 @@ output = mgr.read_task_output(task_id)
 # Stop a task
 mgr.stop_task(task_id)
 
+
 # Register a completion listener
 def on_complete(task):
     print(f"Task {task.id} finished with code {task.return_code}")
+
 
 mgr.register_completion_listener(on_complete)
 ```

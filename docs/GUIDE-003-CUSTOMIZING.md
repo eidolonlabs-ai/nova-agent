@@ -336,8 +336,10 @@ Quick example:
 ```python
 from nova.hooks import hooks, EVENT_PRE_TOOL_CALL
 
+
 def audit(tool_name, args, **kwargs):
     print(f"[AUDIT] {tool_name}({args})")
+
 
 hooks.on(EVENT_PRE_TOOL_CALL, audit)
 ```

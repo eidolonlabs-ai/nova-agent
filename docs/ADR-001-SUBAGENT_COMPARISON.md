@@ -106,9 +106,7 @@ def delegate_task(
 
 ```python
 # Fresh conversation (default)
-messages = [
-    {"role": "user", "content": task}
-]
+messages = [{"role": "user", "content": task}]
 
 # No fork mode — sub-agent always starts fresh
 # Parent transcript never passed to child
@@ -144,9 +142,7 @@ const childMessages = [
 
 ```python
 # Isolated mode (default)
-messages = [
-    {"role": "user", "content": task}
-]
+messages = [{"role": "user", "content": task}]
 
 # Fork mode (optional)
 if context_mode == "fork":
@@ -240,9 +236,10 @@ if is_leaf:
 class IterationBudget:
     total: int
     remaining: int
-    
+
     def check(self) -> bool:
         return self.remaining > 0
+
 
 # Per-subagent
 subagent_budget = IterationBudget(total=50, remaining=50)

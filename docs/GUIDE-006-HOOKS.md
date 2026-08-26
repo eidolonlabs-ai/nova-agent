@@ -13,15 +13,19 @@ Hooks are registered programmatically. Add to your startup script or custom agen
 ```python
 from nova.hooks import hooks, EVENT_PRE_TOOL_CALL, EVENT_POST_TOOL_CALL
 
+
 # Log every tool call
 def audit_tool(tool_name, args, **kwargs):
     print(f"[AUDIT] {tool_name} called with args: {args}")
 
+
 hooks.on(EVENT_PRE_TOOL_CALL, audit_tool)
+
 
 # Record metrics after tool execution
 def record_metric(tool_name, result, **kwargs):
     print(f"[METRIC] {tool_name} returned {len(result)} chars")
+
 
 hooks.on(EVENT_POST_TOOL_CALL, record_metric)
 ```
@@ -56,7 +60,7 @@ hooks.has_listeners("pre_tool_call")
 
 # Clear callbacks
 hooks.clear("pre_tool_call")  # Single event
-hooks.clear()                  # All events
+hooks.clear()  # All events
 ```
 
 ## Callback Signature
@@ -85,11 +89,14 @@ from nova.hooks import hooks, EVENT_PRE_TOOL_CALL, EVENT_POST_TOOL_CALL
 
 audit_logger = logging.getLogger("nova.audit")
 
+
 def log_tool_call(tool_name, args, **kwargs):
     audit_logger.info("TOOL_CALL: %s(%s)", tool_name, args)
 
+
 def log_tool_result(tool_name, result, **kwargs):
     audit_logger.info("TOOL_RESULT: %s → %d chars", tool_name, len(result))
+
 
 hooks.on(EVENT_PRE_TOOL_CALL, log_tool_call)
 hooks.on(EVENT_POST_TOOL_CALL, log_tool_result)
@@ -104,6 +111,7 @@ def sanitize_result(tool_name, result, **kwargs):
         return "[REDACTED]"
     return result
 
+
 hooks.on(EVENT_POST_TOOL_CALL, sanitize_result)
 ```
 
@@ -112,10 +120,11 @@ hooks.on(EVENT_POST_TOOL_CALL, sanitize_result)
 ```python
 from nova.hooks import hooks, EVENT_POST_LLM_CALL
 
+
 def track_api_calls(response, **kwargs):
     usage = response.get("usage", {})
-    print(f"API call: {usage.get('prompt_tokens', 0)} in, "
-          f"{usage.get('completion_tokens', 0)} out")
+    print(f"API call: {usage.get('prompt_tokens', 0)} in, {usage.get('completion_tokens', 0)} out")
+
 
 hooks.on(EVENT_POST_LLM_CALL, track_api_calls)
 ```

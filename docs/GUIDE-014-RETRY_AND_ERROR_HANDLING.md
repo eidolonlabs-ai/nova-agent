@@ -54,7 +54,12 @@ String matching catches errors that don't have HTTP status codes (e.g., SDK-leve
 
 ```python
 # Retryable patterns
-"rate limit", "too many requests", "server error", "internal error",
+(
+    "rate limit",
+    "too many requests",
+    "server error",
+    "internal error",
+)
 "bad gateway", "service unavailable", "upstream error"
 
 # Connection error patterns (retried aggressively)
@@ -71,7 +76,7 @@ String matching catches errors that don't have HTTP status codes (e.g., SDK-leve
 The retry logic uses **exponential backoff with jitter**:
 
 ```python
-wait_time = base_delay * (backoff_multiplier ** attempt) + random_jitter
+wait_time = base_delay * (backoff_multiplier**attempt) + random_jitter
 ```
 
 ### Default Parameters

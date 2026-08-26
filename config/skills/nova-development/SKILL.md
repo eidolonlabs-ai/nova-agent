@@ -103,27 +103,33 @@ MY_TOOL_SCHEMA = {
         "type": "object",
         "properties": {
             "path": {"type": "string", "description": "Absolute file path."},
-            "limit": {"type": "integer", "description": "Max results (default: 10).", "default": 10},
+            "limit": {
+                "type": "integer",
+                "description": "Max results (default: 10).",
+                "default": 10,
+            },
         },
         "required": ["path"],
     },
 }
 
+
 def _my_tool(args: dict, **kwargs) -> str:
     config = kwargs.get("config", {})
-    memory = kwargs.get("memory")   # MemoryStore | None
-    agent  = kwargs.get("agent")    # NovaAgent instance
-    path   = args.get("path", "")
-    limit  = int(args.get("limit", 10))
+    memory = kwargs.get("memory")  # MemoryStore | None
+    agent = kwargs.get("agent")  # NovaAgent instance
+    path = args.get("path", "")
+    limit = int(args.get("limit", 10))
     # ...
     return "result as string"
+
 
 registry.register(
     name="my_tool",
     toolset="custom",
     schema=MY_TOOL_SCHEMA,
     handler=_my_tool,
-    is_read_only=True,   # omit or False for mutating tools
+    is_read_only=True,  # omit or False for mutating tools
     emoji="🔧",
 )
 ```
@@ -145,13 +151,16 @@ Then add `"nova.tools.my_tool"` to `tool_modules` in `nova/tools/registry.py`.
 ```python
 from nova.tools.my_tool import _my_tool
 
+
 def test_my_tool_basic():
     result = _my_tool({"path": "/tmp/test.txt"}, config={}, memory=None, agent=None)
     assert isinstance(result, str)
 
+
 def test_my_tool_missing_required_arg():
     result = _my_tool({}, config={}, memory=None, agent=None)
     assert result.startswith("Error:")
+
 
 def test_my_tool_reads_config():
     config = {"my_tool": {"max_results": 5}}
@@ -167,6 +176,7 @@ Inject `http_client`, `session_store`, and `memory_store` — never let tests ma
 from unittest.mock import MagicMock
 import httpx
 from nova.agent import NovaAgent
+
 
 def test_agent_something(minimal_config, mock_session_store):
     mock_http = MagicMock(spec=httpx.Client)
@@ -240,6 +250,7 @@ The agent checks permissions automatically at dispatch. Tools with file paths or
 ```python
 from nova.permissions import get_permission_checker
 
+
 def _my_tool(args: dict, **kwargs) -> str:
     checker = get_permission_checker(kwargs.get("config", {}))
     result = checker.evaluate("my_tool", is_read_only=True, file_path=args.get("path"))
@@ -256,8 +267,10 @@ Always-blocked paths (cannot be overridden by config):
 ```python
 from nova.hooks import hooks, EVENT_PRE_TOOL_CALL, EVENT_POST_TOOL_CALL, EVENT_POST_LLM_CALL
 
+
 def my_callback(tool_name: str, args: dict, **kwargs) -> None:
     print(f"[AUDIT] {tool_name}({args})")
+
 
 hooks.on(EVENT_PRE_TOOL_CALL, my_callback)
 hooks.off(EVENT_PRE_TOOL_CALL, my_callback)

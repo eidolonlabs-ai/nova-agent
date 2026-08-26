@@ -70,9 +70,9 @@ tracker.add_usage(
 )
 
 # View totals
-print(tracker.total.input_tokens)    # 2000
-print(tracker.total.output_tokens)   # 1000
-print(tracker.total.total_cost)      # 0.00015
+print(tracker.total.input_tokens)  # 2000
+print(tracker.total.output_tokens)  # 1000
+print(tracker.total.total_cost)  # 0.00015
 
 # Human-readable summary
 print(tracker.format_summary())

@@ -70,7 +70,7 @@ Then add it to `discover_builtin_tools()` in `nova/tools/registry.py`:
 ```python
 tool_modules = [
     # ... existing modules ...
-    "nova.tools.hello",   # ← add this line
+    "nova.tools.hello",  # ← add this line
 ]
 ```
 
@@ -126,8 +126,7 @@ See [docs/GUIDE-006-HOOKS.md](GUIDE-006-HOOKS.md) for details on registering hoo
 Every handler must follow this signature:
 
 ```python
-def _my_tool(args: dict, **kwargs) -> str:
-    ...
+def _my_tool(args: dict, **kwargs) -> str: ...
 ```
 
 | Parameter | Type | Description |
@@ -151,8 +150,8 @@ Access them like this:
 ```python
 def _my_tool(args: dict, **kwargs) -> str:
     config = kwargs.get("config", {})
-    wiki   = kwargs.get("wiki")
-    agent  = kwargs.get("agent")
+    wiki = kwargs.get("wiki")
+    agent = kwargs.get("agent")
     ...
 ```
 
@@ -168,6 +167,7 @@ return "File written successfully."
 
 # ✅ Good — JSON for structured data
 import json
+
 return json.dumps({"status": "ok", "count": 42})
 
 # ✅ Good — error message
@@ -175,7 +175,7 @@ return "Error: File not found at /path/to/file."
 
 # ❌ Bad — never return None or non-string
 return None
-return {"status": "ok"}   # dict, not string
+return {"status": "ok"}  # dict, not string
 ```
 
 ### Budget enforcement
@@ -236,7 +236,7 @@ MY_TOOL_SCHEMA = {
                 "description": "List of tags to apply.",
             },
         },
-        "required": ["path"],   # Only list truly required params
+        "required": ["path"],  # Only list truly required params
     },
 }
 ```
@@ -316,9 +316,9 @@ def _github(args: dict[str, Any], **kwargs) -> str:
         return "Error: GITHUB_TOKEN environment variable is not set."
 
     action = args.get("action", "")
-    repo   = args.get("repo", "")
-    query  = args.get("query", "")
-    limit  = int(args.get("limit", 10))
+    repo = args.get("repo", "")
+    query = args.get("query", "")
+    limit = int(args.get("limit", 10))
 
     headers = {
         "Authorization": f"Bearer {token}",
@@ -334,14 +334,17 @@ def _github(args: dict[str, Any], **kwargs) -> str:
                 resp = client.get(f"{_GITHUB_API}/repos/{repo}", headers=headers)
                 resp.raise_for_status()
                 data = resp.json()
-                return json.dumps({
-                    "name": data["full_name"],
-                    "description": data.get("description"),
-                    "stars": data["stargazers_count"],
-                    "forks": data["forks_count"],
-                    "open_issues": data["open_issues_count"],
-                    "url": data["html_url"],
-                }, indent=2)
+                return json.dumps(
+                    {
+                        "name": data["full_name"],
+                        "description": data.get("description"),
+                        "stars": data["stargazers_count"],
+                        "forks": data["forks_count"],
+                        "open_issues": data["open_issues_count"],
+                        "url": data["html_url"],
+                    },
+                    indent=2,
+                )
 
             elif action == "list_issues":
                 if not repo:
@@ -353,10 +356,13 @@ def _github(args: dict[str, Any], **kwargs) -> str:
                 )
                 resp.raise_for_status()
                 issues = resp.json()
-                return json.dumps([
-                    {"number": i["number"], "title": i["title"], "url": i["html_url"]}
-                    for i in issues
-                ], indent=2)
+                return json.dumps(
+                    [
+                        {"number": i["number"], "title": i["title"], "url": i["html_url"]}
+                        for i in issues
+                    ],
+                    indent=2,
+                )
 
             elif action == "search_repos":
                 if not query:
@@ -368,10 +374,17 @@ def _github(args: dict[str, Any], **kwargs) -> str:
                 )
                 resp.raise_for_status()
                 items = resp.json().get("items", [])
-                return json.dumps([
-                    {"name": r["full_name"], "stars": r["stargazers_count"], "url": r["html_url"]}
-                    for r in items
-                ], indent=2)
+                return json.dumps(
+                    [
+                        {
+                            "name": r["full_name"],
+                            "stars": r["stargazers_count"],
+                            "url": r["html_url"],
+                        }
+                        for r in items
+                    ],
+                    indent=2,
+                )
 
             else:
                 return f"Error: Unknown action '{action}'."
@@ -465,12 +478,12 @@ See `nova/wiki_memory.py` for the full `WikiMemory` API.
 
 ```python
 registry.register(
-    name="my_tool",        # Tool name — must match schema["name"]
-    toolset="custom",      # Logical group (used for filtering)
-    schema=MY_TOOL_SCHEMA, # Full JSON schema dict
-    handler=_my_tool,      # Callable: (args: dict, **kwargs) -> str
-    check_fn=None,         # Optional: () -> bool — return False to skip registration
-    emoji="🔧",            # Displayed in tool call output
+    name="my_tool",  # Tool name — must match schema["name"]
+    toolset="custom",  # Logical group (used for filtering)
+    schema=MY_TOOL_SCHEMA,  # Full JSON schema dict
+    handler=_my_tool,  # Callable: (args: dict, **kwargs) -> str
+    check_fn=None,  # Optional: () -> bool — return False to skip registration
+    emoji="🔧",  # Displayed in tool call output
 )
 ```
 
@@ -506,7 +519,7 @@ def discover_builtin_tools(config: dict | None = None):
         "nova.tools.web",
         "nova.tools.skills_tool",
         "nova.tools.wiki_tool",
-        "nova.tools.my_tool",   # ← add your module here
+        "nova.tools.my_tool",  # ← add your module here
     ]
     ...
 ```

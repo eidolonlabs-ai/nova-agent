@@ -161,22 +161,28 @@ from nova.mcp_client import (
 client = McpClient()
 
 # Add a stdio server (local subprocess)
-client.add_server(McpStdioConfig(
-    command="npx",
-    args=["-y", "@modelcontextprotocol/server-filesystem", "/path"],
-))
+client.add_server(
+    McpStdioConfig(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-filesystem", "/path"],
+    )
+)
 
 # Add an HTTP server (Streamable HTTP)
-client.add_server(McpHttpConfig(
-    url="https://api.example.com/mcp",
-    headers={"Authorization": "Bearer token"},
-))
+client.add_server(
+    McpHttpConfig(
+        url="https://api.example.com/mcp",
+        headers={"Authorization": "Bearer token"},
+    )
+)
 
 # Add an SSE server
-client.add_server(McpSseConfig(
-    url="https://api.example.com/sse",
-    headers={"Authorization": "Bearer token"},
-))
+client.add_server(
+    McpSseConfig(
+        url="https://api.example.com/sse",
+        headers={"Authorization": "Bearer token"},
+    )
+)
 
 # Connect to all servers
 connected = client.connect_all()
@@ -220,6 +226,7 @@ Verify the server connected successfully:
 
 ```python
 from nova.mcp_client import McpClient
+
 client = McpClient()
 # ... add and connect servers ...
 print(client.list_tools())

@@ -228,8 +228,7 @@ CREATE TABLE feature_name (
 ## API
 
 ```python
-def create_feature(name: str, config: dict) -> Feature:
-    ...
+def create_feature(name: str, config: dict) -> Feature: ...
 ```
 
 ## Examples

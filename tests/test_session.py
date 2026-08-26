@@ -1,5 +1,6 @@
 """Tests for session storage."""
 
+import sqlite3
 import tempfile
 from pathlib import Path
 
@@ -372,3 +373,43 @@ def test_reasoning_content_omitted_when_none():
 
         msgs = store.get_messages(sid)
         assert "reasoning_content" not in msgs[0]
+
+
+def test_legacy_database_migrates_reasoning_content_column():
+    """Existing databases must gain columns added after their initial schema."""
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "test.db"
+        with sqlite3.connect(db) as conn:
+            conn.executescript(
+                """
+                CREATE TABLE sessions (
+                    session_id TEXT PRIMARY KEY,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    model TEXT,
+                    system_prompt TEXT,
+                    title TEXT,
+                    message_count INTEGER DEFAULT 0
+                );
+                CREATE TABLE messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT NOT NULL,
+                    idx INTEGER NOT NULL,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    tool_calls TEXT,
+                    timestamp TEXT NOT NULL
+                );
+                CREATE TABLE session_fts (
+                    session_id TEXT PRIMARY KEY,
+                    title TEXT,
+                    content TEXT
+                );
+                """
+            )
+
+        store = SessionStore(db)
+        sid = store.create_session()
+        store.add_message(sid, "assistant", "reply", reasoning_content="thinking")
+
+        assert store.get_messages(sid)[0]["reasoning_content"] == "thinking"
