@@ -3,7 +3,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from nova.config import DEFAULT_CONFIG, ConfigError, _validate_config
-from nova.observability import NoOpObservability, create_observability, redact, should_sample
+from nova.observability import (
+    NoOpObservability,
+    create_observability,
+    redact,
+    redact_text,
+    should_sample,
+)
 
 
 def test_observability_defaults_disabled():
@@ -89,6 +95,18 @@ def test_redact_masks_secret_patterns_embedded_in_text():
 
 def test_redact_preserves_ordinary_bearer_text():
     assert redact("Bearer is an ordinary word here") == "Bearer is an ordinary word here"
+
+
+def test_redact_masks_generic_credential_assignments_in_text():
+    result = redact_text("token=secret auth: 'auth-secret' access = access-secret")
+
+    assert result == "token=[REDACTED] auth: '[REDACTED]' access = [REDACTED]"
+
+
+def test_redact_preserves_ordinary_token_auth_and_access_text():
+    text = "token budget, authenticate the access request, and access to the file"
+
+    assert redact_text(text) == text
 
 
 def test_adapter_emits_run_llm_tool_policy_and_verification_observations():
@@ -246,6 +264,31 @@ def test_unresolved_langfuse_placeholders_do_not_initialize_client(monkeypatch):
     )
     assert isinstance(observer, NoOpObservability)
     factory.assert_not_called()
+
+
+def test_langfuse_placeholders_resolve_from_environment(monkeypatch):
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "env-pk")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "env-sk")
+    factory = MagicMock()
+
+    observer = create_observability(
+        {
+            **DEFAULT_CONFIG,
+            "observability": {
+                "enabled": True,
+                "provider": "langfuse",
+                "langfuse": {
+                    "public_key": "${LANGFUSE_PUBLIC_KEY}",
+                    "secret_key": "${LANGFUSE_SECRET_KEY}",
+                },
+            },
+        },
+        client_factory=factory,
+    )
+
+    assert observer.enabled
+    assert factory.call_args.args[0]["public_key"] == "env-pk"
+    assert factory.call_args.args[0]["secret_key"] == "env-sk"
 
 
 def test_provider_other_than_langfuse_is_noop():

@@ -49,9 +49,10 @@ _BEARER_VALUE = re.compile(
     r"^(?P<prefix>\s*Bearer\s+)(?P<token>\S+)(?P<suffix>\s*)$", re.IGNORECASE
 )
 _SECRET_TEXT = re.compile(
-    r"(?P<key>\b(?:api[_-]?(?:key|token)|auth[_-]?token|access[_-]?(?:key|token)|"
-    r"x[-_]?(?:api[-_]?key|api[-_]?token|auth[-_]?token)|password|secret(?:[_-]?key)?|"
-    r"client[_-]?secret|private[_-]?key|authorization|cookie|credential(?:s)?))\b"
+    r"(?P<key>\b(?:api[_-]?(?:key|token)|token|auth(?:[_-]?token)?|"
+    r"access(?:[_-]?(?:key|token))?|x[-_]?(?:api[-_]?key|api[-_]?token|auth[-_]?token)|"
+    r"password|secret(?:[_-]?key)?|client[_-]?secret|private[_-]?key|authorization|"
+    r"cookie|credential(?:s)?))\b"
     r"(?P<key_quote>[\"']?)(?P<separator>\s*[:=]\s*)(?P<prefix>Bearer\s+)?"
     r"(?P<value>\"[^\"]*\"|'[^']*'|[^\s,;}]*)",
     re.IGNORECASE,
@@ -325,6 +326,12 @@ def create_observability(
     if not isinstance(raw, dict):
         return NoOpObservability()
     langfuse_config = dict(raw)
+    for key in ("public_key", "secret_key"):
+        value = langfuse_config.get(key)
+        if isinstance(value, str) and _UNRESOLVED_ENV.fullmatch(value):
+            env_name = value[2:-1] if value.startswith("${") else value[1:]
+            if env_name in os.environ:
+                langfuse_config[key] = os.environ[env_name]
     unresolved_credentials = any(
         isinstance(langfuse_config.get(key), str)
         and _UNRESOLVED_ENV.fullmatch(langfuse_config[key])
