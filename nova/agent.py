@@ -15,13 +15,14 @@ import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from openai import NOT_GIVEN, OpenAI
 
 from nova.compression import compress_conversation
 from nova.config import ensure_nova_home, load_config
 from nova.cost_tracker import CostTracker, extract_usage_from_response
+from nova.harness import HarnessTrace, VerificationResult, derive_run_status
 from nova.hooks import (
     EVENT_POST_LLM_CALL,
     EVENT_POST_TOOL_CALL,
@@ -32,7 +33,7 @@ from nova.hooks import (
 )
 from nova.microcompact import microcompact_messages
 from nova.model_metadata import get_model_context_window
-from nova.observability import create_observability
+from nova.observability import create_observability, redact
 from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
 from nova.retry import retry_with_backoff
@@ -129,6 +130,8 @@ class NovaAgent:
         self.workspace = workspace.resolve() if workspace else Path.cwd().resolve()
         # Token estimate cache: hash(content) → token_count (bounded to 2048 entries)
         self._token_cache: dict[int, int] = {}
+        self.last_run_trace: Any = None
+        self._active_trace: HarnessTrace | None = None
 
         # Initialize components
         ensure_nova_home()
@@ -497,6 +500,74 @@ class NovaAgent:
         return any(kw in error_lower for kw in transient_keywords)
 
     def _execute_tool_call(self, tool_call: dict) -> str:
+        function = tool_call.get("function", {})
+        name = function.get("name", "")
+        call_id = tool_call.get("id", "") or str(uuid.uuid4())
+        raw_args = function.get("arguments", "{}")
+        try:
+            parsed_args = json.loads(raw_args)
+            args = (
+                self._apply_workspace_defaults(name, parsed_args)
+                if isinstance(parsed_args, dict)
+                else {}
+            )
+        except (TypeError, json.JSONDecodeError):
+            args = {}
+        collector = self._active_trace
+        trace = None
+        permission = None
+        if collector is not None:
+            trace = collector.start_tool(call_id, name, redact(args))
+            entry = registry.get_tool(name)
+            if entry is not None:
+                permission = self.permission_checker.evaluate(
+                    name,
+                    is_read_only=entry.is_read_only,
+                    file_path=args.get("path"),
+                    command=args.get("command"),
+                )
+                collector.policy(
+                    trace,
+                    allowed=permission.allowed,
+                    confirmation_required=permission.requires_confirmation,
+                    reason=permission.reason,
+                )
+        try:
+            result = self._execute_tool_call_impl(tool_call)
+            verification = None
+            entry = registry.get_tool(name)
+            if entry is not None and entry.verifier is not None and isinstance(args, dict):
+                try:
+                    verification = entry.verifier(args, result, agent=self)
+                except Exception as exc:
+                    verification = VerificationResult("inconclusive", reason=type(exc).__name__)
+            if verification is None and isinstance(result, str) and result.startswith("Error:"):
+                verification = VerificationResult("failed", reason="tool returned an error")
+            outcome: Literal["completed", "failed", "denied"] = (
+                "denied"
+                if permission is not None
+                and not permission.allowed
+                or (isinstance(result, str) and "requires confirmation" in result)
+                else ("failed" if result.startswith("Error:") else "completed")
+            )
+            if trace is not None and collector is not None:
+                collector.finish_tool(
+                    trace, outcome=outcome, result=redact(result), verification=verification
+                )
+            if verification is not None:
+                self.observability.verification(
+                    name,
+                    status=verification.status,
+                    evidence=verification.evidence,
+                    reason=verification.reason,
+                )
+            return result
+        except BaseException as exc:
+            if trace is not None and collector is not None:
+                collector.finish_tool(trace, outcome="failed", result=type(exc).__name__)
+            raise
+
+    def _execute_tool_call_impl(self, tool_call: dict) -> str:
         """Execute a single tool call and return the result.
 
         Automatically retries transient errors (timeout, network) but not permanent ones.
@@ -669,12 +740,10 @@ class NovaAgent:
         if read_only_calls:
             max_workers = min(len(read_only_calls), 4)
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                future_to_idx = {
-                    executor.submit(
-                        contextvars.copy_context().run, self._execute_tool_call, tc
-                    ): idx
-                    for idx, tc in read_only_calls
-                }
+                future_to_idx = {}
+                for idx, tc in read_only_calls:
+                    context = contextvars.copy_context()
+                    future_to_idx[executor.submit(context.run, self._execute_tool_call, tc)] = idx
 
                 for future in as_completed(future_to_idx):
                     idx = future_to_idx[future]
@@ -798,8 +867,22 @@ class NovaAgent:
         stream_callback: Callable[[str], None] | None = None,
     ) -> str:
         run_id = str(uuid.uuid4())
-        with self.observability.run(run_id, user_message, session_id=self.session_id):
-            return self._run(user_message, stream=stream, stream_callback=stream_callback)
+        trace = HarnessTrace(run_id, user_message)
+        self._active_trace = trace
+        try:
+            with self.observability.run(run_id, user_message, session_id=self.session_id):
+                try:
+                    result = self._run(user_message, stream=stream, stream_callback=stream_callback)
+                    status = derive_run_status(trace.run, has_output=bool(result))
+                    self.observability.finish_run(status=status, output=result)
+                    self.last_run_trace = trace.finish(status=status, output=result)
+                    return result
+                except BaseException as exc:
+                    self.observability.finish_run(status="inconclusive", error=exc)
+                    self.last_run_trace = trace.finish(status="inconclusive")
+                    raise
+        finally:
+            self._active_trace = None
 
     def _run(
         self,
@@ -984,6 +1067,18 @@ class NovaAgent:
                     if not call_id:
                         continue
                     self._report_tool_start(tool_call)
+                    if self._active_trace is not None:
+                        interrupted_trace = self._active_trace.start_tool(
+                            call_id,
+                            tool_call.get("function", {}).get("name", ""),
+                            redact(tool_call.get("function", {})),
+                        )
+                        self._active_trace.finish_tool(
+                            interrupted_trace,
+                            outcome="failed",
+                            result="[Interrupted by user before tool execution]",
+                            verification=VerificationResult("inconclusive", reason="interrupted"),
+                        )
                     interrupted_result = {
                         "role": "tool",
                         "content": "[Interrupted by user before tool execution]",

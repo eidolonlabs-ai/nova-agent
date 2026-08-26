@@ -32,7 +32,9 @@ def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
                     break
                 key_string = str(key)
                 result[key_string] = (
-                    "[REDACTED]" if key_string.lower() in _SECRET_KEYS else _redact(child, depth + 1)
+                    "[REDACTED]"
+                    if key_string.lower() in _SECRET_KEYS
+                    else _redact(child, depth + 1)
                 )
             return result
         if isinstance(item, (list, tuple, set)):
@@ -49,7 +51,9 @@ def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
 
 
 def should_sample(rate: float, *, random_value: float | None = None) -> bool:
-    return rate > 0 and (rate >= 1 or (random_value if random_value is not None else random.random()) < rate)
+    return rate > 0 and (
+        rate >= 1 or (random_value if random_value is not None else random.random()) < rate
+    )
 
 
 class NoOpObservability:
@@ -62,10 +66,14 @@ class NoOpObservability:
     def finish_run(self, *, status: str, output: Any = None, error: Any = None) -> None:
         return None
 
-    def llm(self, model: str, *, input_data: Any = None, output_data: Any = None, **kwargs: Any) -> None:
+    def llm(
+        self, model: str, *, input_data: Any = None, output_data: Any = None, **kwargs: Any
+    ) -> None:
         return None
 
-    def tool(self, name: str, *, input_data: Any = None, output_data: Any = None, **kwargs: Any) -> None:
+    def tool(
+        self, name: str, *, input_data: Any = None, output_data: Any = None, **kwargs: Any
+    ) -> None:
         return None
 
     def policy(self, name: str, *, allowed: bool, **kwargs: Any) -> None:
@@ -85,8 +93,12 @@ class LangfuseObservability(NoOpObservability):
         self.config = config
         self.client = client
         self._flushed = False
-        self._root: contextvars.ContextVar[Any] = contextvars.ContextVar("langfuse_root", default=None)
-        self._sampled: contextvars.ContextVar[bool] = contextvars.ContextVar("langfuse_sampled", default=False)
+        self._root: contextvars.ContextVar[Any] = contextvars.ContextVar(
+            "langfuse_root", default=None
+        )
+        self._sampled: contextvars.ContextVar[bool] = contextvars.ContextVar(
+            "langfuse_sampled", default=False
+        )
 
     def _payload(self, input_data: Any, output_data: Any) -> dict[str, Any]:
         payload: dict[str, Any] = {}
@@ -99,14 +111,35 @@ class LangfuseObservability(NoOpObservability):
     @contextlib.contextmanager
     def _observation(self, kind: str, name: str, **kwargs: Any) -> Iterator[Any]:
         try:
-            # v4 returns a context manager whose __enter__ value is the actual observation.
-            with self.client.start_as_current_observation(
+            context_manager = self.client.start_as_current_observation(
                 as_type="generation" if kind == "llm" else "span", name=name, **kwargs
-            ) as observation:
-                yield observation
+            )
         except Exception as exc:
             logger.warning("Langfuse observation failed: %s", type(exc).__name__)
             yield None
+            return
+        try:
+            # The SDK owns enter/exit and returns the actual observation from __enter__.
+            with context_manager as observation:
+                try:
+                    yield observation
+                finally:
+                    if observation is not None:
+                        try:
+                            observation.update()
+                            # Compatibility with lightweight legacy test doubles;
+                            # the real v4 context manager owns its lifecycle.
+                            if not type(context_manager).__module__.startswith("langfuse"):
+                                end = getattr(observation, "end", None)
+                                if callable(end):
+                                    end()
+                        except Exception as exc:
+                            logger.warning(
+                                "Langfuse observation update failed: %s", type(exc).__name__
+                            )
+        except BaseException as exc:
+            logger.warning("Langfuse observation failed: %s", type(exc).__name__)
+            raise
 
     @contextlib.contextmanager
     def run(self, run_id: str, goal: str, *, session_id: str | None = None) -> Iterator[Any]:
@@ -136,25 +169,25 @@ class LangfuseObservability(NoOpObservability):
         root = self._root.get()
         if root is None or not self._sampled.get():
             return
-        payload: dict[str, Any] = {"metadata": {"status": status}}
+        metadata: dict[str, Any] = {"status": status}
         if error is not None:
-            payload["metadata"]["error_type"] = type(error).__name__
-        payload.update(self._payload(None, output))
+            metadata["error_type"] = type(error).__name__
+        payload = {"metadata": metadata, **self._payload(None, output)}
         try:
             root.update(**payload)
         except Exception as exc:
             logger.warning("Langfuse root update failed: %s", type(exc).__name__)
 
-    def _event(self, kind: str, name: str, input_data: Any = None, output_data: Any = None, **kwargs: Any) -> None:
+    def _event(
+        self, kind: str, name: str, input_data: Any = None, output_data: Any = None, **kwargs: Any
+    ) -> None:
         if not self._sampled.get():
             return
         if not self.config.get("capture_output", False):
             kwargs.pop("result", None)
             kwargs.pop("output", None)
-        payload = self._payload(input_data, output_data)
         native = kwargs.pop("_native", {})
-        payload.update(native)
-        payload["metadata"] = redact(kwargs)
+        payload = {**self._payload(input_data, output_data), **native, "metadata": redact(kwargs)}
         with self._observation(kind, name, **payload) as observation:
             if observation is not None:
                 try:
@@ -162,7 +195,9 @@ class LangfuseObservability(NoOpObservability):
                 except Exception as exc:
                     logger.warning("Langfuse observation update failed: %s", type(exc).__name__)
 
-    def llm(self, model: str, *, input_data: Any = None, output_data: Any = None, **kwargs: Any) -> None:
+    def llm(
+        self, model: str, *, input_data: Any = None, output_data: Any = None, **kwargs: Any
+    ) -> None:
         usage = kwargs.pop("usage", None)
         cost = kwargs.pop("cost", None)
         native: dict[str, Any] = {"model": model}
@@ -172,7 +207,9 @@ class LangfuseObservability(NoOpObservability):
             native["cost_details"] = cost
         self._event("llm", "nova.llm", input_data, output_data, _native=native, **kwargs)
 
-    def tool(self, name: str, *, input_data: Any = None, output_data: Any = None, **kwargs: Any) -> None:
+    def tool(
+        self, name: str, *, input_data: Any = None, output_data: Any = None, **kwargs: Any
+    ) -> None:
         self._event("tool", "nova.tool", input_data, output_data, tool_name=name, **kwargs)
 
     def policy(self, name: str, *, allowed: bool, **kwargs: Any) -> None:
@@ -183,7 +220,12 @@ class LangfuseObservability(NoOpObservability):
 
     def shutdown(self) -> None:
         langfuse = self.config.get("langfuse", {})
-        if self._flushed or not isinstance(langfuse, dict) or not langfuse.get("flush_at_shutdown", True):
+        flush = (
+            langfuse.get("flush_at_shutdown", self.config.get("flush_at_shutdown", True))
+            if isinstance(langfuse, dict)
+            else self.config.get("flush_at_shutdown", True)
+        )
+        if self._flushed or not flush:
             return
         self._flushed = True
         try:
@@ -192,23 +234,31 @@ class LangfuseObservability(NoOpObservability):
             logger.warning("Langfuse flush failed: %s", type(exc).__name__)
 
 
-def create_observability(config: dict[str, Any], *, client_factory: Callable[[dict[str, Any]], Any] | None = None) -> NoOpObservability | LangfuseObservability:
+def create_observability(
+    config: dict[str, Any], *, client_factory: Callable[[dict[str, Any]], Any] | None = None
+) -> NoOpObservability | LangfuseObservability:
     settings = config.get("observability", {})
-    if not isinstance(settings, dict) or not settings.get("enabled") or settings.get("provider", "langfuse") != "langfuse":
+    if (
+        not isinstance(settings, dict)
+        or not settings.get("enabled")
+        or settings.get("provider", "langfuse") != "langfuse"
+    ):
         return NoOpObservability()
     rate = settings.get("sample_rate", 1.0)
     if isinstance(rate, bool) or not isinstance(rate, (int, float)) or not 0 <= rate <= 1:
         return NoOpObservability()
-    langfuse_raw = settings.get("langfuse", {})
-    if not isinstance(langfuse_raw, dict):
+    raw = settings.get("langfuse", {})
+    if not isinstance(raw, dict):
         return NoOpObservability()
-    langfuse_config = dict(langfuse_raw)
+    langfuse_config = dict(raw)
     for key, env_name, default in (
         ("base_url", "LANGFUSE_BASE_URL", "https://cloud.langfuse.com"),
         ("public_key", "LANGFUSE_PUBLIC_KEY", ""),
         ("secret_key", "LANGFUSE_SECRET_KEY", ""),
     ):
-        if not langfuse_config.get(key):
+        if not langfuse_config.get(key) or (
+            key == "base_url" and langfuse_config.get(key) == "https://cloud.langfuse.com"
+        ):
             langfuse_config[key] = os.environ.get(env_name, default)
     normalized = {**settings, "langfuse": langfuse_config, "sample_rate": rate}
     try:
@@ -229,4 +279,10 @@ def create_observability(config: dict[str, Any], *, client_factory: Callable[[di
         return NoOpObservability()
 
 
-__all__ = ["LangfuseObservability", "NoOpObservability", "create_observability", "redact", "should_sample"]
+__all__ = [
+    "LangfuseObservability",
+    "NoOpObservability",
+    "create_observability",
+    "redact",
+    "should_sample",
+]

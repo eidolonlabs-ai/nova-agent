@@ -4,13 +4,40 @@ Supports reading with line ranges, writing with atomic saves,
 and targeted patching with search/replace.
 """
 
+import hashlib
 import logging
 import os
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from nova.harness import VerificationResult
 from nova.tools.registry import registry
+
+
+def _verify_write(args: dict[str, Any], result: Any, **kwargs: Any) -> VerificationResult:
+    path = Path(args.get("path", "")).expanduser()
+    content = args.get("content")
+    if isinstance(content, str) and path.is_file():
+        actual = path.read_text(encoding="utf-8")
+        if actual == content:
+            digest = hashlib.sha256(actual.encode()).hexdigest()[:16]
+            return VerificationResult("verified", f"{path} sha256={digest}")
+    return VerificationResult("failed", reason="write read-back did not match requested content")
+
+
+def _verify_patch(args: dict[str, Any], result: Any, **kwargs: Any) -> VerificationResult:
+    if isinstance(result, str) and result.startswith("Error:"):
+        return VerificationResult("failed", reason="patch reported an error")
+    path = Path(args.get("path", "")).expanduser()
+    if path.is_file():
+        actual = path.read_text(encoding="utf-8")
+        old = args.get("old_string", "")
+        new = args.get("new_string", "")
+        if new in actual and (not old or old not in actual):
+            return VerificationResult("verified", f"{path} replacement present")
+    return VerificationResult("failed", reason="patch read-back did not establish replacement")
+
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +350,7 @@ registry.register(
     schema=WRITE_FILE_SCHEMA,
     handler=_write_file,
     emoji="✏️",
+    verifier=_verify_write,
 )
 
 registry.register(
@@ -331,4 +359,5 @@ registry.register(
     schema=PATCH_FILE_SCHEMA,
     handler=_patch_file,
     emoji="🩹",
+    verifier=_verify_patch,
 )

@@ -48,6 +48,7 @@ class ToolEntry:
         "description",
         "emoji",
         "is_read_only",
+        "verifier",
     )
 
     def __init__(
@@ -60,6 +61,7 @@ class ToolEntry:
         description: str = "",
         emoji: str = "🔧",
         is_read_only: bool = False,
+        verifier: Callable | None = None,
     ):
         self.name = name
         self.toolset = toolset
@@ -69,6 +71,7 @@ class ToolEntry:
         self.description = description
         self.emoji = emoji
         self.is_read_only = is_read_only
+        self.verifier = verifier
 
 
 class ToolRegistry:
@@ -87,6 +90,7 @@ class ToolRegistry:
         check_fn: Callable | None = None,
         emoji: str = "🔧",
         is_read_only: bool = False,
+        verifier: Callable | None = None,
     ):
         """Register a tool."""
         # Auto-detect read-only status if not explicitly set
@@ -101,6 +105,7 @@ class ToolRegistry:
             description=schema.get("description", ""),
             emoji=emoji,
             is_read_only=is_read_only,
+            verifier=verifier,
         )
         self._generation += 1
         logger.debug("Registered tool: %s", name)

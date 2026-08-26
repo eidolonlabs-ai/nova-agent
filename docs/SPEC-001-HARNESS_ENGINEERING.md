@@ -90,6 +90,7 @@ class VerificationResult:
     evidence: str = ""
     reason: str = ""
 
+
 @dataclass
 class ToolTrace:
     call_id: str
@@ -103,6 +104,7 @@ class ToolTrace:
     outcome: Literal["completed", "failed", "denied"] = "completed"
     result_preview: str = ""
     verification: VerificationResult | None = None
+
 
 @dataclass
 class RunTrace:
