@@ -16,7 +16,18 @@ def test_default_config():
     assert "llm" in config
     assert "agent" in config
     assert "budgets" in config
+    assert config["web"]["firecrawl_api_key"] == ""
     assert config["agent"]["max_iterations"] == 50
+
+
+def test_firecrawl_api_key_supports_environment_interpolation():
+    with tempfile.TemporaryDirectory() as tmp:
+        config_file = Path(tmp) / "config.yaml"
+        config_file.write_text("web:\n  firecrawl_api_key: ${FIRECRAWL_API_KEY}\n")
+        with patch.dict(os.environ, {"FIRECRAWL_API_KEY": "firecrawl-secret"}):
+            config = load_config(config_file)
+
+    assert config["web"]["firecrawl_api_key"] == "firecrawl-secret"
 
 
 def test_deep_merge():

@@ -16,6 +16,9 @@ DEFAULT_CONFIG = {
         "model": "qwen/qwen3.6-flash",
         "base_url": "https://openrouter.ai/api/v1",
     },
+    "web": {
+        "firecrawl_api_key": "",
+    },
     "agent": {
         "identity": (
             "You are Nova, a capable personal AI agent. "
@@ -248,6 +251,8 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
             if isinstance(user_config.get("openrouter"), dict):
                 user_config["openrouter"].pop("api_key", None)
                 user_config["openrouter"].pop("base_url", None)
+            if isinstance(user_config.get("web"), dict):
+                user_config["web"].pop("firecrawl_api_key", None)
         config = _deep_merge(config, user_config)
 
     # Resolve environment variable placeholders
@@ -272,6 +277,15 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
         config["llm"]["api_key"] = os.environ.get(  # type: ignore[index]
             "LLM_API_KEY", os.environ.get("OPENROUTER_API_KEY", "")
         )
+
+    web = config.get("web")
+    if not isinstance(web, dict):
+        raise ConfigError("Config section 'web' must be a mapping")
+    firecrawl_api_key = web.get("firecrawl_api_key", "")
+    if isinstance(firecrawl_api_key, str) and re.fullmatch(r"\$\{?\w+\}?", firecrawl_api_key):
+        firecrawl_api_key = ""
+    if not firecrawl_api_key:
+        web["firecrawl_api_key"] = os.environ.get("FIRECRAWL_API_KEY", "")
 
     _validate_config(config)
     return config

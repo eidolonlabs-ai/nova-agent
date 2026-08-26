@@ -11,6 +11,10 @@ llm:
   model: "qwen/qwen3.6-flash" # Any model supported by your endpoint
   base_url: "https://openrouter.ai/api/v1"
 
+# Web search — Firecrawl Search API v2 (optional; anonymous requests are supported)
+web:
+  firecrawl_api_key: "${FIRECRAWL_API_KEY}"
+
 # Agent settings
 agent:
   identity: "You are Nova, a helpful personal assistant."

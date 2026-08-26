@@ -4,10 +4,12 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from nova.tools.file_ops import _patch_file, _read_file, _write_file
 from nova.tools.search_files import _search_files
 from nova.tools.terminal import _truncate_output, execute_terminal
-from nova.tools.web import _search_bing_rss, _strip_html, _web_search
+from nova.tools.web import _search_firecrawl, _strip_html, _web_search
 
 # ── Terminal Tests ──────────────────────────────────────────────────────────
 
@@ -214,29 +216,26 @@ def test_search_files_no_results():
 
 # ── Web Search Tests ────────────────────────────────────────────────────────
 
-_BING_RSS_SAMPLE = """\
-<?xml version="1.0" encoding="utf-8" ?>
-<rss version="2.0">
-  <channel>
-    <title>Bing: python</title>
-    <item>
-      <title>Python.org</title>
-      <link>https://www.python.org</link>
-      <description>The official home of the Python programming language.</description>
-    </item>
-    <item>
-      <title>Python &amp; Docs</title>
-      <link>https://docs.python.org</link>
-      <description>Python <b>3.12</b> documentation.</description>
-    </item>
-  </channel>
-</rss>
-"""
+_FIRECRAWL_RESPONSE = {
+    "success": True,
+    "data": [
+        {
+            "title": "Python.org",
+            "url": "https://www.python.org",
+            "description": "The official home of the Python programming language.",
+        },
+        {
+            "title": "Python & Docs",
+            "url": "https://docs.python.org",
+            "description": "Python <b>3.12</b> documentation.",
+        },
+    ],
+}
 
 
-def _mock_bing_response(xml: str = _BING_RSS_SAMPLE) -> MagicMock:
+def _mock_firecrawl_response(payload: object = _FIRECRAWL_RESPONSE) -> MagicMock:
     mock_resp = MagicMock()
-    mock_resp.text = xml
+    mock_resp.json.return_value = payload
     mock_resp.raise_for_status = MagicMock()
     return mock_resp
 
@@ -253,42 +252,81 @@ def test_strip_html_empty():
     assert _strip_html("") == ""
 
 
-def test_search_bing_rss_parses_results():
-    with patch("nova.tools.web.httpx.get", return_value=_mock_bing_response()):
-        results = _search_bing_rss("python", 5)
+def test_search_firecrawl_posts_payload_and_authenticates():
+    with patch("nova.tools.web.httpx.post", return_value=_mock_firecrawl_response()) as post:
+        results = _search_firecrawl("python", 5, "firecrawl-secret")
+
+    post.assert_called_once_with(
+        "https://api.firecrawl.dev/v2/search",
+        json={"query": "python", "limit": 5},
+        headers={"Authorization": "Bearer firecrawl-secret"},
+        timeout=15.0,
+    )
+    assert results[0] == {
+        "title": "Python.org",
+        "url": "https://www.python.org",
+        "snippet": "The official home of the Python programming language.",
+    }
+
+
+def test_search_firecrawl_allows_anonymous_requests():
+    with patch("nova.tools.web.httpx.post", return_value=_mock_firecrawl_response()) as post:
+        _search_firecrawl("python", 5)
+
+    assert "headers" not in post.call_args.kwargs
+
+
+def test_search_firecrawl_parses_current_response_and_strips_html():
+    with patch("nova.tools.web.httpx.post", return_value=_mock_firecrawl_response()):
+        results = _search_firecrawl("python", 5)
 
     assert len(results) == 2
-    assert results[0]["title"] == "Python.org"
-    assert results[0]["url"] == "https://www.python.org"
-    assert "official home" in results[0]["snippet"]
-
-
-def test_search_bing_rss_strips_html_from_snippet():
-    with patch("nova.tools.web.httpx.get", return_value=_mock_bing_response()):
-        results = _search_bing_rss("python", 5)
-
-    # Second result has <b> tags in description — should be stripped
+    assert results[1]["title"] == "Python & Docs"
     assert "<b>" not in results[1]["snippet"]
     assert "3.12" in results[1]["snippet"]
 
 
-def test_search_bing_rss_unescapes_entities_in_title():
-    with patch("nova.tools.web.httpx.get", return_value=_mock_bing_response()):
-        results = _search_bing_rss("python", 5)
+def test_search_firecrawl_returns_empty_for_missing_or_empty_data():
+    for payload in ({}, {"success": True, "data": []}):
+        with patch("nova.tools.web.httpx.post", return_value=_mock_firecrawl_response(payload)):
+            assert _search_firecrawl("python", 5) == []
 
-    assert results[1]["title"] == "Python & Docs"
+
+def test_search_firecrawl_raises_for_api_failure():
+    with (
+        patch(
+            "nova.tools.web.httpx.post",
+            return_value=_mock_firecrawl_response({"success": False, "error": "bad secret"}),
+        ),
+        pytest.raises(ValueError, match="request failed"),
+    ):
+        _search_firecrawl("python", 5)
 
 
-def test_search_bing_rss_respects_num_results():
-    with patch("nova.tools.web.httpx.get", return_value=_mock_bing_response()):
-        results = _search_bing_rss("python", 1)
+def test_search_firecrawl_propagates_http_failure():
+    import httpx as _httpx
 
-    assert len(results) == 1
+    response = _mock_firecrawl_response()
+    response.raise_for_status.side_effect = _httpx.HTTPStatusError(
+        "bad status", request=MagicMock(), response=response
+    )
+    with (
+        patch("nova.tools.web.httpx.post", return_value=response),
+        pytest.raises(_httpx.HTTPError),
+    ):
+        _search_firecrawl("python", 5)
+
+
+def test_web_search_passes_configured_api_key():
+    with patch("nova.tools.web._search_firecrawl", return_value=[]) as search:
+        _web_search({"query": "python"}, config={"web": {"firecrawl_api_key": "secret"}})
+
+    search.assert_called_once_with("python", 5, "secret")
 
 
 def test_web_search_formats_output():
     with patch(
-        "nova.tools.web._search_bing_rss",
+        "nova.tools.web._search_firecrawl",
         return_value=[
             {"title": "Python.org", "url": "https://www.python.org", "snippet": "Official site."},
         ],
@@ -307,30 +345,38 @@ def test_web_search_empty_query():
 
 
 def test_web_search_no_results():
-    with patch("nova.tools.web._search_bing_rss", return_value=[]):
+    with patch("nova.tools.web._search_firecrawl", return_value=[]):
         result = _web_search({"query": "xyzzy12345"})
 
     assert "No results" in result
 
 
 def test_web_search_clamps_num_results():
-    """num_results > 10 should be clamped to 10."""
     captured = {}
 
-    def fake_search(query, num_results):
+    def fake_search(query, num_results, api_key=""):
         captured["num_results"] = num_results
         return []
 
-    with patch("nova.tools.web._search_bing_rss", side_effect=fake_search):
+    with patch("nova.tools.web._search_firecrawl", side_effect=fake_search):
         _web_search({"query": "test", "num_results": 999})
 
     assert captured["num_results"] == 10
 
 
-def test_web_search_handles_http_error():
+def test_web_search_handles_http_error_without_exposing_api_key():
     import httpx as _httpx
 
-    with patch("nova.tools.web._search_bing_rss", side_effect=_httpx.HTTPError("timeout")):
-        result = _web_search({"query": "test"})
+    with patch("nova.tools.web._search_firecrawl", side_effect=_httpx.HTTPError("timeout")):
+        result = _web_search({"query": "test"}, config={"web": {"firecrawl_api_key": "secret"}})
 
     assert "Error" in result
+    assert "secret" not in result
+
+
+def test_web_search_handles_api_error_without_exposing_api_key():
+    with patch("nova.tools.web._search_firecrawl", side_effect=ValueError("request failed")):
+        result = _web_search({"query": "test"}, config={"web": {"firecrawl_api_key": "secret"}})
+
+    assert "Error" in result
+    assert "secret" not in result
