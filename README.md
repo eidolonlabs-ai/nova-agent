@@ -8,7 +8,7 @@
 **Last Updated:** August 2026
 **By:** [Eidolon Labs LLC](https://github.com/eidolonlabs-ai)
 
-> A minimalist personal AI agent with explicit token budgets and smart context management.
+> A lightweight personal AI agent with explicit token budgets and smart context management.
 
 
 <img width="1324" height="444" alt="image" src="https://github.com/user-attachments/assets/8e7bfe5d-5b88-4ef4-a587-4a295bcb1aa6" />

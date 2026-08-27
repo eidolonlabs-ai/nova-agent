@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nova-agent"
 dynamic = ["version"]
-description = "A minimalist personal AI agent with explicit token budgets and smart context management"
+description = "A lightweight personal AI agent with explicit token budgets and smart context management"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.12"

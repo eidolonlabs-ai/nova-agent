@@ -392,7 +392,7 @@ def _non_negative_int(value: str) -> int:
 def main():
     parser = argparse.ArgumentParser(
         prog="nova",
-        description="Nova Agent — A minimalist personal AI assistant",
+        description="Nova Agent — A lightweight personal AI assistant",
     )
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 

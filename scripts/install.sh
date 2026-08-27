@@ -104,7 +104,7 @@ print_banner() {
     echo "┌─────────────────────────────────────────────────────────┐"
     echo "│              ✦ Nova Agent Installer                     │"
     echo "├─────────────────────────────────────────────────────────┤"
-    echo "│  A minimalist personal AI agent by Eidolon Labs LLC.    │"
+    echo "│  A lightweight personal AI agent by Eidolon Labs LLC.   │"
     echo "─────────────────────────────────────────────────────────┘"
     echo -e "${NC}"
 }

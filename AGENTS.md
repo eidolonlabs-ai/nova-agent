@@ -9,7 +9,7 @@ particular agent runtime.
 
 ## Overview
 
-Nova Agent is a minimalist personal AI agent with explicit token budgets and smart context management. It's designed to run locally with full control over model selection, API keys, and execution.
+Nova Agent is a lightweight personal AI agent with explicit token budgets and smart context management. It's designed to run locally with full control over model selection, API keys, and execution.
 
 ## Architecture
 

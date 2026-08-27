@@ -4,7 +4,7 @@
 
 ---
 
-# Nova Agent — Minimalist Personal AI
+# Nova Agent — Lightweight Personal AI
 
 **Status:** ✅ Production ready  
 **Latest Release:** v0.1.0  

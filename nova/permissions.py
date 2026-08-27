@@ -5,7 +5,7 @@ through a cascade of checks: sensitive paths, tool deny/allow lists,
 path rules, command deny patterns, and permission modes.
 
 Design inspired by OpenHarness's PermissionChecker, simplified for
-Nova-Agent's minimalist ethos.
+Nova-Agent's lightweight ethos.
 """
 
 import fnmatch

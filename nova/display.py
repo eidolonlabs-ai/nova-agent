@@ -22,7 +22,7 @@ NOVA_BANNER = """\
 [#0096C7]  ██  ██ ██  ██   ███  ██  ██ [/]
 [#0096C7]  ██  ██  ████     █   ██  ██ [/]"""
 
-NOVA_TAGLINE = "[dim]A minimalist personal AI agent by Eidolon Labs LLC[/dim]"
+NOVA_TAGLINE = "[dim]A lightweight personal AI agent by Eidolon Labs LLC[/dim]"
 
 
 def print_banner(console, config: dict) -> None:

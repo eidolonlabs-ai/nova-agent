@@ -4,7 +4,7 @@
 > **Organization:** Eidolon Labs LLC
 
 ## Project Overview
-Nova Agent is a minimalist personal AI agent with explicit token budgets and smart context management.
+Nova Agent is a lightweight personal AI agent with explicit token budgets and smart context management.
 
 ## Architecture
 - **nova/** - Main package
