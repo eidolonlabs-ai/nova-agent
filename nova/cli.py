@@ -352,8 +352,18 @@ def cmd_update(args):
         sys.exit(1)
 
     # Reinstall dependencies
-    venv_python = install_dir / "venv" / "bin" / "python"
-    if venv_python.exists():
+    venv_python = next(
+        (
+            candidate
+            for candidate in (
+                install_dir / ".venv" / "bin" / "python",
+                install_dir / "venv" / "bin" / "python",
+            )
+            if candidate.exists()
+        ),
+        None,
+    )
+    if venv_python is not None:
         print("Reinstalling dependencies...")
         subprocess.run(
             [str(venv_python), "-m", "pip", "install", "-e", ".[dev]"],
@@ -361,7 +371,9 @@ def cmd_update(args):
             check=True,
         )
     else:
-        print("⚠ No virtual environment found. Run 'pip install -e .' manually.")
+        print("✗ No virtual environment found. Run 'python3 -m venv .venv' first.")
+        print("  Then run: .venv/bin/pip install -e .")
+        sys.exit(1)
 
     print("\n✓ Nova Agent updated successfully!")
     print("  Run 'nova chat' to start.")
