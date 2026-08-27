@@ -43,8 +43,10 @@ from nova.providers import (
     anthropic_messages,
     build_client,
     call_anthropic,
+    chat_completion,
     is_anthropic,
     maybe_load_model_metadata,
+    stream_response,
 )
 from nova.retry import retry_with_backoff
 from nova.session import SessionStore
@@ -407,33 +409,7 @@ class NovaAgent:
         else:
 
             def _do_post() -> dict:
-                request_kwargs = self._completion_request_kwargs(payload)
-                resp = self.client.chat.completions.create(**request_kwargs)  # type: ignore[call-overload]
-                message = resp.choices[0].message
-                return {
-                    "choices": [
-                        {
-                            "finish_reason": (
-                                resp.choices[0].finish_reason
-                                if isinstance(resp.choices[0].finish_reason, str)
-                                else None
-                            ),
-                            "message": {
-                                "role": "assistant",
-                                "content": message.content,
-                                "tool_calls": (
-                                    [tc.model_dump() for tc in message.tool_calls]
-                                    if message.tool_calls
-                                    else None
-                                ),
-                                "reasoning_content": (message.model_extra or {}).get(
-                                    "reasoning_content"
-                                ),
-                            },
-                        }
-                    ],
-                    "usage": resp.usage.model_dump() if resp.usage else None,
-                }
+                return chat_completion(self.client, payload)
 
             response_data = retry_with_backoff(
                 _do_post,
@@ -471,115 +447,14 @@ class NovaAgent:
         callback: Callable[[str], None] | None = None,
         reasoning_callback: Callable[[str], None] | None = None,
     ) -> dict:
-        """Stream a response from the API."""
-        full_content = ""
-        full_reasoning = ""
-        tool_calls: list[dict[str, Any]] = []
-        interrupted = False
-        finish_reason: str | None = None
-
-        request_kwargs = self._completion_request_kwargs(payload, stream=True)
-
-        with self.client.chat.completions.create(**request_kwargs) as stream:  # type: ignore[call-overload]
-            usage: dict[str, Any] | None = None
-            for chunk in stream:
-                if not chunk.choices:
-                    chunk_usage = getattr(chunk, "usage", None)
-                    if chunk_usage is not None and hasattr(chunk_usage, "model_dump"):
-                        dumped_usage = chunk_usage.model_dump()
-                        if isinstance(dumped_usage, dict):
-                            usage = dumped_usage
-                    continue
-                chunk_finish_reason = chunk.choices[0].finish_reason
-                if isinstance(chunk_finish_reason, str):
-                    finish_reason = chunk_finish_reason
-                delta = chunk.choices[0].delta
-
-                _ic = getattr(self, "_interrupt_check", None)
-                if _ic is not None and _ic():
-                    logger.info("Stream interrupted by user")
-                    interrupted = True
-                    break
-
-                if delta.content:
-                    full_content += delta.content
-                    if callback:
-                        callback(delta.content)
-
-                if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        index = tc.index
-                        while index >= len(tool_calls):
-                            tool_calls.append(
-                                {
-                                    "id": "",
-                                    "type": "function",
-                                    "function": {"name": "", "arguments": ""},
-                                }
-                            )
-                        if tc.id:
-                            tool_calls[index]["id"] = tc.id
-                        if tc.function:
-                            if tc.function.name:
-                                tool_calls[index]["function"]["name"] = tc.function.name
-                            if tc.function.arguments:
-                                tool_calls[index]["function"]["arguments"] += tc.function.arguments
-
-                extra = delta.model_extra or {}
-                reasoning_chunks: list[str] = []
-                for key in ("reasoning", "reasoning_content"):
-                    value = extra.get(key)
-                    if isinstance(value, str):
-                        reasoning_chunks.append(value)
-                details = extra.get("reasoning_details")
-                if not reasoning_chunks and isinstance(details, list):
-                    for detail in details:
-                        if isinstance(detail, dict):
-                            value = detail.get("text") or detail.get("content")
-                            if isinstance(value, str):
-                                reasoning_chunks.append(value)
-                for reasoning in reasoning_chunks:
-                    full_reasoning += reasoning
-                    if reasoning_callback:
-                        reasoning_callback(reasoning)
-
-        reasoning_content_value: str | None = full_reasoning if full_reasoning else None
-        if not reasoning_content_value and tool_calls:
-            reasoning_content_value = ""
-
-        return {
-            "choices": [
-                {
-                    "finish_reason": finish_reason,
-                    "message": {
-                        "role": "assistant",
-                        "content": full_content if full_content else None,
-                        "tool_calls": None if interrupted else (tool_calls if tool_calls else None),
-                        "reasoning_content": reasoning_content_value,
-                    },
-                }
-            ],
-            "usage": usage,
-        }
-
-    @staticmethod
-    def _completion_request_kwargs(payload: dict[str, Any], stream: bool = False) -> dict[str, Any]:
-        request_kwargs: dict[str, Any] = {
-            "model": payload["model"],
-            "messages": payload["messages"],
-            "temperature": payload.get("temperature", 0.7),
-            "top_p": payload.get("top_p", 1.0),
-        }
-        if payload.get("tools"):
-            request_kwargs["tools"] = payload["tools"]
-            request_kwargs["tool_choice"] = "auto"
-        if "extra_body" in payload:
-            request_kwargs["extra_body"] = payload["extra_body"]
-        if stream:
-            request_kwargs["stream"] = True
-            if payload.get("stream_include_usage", True):
-                request_kwargs["stream_options"] = {"include_usage": True}
-        return request_kwargs
+        """Stream a response from the API (delegates to the provider layer)."""
+        return stream_response(
+            self.client,
+            payload,
+            callback,
+            reasoning_callback,
+            interrupt_check=getattr(self, "_interrupt_check", None),
+        )
 
     @staticmethod
     def _is_transient_error(error_msg: str) -> bool:
