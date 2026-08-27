@@ -96,14 +96,18 @@ def _chat_loop(agent):
             _cprint(f"{_DIM}(sending /{cmd_name} to agent){_RST}")
 
         # Regular message → agent
-        display = StreamingReasoningBox()
+        display = StreamingReasoningBox(
+            show_reasoning=agent.config.get("ui", {}).get("show_reasoning", True)
+        )
         display.reset()
         tool_names: list[str] = []
 
         def stream_callback(chunk: str, d: StreamingReasoningBox = display) -> None:
+            d.show_reasoning = agent.config.get("ui", {}).get("show_reasoning", True)
             d.feed(chunk)
 
         def reasoning_callback(chunk: str, d: StreamingReasoningBox = display) -> None:
+            d.show_reasoning = agent.config.get("ui", {}).get("show_reasoning", True)
             d.feed_reasoning(chunk)
 
         # Print tool calls immediately as they execute (before response)
@@ -120,6 +124,7 @@ def _chat_loop(agent):
             tl.clear()
 
         agent._reasoning_callback = reasoning_callback
+        agent._stream_callback = stream_callback
         agent._tool_callback = tool_callback
         # Wire Ctrl+C interrupt into the agent loop
         agent._interrupt_check = tui._interrupt_requested.is_set

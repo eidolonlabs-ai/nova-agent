@@ -98,6 +98,12 @@ def make_reasoning_chunk(reasoning: str) -> MagicMock:
     return chunk
 
 
+def make_reasoning_content_chunk(reasoning: str) -> MagicMock:
+    chunk = make_reasoning_chunk("")
+    chunk.choices[0].delta.model_extra = {"reasoning_content": reasoning}
+    return chunk
+
+
 def make_usage_chunk(usage: dict) -> MagicMock:
     chunk = MagicMock()
     chunk.choices = []
@@ -253,6 +259,32 @@ def test_stream_response_reasoning_content_in_result(minimal_config, mock_sessio
     msg = result["choices"][0]["message"]
     assert msg["reasoning_content"] == "Let me think"
     assert msg["content"] == "Answer"
+
+
+def test_stream_response_reasoning_content_field_triggers_callback(
+    minimal_config, mock_session_store
+):
+    from openai import OpenAI
+
+    mock_client = MagicMock(spec=OpenAI)
+    mock_client.chat.completions.create.return_value = make_mock_stream(
+        make_reasoning_content_chunk("Thinking"),
+        make_text_chunk("Answer"),
+    )
+    callback_invoked = []
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_client,
+        session_store=mock_session_store,
+    )
+
+    result = agent._stream_response(
+        {"model": "test-model", "messages": []},
+        reasoning_callback=callback_invoked.append,
+    )
+
+    assert callback_invoked == ["Thinking"]
+    assert result["choices"][0]["message"]["reasoning_content"] == "Thinking"
 
 
 def test_stream_response_text_callback(minimal_config, mock_session_store):

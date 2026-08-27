@@ -38,6 +38,21 @@ def test_add_and_get_messages():
         assert msgs[1]["role"] == "assistant"
 
 
+def test_replace_messages_rebuilds_message_count_and_search_content():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SessionStore(Path(tmp) / "test.db")
+        sid = store.create_session()
+        store.add_message(sid, "user", "old")
+        store.add_message(sid, "assistant", "answer")
+
+        store.replace_messages(sid, [{"role": "user", "content": "new"}])
+
+        assert store.get_messages(sid) == [{"role": "user", "content": "new"}]
+        assert store.get_session_info(sid)["message_count"] == 1
+        assert store.search_sessions("new")[0]["session_id"] == sid
+        assert store.search_sessions("old") == []
+
+
 def test_get_messages_with_limit():
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "test.db"

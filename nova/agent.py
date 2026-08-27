@@ -347,6 +347,10 @@ class NovaAgent:
             payload["tool_choice"] = "auto"
         # else: omit tools entirely — some models reject an empty tools array.
 
+        reasoning = llm_config.get("reasoning")
+        if reasoning is not None:
+            payload["extra_body"] = {"reasoning": reasoning}
+
         max_retries = retry_cfg.get("max_retries", 3)
         base_delay = retry_cfg.get("base_delay", 1.0)
         max_delay = retry_cfg.get("max_delay", 60.0)
@@ -371,6 +375,7 @@ class NovaAgent:
                     top_p=payload.get("top_p", 1.0),
                     tools=payload["tools"] if payload.get("tools") else NOT_GIVEN,
                     tool_choice="auto" if payload.get("tools") else NOT_GIVEN,
+                    extra_body=payload.get("extra_body", NOT_GIVEN),
                 )
                 message = resp.choices[0].message
                 return {
@@ -442,6 +447,7 @@ class NovaAgent:
             top_p=payload.get("top_p", 1.0),
             tools=payload["tools"] if payload.get("tools") else NOT_GIVEN,
             tool_choice="auto" if payload.get("tools") else NOT_GIVEN,
+            extra_body=payload.get("extra_body", NOT_GIVEN),
             stream=True,
             stream_options={"include_usage": True},
         ) as stream:
@@ -490,8 +496,19 @@ class NovaAgent:
                                 tool_calls[index]["function"]["arguments"] += tc.function.arguments
 
                 extra = delta.model_extra or {}
-                reasoning = extra.get("reasoning")
-                if reasoning:
+                reasoning_chunks: list[str] = []
+                for key in ("reasoning", "reasoning_content"):
+                    value = extra.get(key)
+                    if isinstance(value, str):
+                        reasoning_chunks.append(value)
+                details = extra.get("reasoning_details")
+                if not reasoning_chunks and isinstance(details, list):
+                    for detail in details:
+                        if isinstance(detail, dict):
+                            value = detail.get("text") or detail.get("content")
+                            if isinstance(value, str):
+                                reasoning_chunks.append(value)
+                for reasoning in reasoning_chunks:
                     full_reasoning += reasoning
                     if reasoning_callback:
                         reasoning_callback(reasoning)

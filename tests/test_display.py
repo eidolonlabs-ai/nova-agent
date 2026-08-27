@@ -197,6 +197,15 @@ class TestStreamingReasoningBoxInit:
             b = StreamingReasoningBox(console=object())
         assert b._reasoning_tokens == 0
 
+    def test_reasoning_can_be_hidden(self):
+        with patch("nova.display._cprint"):
+            b = StreamingReasoningBox(show_reasoning=False)
+            b.feed_reasoning("secret")
+            b.feed("visible")
+            b.flush()
+        assert b._reasoning_lines == []
+        assert b._reasoning_buf == ""
+
 
 class TestStreamingReasoningBoxReset:
     def test_reset_clears_all_state(self, box):

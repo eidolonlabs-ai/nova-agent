@@ -603,7 +603,8 @@ class StreamingReasoningBox:
     with the footer spinner's \\r writes.
     """
 
-    def __init__(self, console=None):  # console kept for compat, unused
+    def __init__(self, console=None, show_reasoning: bool = True):  # console kept for compat
+        self.show_reasoning = show_reasoning
         self._reasoning_tokens = 0
         self._reasoning_lines: list[str] = []
         self._reasoning_buf = ""  # partial line buffer for reasoning
@@ -656,6 +657,8 @@ class StreamingReasoningBox:
             _cprint(f"{_DIM}{prefix} {line}{_RST}")
 
     def _emit_reasoning(self, text: str) -> None:
+        if not self.show_reasoning:
+            return
         self._open_reasoning()
         self._reasoning_buf += text
         # Flush complete lines
@@ -698,6 +701,9 @@ class StreamingReasoningBox:
 
     def feed(self, text: str) -> str:
         if not text:
+            return ""
+        if not self.show_reasoning:
+            self._emit_response(text)
             return ""
         self._prefilt_buf += text
         if not self._in_reasoning:

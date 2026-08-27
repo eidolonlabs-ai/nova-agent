@@ -308,6 +308,51 @@ class SessionStore:
                 (title, session_id),
             )
 
+    def replace_messages(self, session_id: str, messages: list[dict]) -> None:
+        """Replace the persisted conversation messages for a session."""
+        now = datetime.now().isoformat()
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM session_fts WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM session_search WHERE session_id = ?", (session_id,))
+            content_parts: list[str] = []
+            for idx, message in enumerate(messages):
+                content = message.get("content") or ""
+                role = message.get("role", "")
+                tool_calls = message.get("tool_calls")
+                conn.execute(
+                    "INSERT INTO messages "
+                    "(session_id, idx, role, content, tool_calls, tool_call_id, reasoning_content, timestamp) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (
+                        session_id,
+                        idx,
+                        role,
+                        content,
+                        json.dumps(tool_calls) if tool_calls else None,
+                        message.get("tool_call_id"),
+                        message.get("reasoning_content"),
+                        now,
+                    ),
+                )
+                if role in ("user", "assistant") and content:
+                    content_parts.append(content)
+            conn.execute(
+                "INSERT INTO session_fts (session_id, title, content) "
+                "SELECT session_id, title, ? FROM sessions WHERE session_id = ?",
+                (" ".join(content_parts), session_id),
+            )
+            conn.execute(
+                "INSERT INTO session_search (session_id, title, content) "
+                "SELECT session_id, title, ? FROM sessions WHERE session_id = ?",
+                (" ".join(content_parts), session_id),
+            )
+            conn.execute(
+                "UPDATE sessions SET message_count = ?, updated_at = ? WHERE session_id = ?",
+                (len(messages), now, session_id),
+            )
+
     def list_sessions(self, limit: int = 20) -> list[dict]:
         """List recent sessions."""
         with self._connection() as conn:

@@ -75,10 +75,12 @@ def test_get_registered_commands_returns_set(agent):
 
 def test_cmd_new_creates_new_session(agent):
     old_session_id = agent.session_id
+    agent.messages = [{"role": "user", "content": "old"}]
     with patch("nova.display._cprint"):
         dispatch_command("new", agent, "")
     assert agent.session_id is not None
     assert agent.session_id != old_session_id
+    assert agent.messages == []
 
 
 def test_cmd_reset_alias_works(agent):
@@ -178,13 +180,34 @@ def test_cmd_sessions_no_sessions(agent):
 def test_cmd_sessions_lists_sessions(agent):
     agent.session_store.list_sessions = MagicMock(
         return_value=[
-            {"id": "abc-123", "created_at": "2026-01-01"},
+            {"session_id": "abc-123", "created_at": "2026-01-01"},
         ]
     )
     printed = []
     with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
         dispatch_command("sessions", agent, "")
     assert any("abc-123" in s for s in printed)
+
+
+def test_cmd_sessions_uses_session_id_key(agent):
+    agent.session_store.list_sessions = MagicMock(
+        return_value=[{"session_id": "real-id", "created_at": "today"}]
+    )
+    printed = []
+    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
+        dispatch_command("sessions", agent, "")
+    assert any("real-id" in s for s in printed)
+
+
+def test_cmd_resume_loads_requested_session(agent):
+    target = agent.session_store.create_session(model="other-model")
+    agent.session_store.add_message(target, "user", "saved question")
+    agent.session_store.add_message(target, "assistant", "saved answer")
+    with patch("nova.display._cprint"):
+        dispatch_command("resume", agent, target)
+    assert agent.session_id == target
+    assert agent.config["llm"]["model"] == "other-model"
+    assert [m["content"] for m in agent.messages] == ["saved question", "saved answer"]
 
 
 # ─── cmd_model ───────────────────────────────────────────────────────────────
@@ -207,6 +230,13 @@ def test_cmd_model_trims_whitespace(agent):
     with patch("nova.display._cprint"):
         dispatch_command("model", agent, "  openai/gpt-4o  ")
     assert agent.config["llm"]["model"] == "openai/gpt-4o"
+
+
+def test_cmd_skills_rejects_unknown_subcommand(agent):
+    printed = []
+    with patch("nova.display._cprint", side_effect=lambda s: printed.append(s)):
+        dispatch_command("skills", agent, "unknown")
+    assert any("Usage: /skills" in s for s in printed)
 
 
 # ─── cmd_tools ───────────────────────────────────────────────────────────────
@@ -263,6 +293,16 @@ def test_cmd_undo_removes_last_exchange(agent):
         dispatch_command("undo", agent, "")
     assert len(agent.messages) == 2
     assert agent.messages[-1]["content"] == "response"
+    assert agent.session_store.get_messages(agent.session_id) == agent.messages
+
+
+def test_cmd_compact_persists_trimmed_history(agent):
+    agent.messages = [{"role": "user", "content": f"msg {i}"} for i in range(10)]
+    for message in agent.messages:
+        agent.session_store.add_message(agent.session_id, message["role"], message["content"])
+    with patch("nova.display._cprint"):
+        dispatch_command("compact", agent, "")
+    assert agent.session_store.get_messages(agent.session_id) == agent.messages
 
 
 def test_cmd_undo_does_nothing_when_empty(agent):

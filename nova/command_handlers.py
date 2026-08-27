@@ -119,6 +119,7 @@ def cmd_new(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
 
     agent._create_session()
+    agent.messages = []
     _cprint(f"{_DIM}New session started{_RST}")
 
 
@@ -167,7 +168,7 @@ def cmd_sessions(agent: NovaAgent, args: str) -> None:
     if not sessions:
         _cprint(f"{_DIM}No sessions found{_RST}")
     for s in sessions:
-        _cprint(f"{_DIM}{s.get('id', '')}  {s.get('created_at', '')}{_RST}")
+        _cprint(f"{_DIM}{s.get('session_id', '')}  {s.get('created_at', '')}{_RST}")
 
 
 @command_handler("model")
@@ -215,9 +216,16 @@ def cmd_retry(agent: NovaAgent, args: str) -> None:
     if not last_user:
         _cprint(f"{_DIM}Nothing to retry{_RST}")
         return
-    while agent.messages and agent.messages[-1].get("role") != "user":
-        agent.messages.pop()
-    agent.run(last_user, stream=False)
+    last_user_index = max(
+        i for i, message in enumerate(agent.messages) if message.get("role") == "user"
+    )
+    agent.messages = agent.messages[:last_user_index]
+    if agent.session_id:
+        agent.session_store.replace_messages(agent.session_id, agent.messages)
+    callback = getattr(agent, "_stream_callback", None)
+    response = agent.run(last_user, stream=True, stream_callback=callback)
+    if callback is None and response:
+        _cprint(response)
 
 
 @command_handler("resume")
@@ -228,10 +236,20 @@ def cmd_resume(agent: NovaAgent, args: str) -> None:
     if not session_id:
         _cprint(f"{_DIM}Usage: /resume <session-id>{_RST}")
         return
-    agent.config["_resume_session_id"] = session_id
-    _cprint(
-        f"{_DIM}Session resume requested: {session_id}. Start a new chat with this ID to load it.{_RST}"
-    )
+    info = agent.session_store.get_session_info(session_id)
+    if info is None:
+        _cprint(f"{_DIM}Session not found: {session_id}{_RST}")
+        return
+    agent.session_id = session_id
+    turn_limit = agent.config["budgets"].get("conversation_turn_limit", 15)
+    agent.messages = agent.session_store.get_messages(session_id, limit=turn_limit * 4)
+    from nova.agent import _normalize_message_history
+
+    agent.messages = _normalize_message_history(agent.messages)
+    if info.get("model"):
+        agent.config["llm"]["model"] = info["model"]
+    agent._refresh_system_prompt()
+    _cprint(f"{_DIM}Resumed session: {session_id}{_RST}")
 
 
 @command_handler("title")
@@ -272,6 +290,10 @@ def cmd_skills(agent: NovaAgent, args: str) -> None:
 
     from nova.display import _CYAN, _DIM, _RST, _cprint
     from nova.skills import discover_skills
+
+    if args.strip() not in {"", "list"}:
+        _cprint(f"{_DIM}Usage: /skills [list]{_RST}")
+        return
 
     skills_dir = Path(
         agent.config.get("skills", {}).get("directory", "~/.nova/skills")
@@ -326,6 +348,8 @@ def cmd_undo(agent: NovaAgent, args: str) -> None:
     )
     if 0 <= last_user < len(agent.messages) - 1:
         agent.messages = agent.messages[:last_user]
+        if agent.session_id:
+            agent.session_store.replace_messages(agent.session_id, agent.messages)
         _cprint(f"{_DIM}Last exchange removed{_RST}")
     else:
         _cprint(f"{_DIM}Nothing to undo{_RST}")
@@ -344,6 +368,8 @@ def cmd_compact(agent: NovaAgent, args: str) -> None:
         while cut > 0 and agent.messages[cut].get("role") != "user":
             cut -= 1
         agent.messages = _normalize_message_history(agent.messages[cut:])
+        if agent.session_id:
+            agent.session_store.replace_messages(agent.session_id, agent.messages)
     _cprint(f"{_DIM}Context compacted to {len(agent.messages)} messages{_RST}")
 
 
