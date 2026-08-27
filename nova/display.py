@@ -62,6 +62,18 @@ def print_banner(console, config: dict) -> None:
     console.print()
 
 
+def print_message_history(messages: list[dict[str, Any]]) -> None:
+    """Render persisted conversation messages into terminal scrollback."""
+    for message in messages:
+        role = message.get("role", "")
+        content = message.get("content") or ""
+        if role == "user":
+            _cprint(f"\n{_CYAN}❯ {content}{_RST}")
+        elif role == "assistant" and content:
+            preview = content[:200] + "…" if len(content) > 200 else content
+            _cprint(f"  {preview}")
+
+
 # ─── Reasoning/Thinking Block Handling ───────────────────────────────────────
 
 # Reasoning/thinking tag variants used by different models

@@ -64,11 +64,14 @@ def _chat_loop(agent):
         NovaTUI,
         StreamingReasoningBox,
         print_banner,
+        print_message_history,
         print_tool_calls,
     )
 
     console = Console()
     print_banner(console, agent.config)
+    if agent.messages:
+        print_message_history(agent.messages)
 
     model = agent.config["llm"]["model"]
     context_window = get_model_context_window(model)

@@ -125,16 +125,9 @@ def cmd_new(agent: NovaAgent, args: str) -> None:
 
 @command_handler("history")
 def cmd_history(agent: NovaAgent, args: str) -> None:
-    from nova.display import _CYAN, _RST, _cprint
+    from nova.display import print_message_history
 
-    for msg in agent.messages:
-        role = msg.get("role", "")
-        content = msg.get("content") or ""
-        if role == "user":
-            _cprint(f"\n{_CYAN}❯ {content}{_RST}")
-        elif role == "assistant" and content:
-            preview = content[:200] + "…" if len(content) > 200 else content
-            _cprint(f"  {preview}")
+    print_message_history(agent.messages)
 
 
 @command_handler("status", aliases=("st",))
@@ -245,6 +238,9 @@ def cmd_resume(agent: NovaAgent, args: str) -> None:
     agent.session_id = session_id
     agent._load_session()
     _cprint(f"{_DIM}Resumed session: {session_id}{_RST}")
+    from nova.display import print_message_history
+
+    print_message_history(agent.messages)
 
 
 @command_handler("title")

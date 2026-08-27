@@ -226,6 +226,17 @@ def test_cmd_resume_loads_requested_session(agent):
     assert [m["content"] for m in agent.messages] == ["saved question", "saved answer"]
 
 
+def test_cmd_resume_displays_loaded_history(agent):
+    target = agent.session_store.create_session()
+    agent.session_store.add_message(target, "user", "saved question")
+    agent.session_store.add_message(target, "assistant", "saved answer")
+    printed = []
+    with patch("nova.display._cprint", side_effect=printed.append):
+        dispatch_command("resume", agent, target)
+    assert any("saved question" in message for message in printed)
+    assert any("saved answer" in message for message in printed)
+
+
 def test_cmd_resume_accepts_session_listing_row(agent):
     target = agent.session_store.create_session(model="other-model")
     agent.session_store.add_message(target, "user", "saved question")
