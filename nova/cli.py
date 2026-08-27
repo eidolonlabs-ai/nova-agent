@@ -147,7 +147,14 @@ def _chat_loop(agent):
 def cmd_chat(args):
     """Start an interactive chat session."""
     config = load_config()
-    agent = NovaAgent(config=config, session_id=args.session)
+    session_id = args.session
+    if getattr(args, "continue_session", False) is True:
+        from nova.session import SessionStore
+
+        session_dir = Path(config["session"]["directory"]).expanduser()
+        sessions = SessionStore(session_dir / "sessions.db").list_sessions(limit=1)
+        session_id = sessions[0]["session_id"] if sessions else None
+    agent = NovaAgent(config=config, session_id=session_id)
     _chat_loop(agent)
 
 
@@ -398,7 +405,15 @@ def main():
 
     # chat
     chat_parser = subparsers.add_parser("chat", help="Start an interactive chat session")
-    chat_parser.add_argument("--session", help="Resume a specific session ID")
+    chat_sessions = chat_parser.add_mutually_exclusive_group()
+    chat_sessions.add_argument("--session", help="Resume a specific session ID")
+    chat_sessions.add_argument(
+        "-c",
+        "--continue",
+        dest="continue_session",
+        action="store_true",
+        help="Continue the most recent session",
+    )
     chat_parser.set_defaults(func=cmd_chat)
 
     # ask

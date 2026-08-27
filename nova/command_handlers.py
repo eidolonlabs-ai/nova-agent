@@ -232,7 +232,9 @@ def cmd_retry(agent: NovaAgent, args: str) -> None:
 def cmd_resume(agent: NovaAgent, args: str) -> None:
     from nova.display import _DIM, _RST, _cprint
 
-    session_id = args.strip()
+    # Session listings include metadata after the ID; accept a copied row as
+    # well as the bare ID.
+    session_id = args.strip().split(maxsplit=1)[0] if args.strip() else ""
     if not session_id:
         _cprint(f"{_DIM}Usage: /resume <session-id>{_RST}")
         return
@@ -241,14 +243,7 @@ def cmd_resume(agent: NovaAgent, args: str) -> None:
         _cprint(f"{_DIM}Session not found: {session_id}{_RST}")
         return
     agent.session_id = session_id
-    turn_limit = agent.config["budgets"].get("conversation_turn_limit", 15)
-    agent.messages = agent.session_store.get_messages(session_id, limit=turn_limit * 4)
-    from nova.agent import _normalize_message_history
-
-    agent.messages = _normalize_message_history(agent.messages)
-    if info.get("model"):
-        agent.config["llm"]["model"] = info["model"]
-    agent._refresh_system_prompt()
+    agent._load_session()
     _cprint(f"{_DIM}Resumed session: {session_id}{_RST}")
 
 

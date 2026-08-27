@@ -270,6 +270,8 @@ class NovaAgent:
 
         info = self.session_store.get_session_info(self.session_id)
         if info:
+            if info.get("model"):
+                self.config["llm"]["model"] = info["model"]
             # Load recent messages only — respect conversation turn limit
             turn_limit = self.config["budgets"].get("conversation_turn_limit", 15)
             self.messages = self.session_store.get_messages(

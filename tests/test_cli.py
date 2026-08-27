@@ -40,6 +40,15 @@ def test_cli_chat_command_parsing():
         mock_chat.assert_called_once()
 
 
+@pytest.mark.parametrize("flag", ["-c", "--continue"])
+def test_cli_chat_continue_command_parsing(flag):
+    with patch("nova.cli.cmd_chat") as mock_chat:
+        with patch.object(sys, "argv", ["nova", "chat", flag]):
+            main()
+        args = mock_chat.call_args.args[0]
+        assert args.continue_session is True
+
+
 def test_cli_acp_command_parsing():
     with patch("nova.cli.cmd_acp") as mock_acp:
         with patch.object(sys, "argv", ["nova", "acp"]):
@@ -137,7 +146,7 @@ class TestCmdChat:
     def test_cmd_chat_starts_agent(self):
         """Test that cmd_chat creates and runs agent via _chat_loop."""
         mock_agent = MagicMock()
-        args = MagicMock(session=None)
+        args = MagicMock(session=None, continue_session=False)
 
         with (
             patch("nova.cli.load_config") as mock_config,
@@ -156,7 +165,7 @@ class TestCmdChat:
     def test_cmd_chat_with_session_id(self):
         """Test that cmd_chat passes session_id to agent."""
         mock_agent = MagicMock()
-        args = MagicMock(session="session-123")
+        args = MagicMock(session="session-123", continue_session=False)
 
         with (
             patch("nova.cli.load_config") as mock_config,
@@ -170,7 +179,7 @@ class TestCmdChat:
 
     def test_cmd_chat_handles_agent_exception(self):
         """Test that cmd_chat propagates _chat_loop errors."""
-        args = MagicMock(session=None)
+        args = MagicMock(session=None, continue_session=False)
 
         with (
             patch("nova.cli.load_config"),
@@ -179,6 +188,45 @@ class TestCmdChat:
             pytest.raises(KeyboardInterrupt),
         ):
             cmd_chat(args)
+
+    def test_cmd_chat_continues_most_recent_session(self):
+        mock_agent = MagicMock()
+        args = MagicMock(session=None, continue_session=True)
+        mock_store = MagicMock()
+        mock_store.list_sessions.return_value = [{"session_id": "latest-session"}]
+
+        with (
+            patch("nova.cli.load_config", return_value={"session": {"directory": "/tmp"}}),
+            patch("nova.cli.NovaAgent", return_value=mock_agent) as mock_agent_cls,
+            patch("nova.cli._chat_loop"),
+            patch("nova.session.SessionStore", return_value=mock_store),
+        ):
+            cmd_chat(args)
+
+        mock_store.list_sessions.assert_called_once_with(limit=1)
+        mock_agent_cls.assert_called_once_with(
+            config={"session": {"directory": "/tmp"}},
+            session_id="latest-session",
+        )
+
+    def test_cmd_chat_continue_starts_new_when_no_sessions(self):
+        mock_agent = MagicMock()
+        args = MagicMock(session=None, continue_session=True)
+        mock_store = MagicMock()
+        mock_store.list_sessions.return_value = []
+
+        with (
+            patch("nova.cli.load_config", return_value={"session": {"directory": "/tmp"}}),
+            patch("nova.cli.NovaAgent", return_value=mock_agent) as mock_agent_cls,
+            patch("nova.cli._chat_loop"),
+            patch("nova.session.SessionStore", return_value=mock_store),
+        ):
+            cmd_chat(args)
+
+        mock_agent_cls.assert_called_once_with(
+            config={"session": {"directory": "/tmp"}},
+            session_id=None,
+        )
 
 
 class TestCmdAsk:
