@@ -32,6 +32,22 @@ def test_completion_request_kwargs_plain(minimal_config):
     assert "stream" not in kwargs
 
 
+def test_completion_request_kwargs_forwards_max_tokens():
+    payload = {
+        "model": "test-model",
+        "messages": [],
+        "max_tokens": 4096,
+    }
+    kwargs = completion_request_kwargs(payload)
+    assert kwargs["max_tokens"] == 4096
+
+
+def test_completion_request_kwargs_omits_zero_max_tokens():
+    payload = {"model": "test-model", "messages": [], "max_tokens": 0}
+    kwargs = completion_request_kwargs(payload)
+    assert "max_tokens" not in kwargs
+
+
 def test_completion_request_kwargs_stream_and_tools():
     payload = {
         "model": "test-model",

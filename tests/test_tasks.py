@@ -212,7 +212,8 @@ def test_completion_listener(tmp_path):
 # ── Global Task Manager ─────────────────────────────────────────────────────
 
 
-def test_get_task_manager_singleton():
+def test_get_task_manager_singleton(tmp_path, monkeypatch):
+    monkeypatch.setattr("nova.tasks.get_nova_home", lambda: tmp_path)
     reset_task_manager()
     mgr1 = get_task_manager()
     mgr2 = get_task_manager()
@@ -220,7 +221,9 @@ def test_get_task_manager_singleton():
     reset_task_manager()
 
 
-def test_reset_task_manager():
+def test_reset_task_manager(tmp_path, monkeypatch):
+    monkeypatch.setattr("nova.tasks.get_nova_home", lambda: tmp_path)
+    reset_task_manager()
     mgr = get_task_manager()
     mgr.create_shell_task("echo test", "test")
     reset_task_manager()

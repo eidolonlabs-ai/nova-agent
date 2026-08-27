@@ -30,6 +30,17 @@ def test_get_tool_summary_list():
     assert "read_file" in summary
 
 
+def test_tool_summary_grouped_by_toolset():
+    discover_builtin_tools()
+    summary = registry.get_tool_summary_list()
+    # Tools are grouped under per-toolset headers so the model can scan by domain.
+    assert "### Files" in summary
+    assert "### Git" in summary
+    assert "### Sessions" in summary
+    # Group headers come before the tools they contain.
+    assert summary.index("### Files") < summary.index("read_file:")
+
+
 def test_dispatch_unknown_tool():
     result = registry.dispatch("nonexistent_tool", {})
     assert "Error" in result

@@ -28,6 +28,7 @@ from nova.tools.firecrawl_client import (
     translate_error,
     validate_url,
 )
+from nova.tools.path_safety import path_safety_error
 from nova.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -642,6 +643,9 @@ def _web_parse(args: dict[str, Any], config: dict[str, Any] | None = None, **kwa
         return "Error: path is required."
 
     path = Path(raw_path).expanduser()
+    safety_error = path_safety_error(path, config=config, **kwargs)
+    if safety_error:
+        return safety_error
     if not path.exists():
         return f"Error: File not found: {raw_path}"
     if not path.is_file():
@@ -810,10 +814,11 @@ _TOOLS: tuple[tuple[str, dict, Any, str, bool], ...] = (
     ("web_scrape", WEB_SCRAPE_SCHEMA, _web_scrape, "📄", True),
     ("web_map", WEB_MAP_SCHEMA, _web_map, "🗺️", True),
     # web_crawl/web_extract look read-only, but every page they process costs
-    # Firecrawl credits — so they are deliberately NOT in the read-only tool
-    # set in registry.py (read_only here only controls ask-mode gating).
-    ("web_crawl", WEB_CRAWL_SCHEMA, _web_crawl, "🕷️", True),
-    ("web_extract", WEB_EXTRACT_SCHEMA, _web_extract, "🧬", True),
+    # Firecrawl credits and starts a server-side job — so they are marked
+    # NOT read-only: they require confirmation in "ask" mode and are excluded
+    # from the parallel read-only tool set in registry.py.
+    ("web_crawl", WEB_CRAWL_SCHEMA, _web_crawl, "🕷️", False),
+    ("web_extract", WEB_EXTRACT_SCHEMA, _web_extract, "🧬", False),
     ("web_dev_search", WEB_DEV_SEARCH_SCHEMA, _web_dev_search, "🐙", True),
     ("web_usage", WEB_USAGE_SCHEMA, _web_usage, "📊", True),
     # web_parse uploads local file contents to a third party — not read-only,

@@ -53,6 +53,37 @@ def test_replace_messages_rebuilds_message_count_and_search_content():
         assert store.search_sessions("old") == []
 
 
+def test_replace_messages_does_not_duplicate_session_search_row():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SessionStore(Path(tmp) / "test.db")
+        sid = store.create_session()
+        store.replace_messages(sid, [{"role": "user", "content": "hello world"}])
+
+        with store._connection() as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM session_search WHERE session_id = ?", (sid,)
+            ).fetchone()[0]
+        assert count == 1
+        # Search must return the session exactly once (no duplicate rows).
+        results = store.search_sessions("hello")
+        assert [r["session_id"] for r in results].count(sid) == 1
+
+
+def test_delete_session_purges_message_search_index():
+    with tempfile.TemporaryDirectory() as tmp:
+        store = SessionStore(Path(tmp) / "test.db")
+        sid = store.create_session()
+        store.add_message(sid, "user", "sensitive secret content")
+
+        assert store.delete_session(sid) is True
+
+        with store._connection() as conn:
+            leaked = conn.execute(
+                "SELECT COUNT(*) FROM message_search WHERE session_id = ?", (sid,)
+            ).fetchone()[0]
+        assert leaked == 0
+
+
 def test_get_messages_with_limit():
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "test.db"

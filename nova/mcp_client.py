@@ -11,20 +11,31 @@ Supports three transport types:
 
 import json
 import logging
-import os
+import selectors
 import subprocess
 import threading
+import time
+from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import Any, Union
 
 import httpx
 
 from nova import __version__
+from nova.tasks import sanitize_environment
 
 logger = logging.getLogger(__name__)
 
 # JSON-RPC protocol version
 MCP_PROTOCOL_VERSION = "2024-11-05"
+
+# Default per-request timeout for stdio transports (seconds). A hung server
+# must never be able to wedge the agent loop indefinitely.
+_STDIO_REQUEST_TIMEOUT = 60.0
+
+# Max bytes of MCP result content injected into the model context. External
+# servers are untrusted: their output is truncated and labeled downstream.
+MCP_RESULT_MAX_CHARS = 12000
 
 # Transport type alias
 Transport = Union["_StdioTransport", "_HttpTransport", "_SseTransport"]
@@ -91,16 +102,19 @@ class _StdioTransport:
         self.config = config
         self._proc: subprocess.Popen | None = None
         self._next_id: int = 0
+        self._selector: selectors.BaseSelector | None = None
 
     def connect(self) -> bool:
         """Start the subprocess and initialize the MCP session."""
         try:
-            env = {**os.environ, **self.config.env}
+            # Sanitize the environment so MCP subprocesses do not inherit the
+            # agent's API keys; the server's own env overrides sit on top.
+            env = {**sanitize_environment(), **self.config.env}
             self._proc = subprocess.Popen(
                 [self.config.command, *self.config.args],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
                 env=env,
                 text=True,
             )
@@ -112,6 +126,10 @@ class _StdioTransport:
 
     def disconnect(self) -> None:
         """Terminate the subprocess."""
+        if self._selector is not None:
+            with suppress(Exception):
+                self._selector.close()
+            self._selector = None
         if self._proc:
             try:
                 if self._proc.stdin and not self._proc.stdin.closed:
@@ -123,7 +141,7 @@ class _StdioTransport:
             self._proc = None
 
     def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict:
-        """Send a JSON-RPC request and read the response."""
+        """Send a JSON-RPC request and read the matching response."""
         if not self._proc or self._proc.poll() is not None:
             raise RuntimeError("Process is not running")
         request_id = self._next_id
@@ -135,7 +153,7 @@ class _StdioTransport:
             "params": params or {},
         }
         self._send(request)
-        return self._read_response()
+        return self._read_response(request_id)
 
     def send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
         """Send a JSON-RPC notification (no response expected)."""
@@ -162,7 +180,7 @@ class _StdioTransport:
             },
         }
         self._send(init_request)
-        self._read_response()
+        self._read_response(0)
         self.send_notification("notifications/initialized")
         return True
 
@@ -173,14 +191,58 @@ class _StdioTransport:
         self._proc.stdin.write(json.dumps(message) + "\n")
         self._proc.stdin.flush()
 
-    def _read_response(self) -> dict:
-        """Read a JSON-RPC response from stdout."""
+    def _readline_with_deadline(self, deadline: float) -> str:
+        """Read one line from stdout, raising on timeout.
+
+        Uses a selector on the underlying fd so a silent server cannot block
+        the agent forever. Falls back to a plain blocking readline when the
+        stream has no real fileno (e.g. mocked in tests).
+        """
+        assert self._proc is not None and self._proc.stdout is not None
+        stdout = self._proc.stdout
+        try:
+            fileno = stdout.fileno()
+        except (OSError, ValueError, AttributeError):
+            fileno = None
+
+        if fileno is not None and isinstance(fileno, int):
+            if self._selector is None:
+                self._selector = selectors.DefaultSelector()
+                self._selector.register(stdout, selectors.EVENT_READ)
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("MCP server response timed out")
+            if not self._selector.select(timeout=remaining):
+                raise TimeoutError("MCP server response timed out")
+        return stdout.readline()
+
+    def _read_response(self, request_id: int) -> dict:
+        """Read JSON-RPC messages from stdout until the matching id arrives.
+
+        Skips notifications and unrelated messages, and enforces a wall-clock
+        timeout so a hung or chatty server cannot wedge the agent loop.
+        """
         if not self._proc or not self._proc.stdout or self._proc.stdout.closed:
             raise RuntimeError("Stdout is closed")
-        line = self._proc.stdout.readline()
-        if not line:
-            raise RuntimeError("Server closed connection")
-        return json.loads(line)
+        deadline = time.monotonic() + _STDIO_REQUEST_TIMEOUT
+        while True:
+            line = self._readline_with_deadline(deadline)
+            if not line:
+                raise RuntimeError("Server closed connection")
+            try:
+                message = json.loads(line)
+            except json.JSONDecodeError:
+                # Non-JSON log line on stdout — ignore and keep reading.
+                continue
+            if not isinstance(message, dict):
+                continue
+            if "id" not in message:
+                # Notification or request from the server — not our reply.
+                continue
+            if message.get("id") == request_id:
+                return message
+            # A response to a different request (should not happen with the
+            # per-transport lock, but be defensive) — ignore it.
 
 
 class _HttpTransport:
@@ -388,7 +450,7 @@ class _SseTransport:
             "params": {
                 "protocolVersion": MCP_PROTOCOL_VERSION,
                 "capabilities": {},
-                "clientInfo": {"name": "nova-agent", "version": "0.1.0"},
+                "clientInfo": {"name": "nova-agent", "version": __version__},
             },
         }
         post_headers = dict(self.config.headers)
@@ -551,10 +613,13 @@ class McpClient:
                         "arguments": arguments,
                     },
                 )
-            return self._extract_tool_result(response)
+            return self._format_external(
+                self._extract_tool_result(response),
+                source=f"MCP tool {server_name}/{tool_name}",
+            )
         except Exception as e:
             logger.error("MCP tool call failed (%s/%s): %s", server_name, tool_name, e)
-            return f"Error: MCP tool call failed: {e}"
+            return f"Error: MCP tool call failed: {type(e).__name__}"
 
     def read_resource(self, server_name: str, uri: str) -> str:
         """Read an MCP resource from a specific server."""
@@ -565,14 +630,18 @@ class McpClient:
         try:
             with self._call_lock:
                 response = transport.send_request("resources/read", {"uri": uri})
+            error = response.get("error")
+            if isinstance(error, dict):
+                return f"Error: MCP resource read failed: {error.get('message', 'unknown error')}"
             result = response.get("result", {})
             contents = result.get("contents", [])
             if contents:
-                return contents[0].get("text", contents[0].get("blob", "(binary)"))
+                text = contents[0].get("text", contents[0].get("blob", "(binary)"))
+                return self._format_external(text, source=f"MCP resource {server_name} {uri}")
             return "(empty resource)"
         except Exception as e:
             logger.error("MCP resource read failed (%s/%s): %s", server_name, uri, e)
-            return f"Error: MCP resource read failed: {e}"
+            return f"Error: MCP resource read failed: {type(e).__name__}"
 
     def is_connected(self, server_name: str) -> bool:
         """Check if a server is connected."""
@@ -664,8 +733,26 @@ class McpClient:
         self._resources = [r for r in self._resources if r.server_name in self._connected]
 
     @staticmethod
+    def _format_external(text: str, source: str) -> str:
+        """Truncate and label untrusted MCP output for safe context injection."""
+        if text.startswith("Error:"):
+            return text
+        from nova.context import label_external_content, truncate_with_head_tail
+
+        truncated = truncate_with_head_tail(text, MCP_RESULT_MAX_CHARS)
+        return label_external_content(truncated, source=source)
+
+    @staticmethod
     def _extract_tool_result(response: dict) -> str:
-        """Extract text content from a tool call response."""
+        """Extract text content from a tool call response.
+
+        Surfaces JSON-RPC errors and tool-level ``isError`` results so the
+        model never mistakes a failure for empty success.
+        """
+        error = response.get("error")
+        if isinstance(error, dict):
+            return f"Error: MCP tool call failed: {error.get('message', 'unknown error')}"
+
         result = response.get("result", {})
         content = result.get("content", [])
         if not content:
@@ -680,7 +767,10 @@ class McpClient:
             else:
                 parts.append(str(item))
 
-        return "\n".join(parts) if parts else "(no output)"
+        text = "\n".join(parts) if parts else "(no output)"
+        if result.get("isError"):
+            return f"Error: {text}"
+        return text
 
 
 def build_mcp_client(config: dict) -> McpClient:

@@ -377,11 +377,9 @@ class SessionStore:
                 "SELECT session_id, title, ? FROM sessions WHERE session_id = ?",
                 (" ".join(content_parts), session_id),
             )
-            conn.execute(
-                "INSERT INTO session_search (session_id, title, content) "
-                "SELECT session_id, title, ? FROM sessions WHERE session_id = ?",
-                (" ".join(content_parts), session_id),
-            )
+            # session_search is populated by the session_fts_insert trigger — a
+            # second explicit insert here would duplicate the row and cause
+            # search_sessions to return the same session twice.
             conn.execute(
                 "UPDATE sessions SET message_count = ?, updated_at = ? WHERE session_id = ?",
                 (len(messages), now, session_id),
@@ -416,6 +414,7 @@ class SessionStore:
             if not cursor.fetchone():
                 return False
             conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM message_search WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM session_fts WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM session_search WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM sessions WHERE session_id = ?", (session_id,))

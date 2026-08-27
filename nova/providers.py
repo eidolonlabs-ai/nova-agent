@@ -31,6 +31,8 @@ def completion_request_kwargs(payload: dict[str, Any], stream: bool = False) -> 
         "temperature": payload.get("temperature", 0.7),
         "top_p": payload.get("top_p", 1.0),
     }
+    if payload.get("max_tokens"):
+        request_kwargs["max_tokens"] = payload["max_tokens"]
     if payload.get("tools"):
         request_kwargs["tools"] = payload["tools"]
         request_kwargs["tool_choice"] = "auto"

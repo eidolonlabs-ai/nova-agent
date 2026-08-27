@@ -21,6 +21,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from nova.config import get_nova_home
+
 logger = logging.getLogger(__name__)
 
 # Task status constants
@@ -77,8 +79,6 @@ class BackgroundTaskManager:
 
     def __init__(self, tasks_dir: Path | None = None, config: dict[str, Any] | None = None) -> None:
         if tasks_dir is None:
-            from nova.config import get_nova_home
-
             tasks_dir = get_nova_home() / "tasks"
         self.tasks_dir = tasks_dir
         self.tasks_dir.mkdir(parents=True, exist_ok=True)

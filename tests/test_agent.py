@@ -9,6 +9,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from nova.agent import NovaAgent, _normalize_message_history
 from nova.mcp_client import McpResourceInfo, McpToolInfo
 from nova.tools.registry import discover_builtin_tools
@@ -325,6 +327,42 @@ def test_agent_run_no_tool_calls(minimal_config, mock_session_store, mock_openai
     call_kwargs = mock_openai_client.chat.completions.create.call_args[1]
     assert any("meaning of life" in str(m.get("content", "")) for m in call_kwargs["messages"])
     assert "extra_body" not in call_kwargs
+    # max_tokens must be forwarded so the reserved output budget is real.
+    assert call_kwargs["max_tokens"] == minimal_config["llm"]["max_tokens"]
+
+
+def test_agent_recovers_from_context_overflow(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    """A provider overflow error triggers aggressive compaction and one retry."""
+    overflow = Exception("This model's maximum context length is 8192 tokens")
+    ok = make_openai_response(content="recovered")
+    mock_openai_client.chat.completions.create.side_effect = [overflow, ok]
+
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+    )
+
+    result = agent.run("hello", stream=False)
+
+    assert result == "recovered"
+    assert mock_openai_client.chat.completions.create.call_count == 2
+
+
+def test_agent_reraises_non_overflow_errors(minimal_config, mock_session_store, mock_openai_client):
+    """A non-overflow error is not retried by the overflow path."""
+    mock_openai_client.chat.completions.create.side_effect = ValueError("bad request 400")
+
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+    )
+
+    with pytest.raises(ValueError):
+        agent.run("hello", stream=False)
 
 
 def test_agent_continues_when_session_persistence_is_locked(
@@ -403,6 +441,38 @@ def test_agent_history_compacts_to_token_budget(
 
     assert len(agent.messages) < 22
     assert not any("msg 0" in message.get("content", "") for message in agent.messages)
+
+
+def test_compaction_injects_recovery_note(minimal_config, mock_session_store, mock_openai_client):
+    """After compaction, the model is told history is recoverable via search."""
+    minimal_config["llm"]["max_tokens"] = 100
+    mock_openai_client.chat.completions.create.return_value = make_openai_response(content="OK")
+
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+    )
+    for i in range(10):
+        agent.messages.append({"role": "user", "content": f"msg {i} " * 100})
+        agent.messages.append({"role": "assistant", "content": f"reply {i} " * 100})
+
+    with patch("nova.agent.get_model_context_window", return_value=2000):
+        agent.run("latest message", stream=False)
+
+    sent = mock_openai_client.chat.completions.create.call_args.kwargs["messages"]
+    notes = [
+        m
+        for m in sent
+        if m.get("role") == "system"
+        and "older conversation history was removed" in m.get("content", "")
+    ]
+    assert notes, "compaction note missing from the request sent to the model"
+    # The note is ephemeral guidance — it must not be persisted into the
+    # canonical conversation history.
+    assert not any(
+        "older conversation history was removed" in m.get("content", "") for m in agent.messages
+    )
 
 
 def test_agent_execute_tool_call_invalid_json(

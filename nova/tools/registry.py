@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 # in the same LLM response run concurrently.
 # delegate_task is intentionally NOT here: it spawns sub-agents with shared
 # state (wiki, session store) and is not safe to fan out in parallel.
+# web_crawl/web_extract are also excluded: they start credit-spending,
+# job-mutating operations, so they must require confirmation in ask-mode and
+# must not be fanned out as "read-only" parallel calls.
 _READ_ONLY_TOOLS: frozenset[str] = frozenset(
     {
         "read_file",
@@ -28,8 +31,6 @@ _READ_ONLY_TOOLS: frozenset[str] = frozenset(
         "web_search",
         "web_scrape",
         "web_map",
-        "web_crawl",
-        "web_extract",
         "web_dev_search",
         "web_usage",
         "http_get",
@@ -41,6 +42,34 @@ _READ_ONLY_TOOLS: frozenset[str] = frozenset(
         "task_output",
     }
 )
+
+# Display ordering and labels for the grouped tool summary in the system prompt.
+_TOOLSET_ORDER: tuple[str, ...] = (
+    "file",
+    "git",
+    "http",
+    "web",
+    "sessions",
+    "skills",
+    "tasks",
+    "terminal",
+    "wiki",
+    "delegation",
+    "mcp",
+)
+_TOOLSET_LABELS: dict[str, str] = {
+    "file": "Files",
+    "git": "Git",
+    "http": "HTTP",
+    "web": "Web",
+    "sessions": "Sessions",
+    "skills": "Skills",
+    "tasks": "Background Tasks",
+    "terminal": "Terminal",
+    "wiki": "Wiki",
+    "delegation": "Delegation",
+    "mcp": "MCP",
+}
 
 
 class ToolEntry:
@@ -152,15 +181,27 @@ class ToolRegistry:
         return tools
 
     def get_tool_summary_list(self, tool_names: set | None = None) -> str:
-        """Get a compact bullet list of tool names + one-line descriptions.
+        """Get a compact, grouped bullet list of tool names + one-line descriptions.
 
-        Used in the system prompt for efficient tokenization.
+        Tools are grouped under small per-toolset headers so the model can scan
+        the surface area by domain. Used in the system prompt for efficient
+        tokenization.
         """
-        lines = []
+        by_toolset: dict[str, list[str]] = {}
         for name, entry in sorted(self._tools.items()):
-            if tool_names is None or name in tool_names:
-                desc = entry.description.split("\n")[0][:100]
-                lines.append(f"- {name}: {desc}")
+            if tool_names is not None and name not in tool_names:
+                continue
+            desc = entry.description.split("\n")[0][:100]
+            by_toolset.setdefault(entry.toolset, []).append(f"- {name}: {desc}")
+
+        lines: list[str] = []
+        for toolset in _TOOLSET_ORDER:
+            if toolset in by_toolset:
+                lines.append(f"### {_TOOLSET_LABELS.get(toolset, toolset)}")
+                lines.extend(sorted(by_toolset.pop(toolset)))
+        for toolset in sorted(by_toolset):
+            lines.append(f"### {_TOOLSET_LABELS.get(toolset, toolset)}")
+            lines.extend(sorted(by_toolset[toolset]))
         return "\n".join(lines)
 
     def dispatch(self, name: str, args: dict, **kwargs) -> Any:

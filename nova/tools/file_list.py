@@ -127,7 +127,7 @@ def _list_files(args: dict[str, Any], **kwargs: Any) -> str:
 
 registry.register(
     name="list_files",
-    toolset="files",
+    toolset="file",
     schema=LIST_FILES_SCHEMA,
     handler=_list_files,
     emoji="📋",

@@ -3,7 +3,10 @@
 from dataclasses import dataclass
 from typing import Any
 
-DEFAULT_CONTEXT_WINDOW = 1_000_000
+# Conservative fallback when the provider does not report a context window.
+# A too-large default silently disables compaction and produces hard API 400s
+# on small-context models; 128k is safe for the vast majority of models.
+DEFAULT_CONTEXT_WINDOW = 128_000
 
 
 @dataclass(frozen=True)
@@ -72,14 +75,28 @@ def load_provider_metadata(client: Any) -> dict[str, ModelMetadata]:
 
 
 def get_model_metadata(model: str) -> ModelMetadata | None:
-    """Return exact or partial-match metadata for a model identifier."""
+    """Return exact or partial-match metadata for a model identifier.
+
+    Matching order: exact id, then the segment after the last ``/`` (provider
+    prefix stripped), then the longest substring match. Longest-match avoids a
+    short id like ``gpt-4`` incorrectly resolving to ``gpt-4o-mini``.
+    """
     if model in _MODEL_METADATA:
         return _MODEL_METADATA[model]
+
     model_lower = model.lower()
-    for key, value in _MODEL_METADATA.items():
-        if key.lower() in model_lower or model_lower in key.lower():
-            return value
-    return None
+    suffix = model_lower.rsplit("/", 1)[-1]
+
+    best_key: str | None = None
+    for key in _MODEL_METADATA:
+        key_lower = key.lower()
+        if key_lower.rsplit("/", 1)[-1] == suffix:
+            return _MODEL_METADATA[key]
+        if (key_lower in model_lower or model_lower in key_lower) and (
+            best_key is None or len(key_lower) > len(best_key.lower())
+        ):
+            best_key = key
+    return _MODEL_METADATA[best_key] if best_key is not None else None
 
 
 def get_model_context_window(model: str) -> int:

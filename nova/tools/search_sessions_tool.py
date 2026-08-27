@@ -14,16 +14,15 @@ logger = logging.getLogger(__name__)
 SEARCH_SESSIONS_SCHEMA = {
     "name": "search_sessions",
     "description": (
-        "Search across all chat sessions by keyword. "
-        "Returns matching sessions with their IDs, titles, and metadata. "
-        "Use this to find past conversations before resuming or referencing them."
+        "Find a past chat session by topic. Use it before read_session to discover "
+        "the session ID. Returns matching session IDs, titles, and metadata."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "query": {
                 "type": "string",
-                "description": "Search keyword or phrase to find in session titles and messages.",
+                "description": "Search keyword or phrase to find in session titles and messages (3+ characters).",
             },
             "limit": {
                 "type": "integer",
@@ -80,9 +79,8 @@ registry.register(
 READ_SESSION_SCHEMA = {
     "name": "read_session",
     "description": (
-        "Read messages from a past chat session by ID. "
-        "Use search_sessions first to find the session ID, then call this "
-        "to retrieve the actual conversation content."
+        "Read a past chat session's messages by ID. Use search_sessions first to find "
+        "the ID, or search_messages with around_idx to center on a found message."
     ),
     "parameters": {
         "type": "object",
@@ -165,13 +163,16 @@ registry.register(
 SEARCH_MESSAGES_SCHEMA = {
     "name": "search_messages",
     "description": (
-        "Search individual messages across chat sessions. Returns bounded historical "
-        "snippets and indexes; use read_session with around_idx for nearby context."
+        "Find a specific message across sessions. Returns bounded snippets and a message "
+        "index — follow with read_session around_idx for the surrounding conversation."
     ),
     "parameters": {
         "type": "object",
         "properties": {
-            "query": {"type": "string", "description": "Keyword or phrase to search for."},
+            "query": {
+                "type": "string",
+                "description": "Keyword or phrase to search for (3+ characters).",
+            },
             "limit": {"type": "integer", "description": "Maximum results (default: 10)."},
             "session_id": {"type": "string", "description": "Optional session ID filter."},
         },

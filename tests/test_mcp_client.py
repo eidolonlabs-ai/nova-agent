@@ -1,6 +1,7 @@
 """Tests for the MCP client — stdio, HTTP, and SSE transports."""
 
 import json
+import subprocess
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -574,7 +575,7 @@ def test_stdio_read_response_raises_on_empty_line():
     proc = _make_proc(stdout_data="")
     transport._proc = proc
     with pytest.raises(RuntimeError, match="Server closed connection"):
-        transport._read_response()
+        transport._read_response(0)
 
 
 def test_stdio_read_response_raises_when_stdout_closed():
@@ -584,7 +585,7 @@ def test_stdio_read_response_raises_when_stdout_closed():
     proc.stdout.closed = True
     transport._proc = proc
     with pytest.raises(RuntimeError, match="Stdout is closed"):
-        transport._read_response()
+        transport._read_response(0)
 
 
 def test_stdio_initialize_handshake():
@@ -937,7 +938,9 @@ def test_mcp_call_tool_exception_returns_error():
 
     result = client.call_tool("srv", "read_file", {"path": "/x"})
     assert "Error" in result
-    assert "connection lost" in result
+    # The raw exception message is redacted; only the type name is surfaced.
+    assert "RuntimeError" in result
+    assert "connection lost" not in result
 
 
 def test_mcp_read_resource_text():
@@ -947,7 +950,7 @@ def test_mcp_read_resource_text():
     client._transports["srv"] = mock_transport
 
     result = client.read_resource("srv", "file://hello")
-    assert result == "hello"
+    assert "hello" in result
 
 
 def test_mcp_read_resource_blob():
@@ -957,7 +960,7 @@ def test_mcp_read_resource_blob():
     client._transports["srv"] = mock_transport
 
     result = client.read_resource("srv", "file://binary")
-    assert result == "b64data"
+    assert "b64data" in result
 
 
 def test_mcp_read_resource_empty_contents():
@@ -1024,3 +1027,100 @@ def test_build_mcp_client_non_dict_server_skipped():
     config = {"mcp": {"servers": {"bad": "not-a-dict"}}}
     client = build_mcp_client(config)
     assert "bad" not in client._server_configs
+
+
+# ── MCP hardening: error propagation, timeout, correlation, sanitization ─────
+
+
+def test_extract_tool_result_surfaces_jsonrpc_error():
+    response = {"error": {"code": -32000, "message": "boom"}}
+    result = McpClient._extract_tool_result(response)
+    assert result.startswith("Error:")
+    assert "boom" in result
+
+
+def test_extract_tool_result_surfaces_is_error():
+    response = {"result": {"isError": True, "content": [{"type": "text", "text": "tool blew up"}]}}
+    result = McpClient._extract_tool_result(response)
+    assert result.startswith("Error:")
+    assert "tool blew up" in result
+
+
+def test_call_tool_result_is_labeled_untrusted():
+    client = McpClient()
+    mock_transport = MagicMock()
+    mock_transport.send_request.return_value = {
+        "result": {"content": [{"type": "text", "text": "hello world"}]}
+    }
+    client._transports["srv"] = mock_transport
+
+    result = client.call_tool("srv", "echo", {})
+    assert "hello world" in result
+    assert "untrusted" in result.lower()
+
+
+def test_read_resource_surfaces_jsonrpc_error():
+    client = McpClient()
+    mock_transport = MagicMock()
+    mock_transport.send_request.return_value = {"error": {"message": "denied"}}
+    client._transports["srv"] = mock_transport
+
+    result = client.read_resource("srv", "file://x")
+    assert result.startswith("Error:")
+    assert "denied" in result
+
+
+def test_stdio_connect_sanitizes_environment(monkeypatch):
+    captured = {}
+
+    def _fake_popen(argv, **kwargs):
+        captured["env"] = kwargs.get("env", {})
+        captured["stderr"] = kwargs.get("stderr")
+        raise RuntimeError("stop before initialize")
+
+    monkeypatch.setenv("SECRET_API_KEY", "leak-me")
+    monkeypatch.setenv("SAFE_VAR", "keep-me")
+    monkeypatch.setattr("nova.mcp_client.subprocess.Popen", _fake_popen)
+
+    transport = _StdioTransport(McpStdioConfig(command="srv", args=[], env={"EXTRA": "1"}))
+    transport.connect()
+
+    assert "SECRET_API_KEY" not in captured["env"]
+    assert captured["env"].get("SAFE_VAR") == "keep-me"
+    assert captured["env"].get("EXTRA") == "1"
+    assert captured["stderr"] is subprocess.DEVNULL
+
+
+def test_stdio_read_response_skips_notifications():
+    lines = [
+        '{"jsonrpc":"2.0","method":"log/message","params":{"x":1}}\n',
+        '{"jsonrpc":"2.0","id":0,"result":{"ok":true}}\n',
+    ]
+    proc = _make_proc()
+    proc.stdout.readline.side_effect = lines
+    transport = _StdioTransport(McpStdioConfig(command="srv", args=[]))
+    transport._proc = proc
+
+    result = transport._read_response(0)
+    assert result["result"] == {"ok": True}
+
+
+def test_stdio_read_response_times_out(monkeypatch):
+    import os
+
+    import nova.mcp_client as mcp_mod
+
+    read_fd, write_fd = os.pipe()
+    reader = os.fdopen(read_fd, "r")
+    proc = MagicMock()
+    proc.stdout = reader
+    transport = _StdioTransport(McpStdioConfig(command="srv", args=[]))
+    transport._proc = proc
+
+    monkeypatch.setattr(mcp_mod, "_STDIO_REQUEST_TIMEOUT", 0.05)
+    try:
+        with pytest.raises(TimeoutError):
+            transport._read_response(0)
+    finally:
+        reader.close()
+        os.close(write_fd)

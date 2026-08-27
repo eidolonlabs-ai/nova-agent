@@ -28,6 +28,7 @@ def minimal_config() -> dict:
             "base_url": "https://openrouter.ai/api/v1",
             "api_key": "test-key",
             "model": "test-model",
+            "max_tokens": 8192,
         },
         "agent": {
             "max_iterations": 3,

@@ -9,7 +9,7 @@ from nova.model_metadata import (
 
 
 def test_default_context_window():
-    assert DEFAULT_CONTEXT_WINDOW == 1_000_000
+    assert DEFAULT_CONTEXT_WINDOW == 128_000
 
 
 def test_exact_match():
@@ -66,3 +66,47 @@ class _Client:
 
     def list(self):
         return {"data": self.data}
+
+
+def test_partial_match_prefers_longest():
+    load_provider_metadata(
+        _Client(
+            [
+                {"id": "gpt-4", "context_length": 8_192},
+                {"id": "gpt-4o-mini", "context_length": 128_000},
+            ]
+        )
+    )
+    # "gpt-4" is a substring of the query and is registered first — a naive
+    # first-hit substring scan would wrongly return its metadata. The longer,
+    # more specific "gpt-4o-mini" entry must win instead.
+    metadata = get_model_metadata("openai/gpt-4o-mini")
+    assert metadata is not None
+    assert metadata.context_window == 128_000
+
+
+def test_partial_match_prefers_longest_substring_without_exact_suffix():
+    # Neither key is an exact suffix of the query (which has a trailing date
+    # stamp), so this exercises the longest-substring tie-break specifically,
+    # not the exact-suffix shortcut.
+    load_provider_metadata(
+        _Client(
+            [
+                {"id": "claude", "context_length": 8_192},
+                {"id": "claude-3-opus", "context_length": 200_000},
+            ]
+        )
+    )
+    metadata = get_model_metadata("anthropic/claude-3-opus-20240229")
+    assert metadata is not None
+    assert metadata.context_window == 200_000
+
+
+def test_suffix_match_ignores_provider_prefix():
+    load_provider_metadata(_Client([{"id": "vendor-a/claude-opus", "context_length": 200_000}]))
+    # Different provider prefix on the query side: the full id strings are
+    # not substrings of one another at all, so this only matches through the
+    # last-path-segment suffix comparison, not plain substring containment.
+    metadata = get_model_metadata("vendor-b/claude-opus")
+    assert metadata is not None
+    assert metadata.context_window == 200_000

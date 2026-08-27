@@ -39,7 +39,7 @@ _SUSPICIOUS_PATTERNS = [
 
 TERMINAL_SCHEMA = {
     "name": "terminal",
-    "description": "Execute a shell command and return its output. Use for system queries, file operations, git commands, and running scripts.",
+    "description": "Execute a shell command and return its output. Use when no dedicated tool covers the task (system queries, running scripts, package installs). Prefer the dedicated read_file/write_file/patch_file, search_files, or git_* tools when they apply.",
     "parameters": {
         "type": "object",
         "properties": {

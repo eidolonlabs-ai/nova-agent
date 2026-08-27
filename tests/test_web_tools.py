@@ -555,6 +555,35 @@ def test_web_parse_is_not_read_only():
     assert registry.get_tool("web_parse").is_read_only is False
 
 
+def test_web_parse_denies_path_outside_workspace(tmp_path: Path):
+    """web_parse must not exfiltrate files outside the configured workspace."""
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    secret = outside / "secret.pdf"
+    secret.write_bytes(b"%PDF-1.4 secret")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    result = _web_parse(
+        {"path": str(secret)},
+        config=CONFIG,
+        workspace=str(workspace),
+    )
+    assert result.startswith("Error:")
+    assert "workspace" in result.lower()
+
+
+def test_web_parse_denies_sensitive_dotfile(tmp_path: Path):
+    ssh_dir = tmp_path / ".ssh"
+    ssh_dir.mkdir()
+    key = ssh_dir / "id_rsa.pdf"
+    key.write_bytes(b"%PDF-1.4 key")
+
+    result = _web_parse({"path": str(key)}, config=CONFIG, workspace=str(tmp_path))
+    assert result.startswith("Error:")
+    assert "sensitive" in result.lower()
+
+
 # ── web_dev_search ──────────────────────────────────────────────────────────
 
 
@@ -662,9 +691,20 @@ def test_tool_is_registered(name):
 def test_read_only_web_tools_are_parallel_eligible():
     from nova.tools.registry import _READ_ONLY_TOOLS
 
-    for name in ("web_search", "web_scrape", "web_map", "web_crawl", "web_extract"):
+    for name in ("web_search", "web_scrape", "web_map"):
         assert name in _READ_ONLY_TOOLS, f"{name} missing from parallel dispatch set"
+    # Credit-spending, job-mutating tools must not be treated as read-only:
+    # they require confirmation in ask-mode and are excluded from parallel fan-out.
+    assert "web_crawl" not in _READ_ONLY_TOOLS
+    assert "web_extract" not in _READ_ONLY_TOOLS
     assert "web_parse" not in _READ_ONLY_TOOLS
+
+
+def test_credit_spending_web_tools_are_not_read_only():
+    for name in ("web_crawl", "web_extract", "web_parse"):
+        entry = registry.get_tool(name)
+        assert entry is not None
+        assert entry.is_read_only is False, f"{name} must not be read-only"
 
 
 def test_schemas_declare_required_fields():

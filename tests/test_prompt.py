@@ -62,6 +62,62 @@ def test_prompt_mode_full():
     assert "Model: test-model" in result
 
 
+def test_prompt_includes_session_retrieval_guidance():
+    """Session retrieval guidance is always present when tools are listed."""
+    config = _minimal_config()
+    discover_builtin_tools()
+
+    result = build_system_prompt(config, mode="full")
+
+    assert "Session Retrieval" in result
+    assert "search_sessions" in result
+    assert "search_messages" in result
+    assert "read_session" in result
+    assert "3+ characters" in result
+
+
+def test_session_retrieval_guidance_not_gated_by_model_family():
+    """Claude-family models get the retrieval guidance too.
+
+    The search workflow used to live only inside EXECUTION_DISCIPLINE, which is
+    skipped for Claude/Anthropic models by default — leaving them with no
+    in-prompt search guidance.
+    """
+    config = _minimal_config()
+    config["llm"]["model"] = "anthropic/claude-sonnet-4"
+    discover_builtin_tools()
+
+    result = build_system_prompt(config, mode="full")
+
+    assert "Session Retrieval" in result
+    assert "Execution Discipline" not in result  # Claude models skip that block
+    assert "search_sessions" in result
+
+
+def test_prompt_includes_tool_choice_guidance():
+    """Tool-choice guidance steers the model to dedicated tools before terminal."""
+    config = _minimal_config()
+    discover_builtin_tools()
+
+    result = build_system_prompt(config, mode="full")
+
+    assert "Tool Choice" in result
+    assert "Use terminal only when no dedicated tool covers the task" in result
+
+
+def test_prompt_includes_skills_usage_guidance_when_enabled():
+    """Skills usage guidance is emitted alongside the skills index."""
+    config = _minimal_config()
+    config["skills"]["enabled"] = True
+    config["skills"]["directory"] = str(Path(tempfile.mkdtemp()))
+    discover_builtin_tools()
+
+    result = build_system_prompt(config, mode="full")
+
+    assert "## Skills" in result
+    assert "skill_view" in result
+
+
 def test_prompt_includes_wiki_guidance_when_enabled():
     """Test that wiki guidance is included when wiki is enabled."""
     config = _minimal_config()

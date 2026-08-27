@@ -42,7 +42,7 @@ from nova.providers import (
     chat_completion,
     stream_response,
 )
-from nova.retry import retry_with_backoff
+from nova.retry import ErrorType, classify_error, retry_with_backoff
 from nova.session import SessionStore
 from nova.tokens import (
     estimate_tokens,
@@ -52,6 +52,18 @@ from nova.tools.registry import discover_builtin_tools, registry
 from nova.wiki_memory import WikiMemory
 
 logger = logging.getLogger(__name__)
+
+# Injected as a trailing system message after deterministic compaction, so the
+# model knows earlier turns are recoverable instead of guessing from memory.
+_COMPACTION_NOTE_PREFIX = "[older conversation history was removed"
+_COMPACTION_NOTE = {
+    "role": "system",
+    "content": (
+        "[older conversation history was removed to fit the context window. "
+        "If you need details from earlier in this conversation or a past session, "
+        "recover them with search_messages then read_session instead of guessing.]"
+    ),
+}
 
 
 def _normalize_message_history(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -336,6 +348,7 @@ class NovaAgent:
             "messages": messages,
             "temperature": agent_config.get("temperature", 0.7),
             "top_p": agent_config.get("top_p", 1.0),
+            "max_tokens": int(llm_config.get("max_tokens", 8192)),
             "stream_include_usage": agent_config.get("stream_include_usage", True),
         }
 
@@ -872,6 +885,70 @@ class NovaAgent:
         finally:
             self._active_trace = None
 
+    def _compact_if_needed(
+        self,
+        api_messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None,
+        force: bool = False,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Compact the request to fit the model window without an extra LLM call.
+
+        Returns the (possibly compacted) ``(api_messages, conversation_messages)``
+        pair. When ``force`` is set (e.g. after a provider overflow error) the
+        target budget is halved to shed context aggressively.
+        """
+        total_tokens = estimate_total_request_tokens(api_messages, tools=tools)
+        context_window = get_model_context_window(self.config["llm"]["model"])
+        response_reserve = max(1024, int(self.config["llm"].get("max_tokens", 8192)))
+        safety_margin = 1024
+        active_budget = max(1, context_window - response_reserve - safety_margin)
+        if force:
+            active_budget = max(1, active_budget // 2)
+
+        if total_tokens <= active_budget:
+            return api_messages, self.messages
+
+        microcompact_cfg = self.config.get("microcompact", {})
+        keep_recent = int(microcompact_cfg.get("keep_recent", 6))
+        compacted = compact_to_token_budget(
+            api_messages,
+            max_tokens=active_budget - estimate_total_request_tokens([], tools=tools),
+            keep_recent=keep_recent,
+            strip_tool_results=microcompact_cfg.get("enabled", True),
+        )
+        compacted = _normalize_message_history(compacted)
+        compacted_tokens = estimate_total_request_tokens(compacted, tools=tools)
+        if compacted_tokens < total_tokens:
+            logger.info(
+                "Deterministic compaction: %d → %d tokens (saved %d)",
+                total_tokens,
+                compacted_tokens,
+                total_tokens - compacted_tokens,
+            )
+            conversation = self._conversation_messages_from_api(compacted)
+            if not any(
+                isinstance(m.get("content"), str)
+                and m["content"].startswith(_COMPACTION_NOTE_PREFIX)
+                for m in compacted
+            ):
+                compacted = [*compacted, _COMPACTION_NOTE]
+            if compacted_tokens > active_budget:
+                logger.warning(
+                    "Context remains above active budget: %d > %d tokens; "
+                    "historical retrieval may be needed",
+                    compacted_tokens,
+                    active_budget,
+                )
+            return compacted, conversation
+
+        logger.warning(
+            "Context remains above active budget: %d > %d tokens; "
+            "historical retrieval may be needed",
+            total_tokens,
+            active_budget,
+        )
+        return api_messages, self.messages
+
     def _run(
         self,
         user_message: str,
@@ -908,47 +985,30 @@ class NovaAgent:
             iteration += 1
 
             # Keep requests below the model window without making another LLM call.
-            total_tokens = estimate_total_request_tokens(api_messages, tools=tools)
-            context_window = get_model_context_window(self.config["llm"]["model"])
-            response_reserve = max(1024, int(self.config["llm"].get("max_tokens", 8192)))
-            safety_margin = 1024
-            active_budget = max(1, context_window - response_reserve - safety_margin)
-            microcompact_cfg = self.config.get("microcompact", {})
-            if total_tokens > active_budget:
-                keep_recent = int(microcompact_cfg.get("keep_recent", 6))
-                compacted = compact_to_token_budget(
-                    api_messages,
-                    max_tokens=active_budget - estimate_total_request_tokens([], tools=tools),
-                    keep_recent=keep_recent,
-                    strip_tool_results=microcompact_cfg.get("enabled", True),
-                )
-                compacted = _normalize_message_history(compacted)
-                compacted_tokens = estimate_total_request_tokens(compacted, tools=tools)
-                if compacted_tokens < total_tokens:
-                    logger.info(
-                        "Deterministic compaction: %d → %d tokens (saved %d)",
-                        total_tokens,
-                        compacted_tokens,
-                        total_tokens - compacted_tokens,
-                    )
-                    api_messages = compacted
-                    self.messages = self._conversation_messages_from_api(compacted)
-                    total_tokens = compacted_tokens
-                if total_tokens > active_budget:
-                    logger.warning(
-                        "Context remains above active budget: %d > %d tokens; "
-                        "historical retrieval may be needed",
-                        total_tokens,
-                        active_budget,
-                    )
+            api_messages, self.messages = self._compact_if_needed(api_messages, tools)
 
-            # Call LLM
-            response = self._call_llm(
-                api_messages,
-                tools=tools,
-                stream=stream,
-                stream_callback=stream_callback,
-            )
+            # Call LLM. If the provider rejects the request as too long despite
+            # our estimate, compact aggressively and retry once before failing.
+            try:
+                response = self._call_llm(
+                    api_messages,
+                    tools=tools,
+                    stream=stream,
+                    stream_callback=stream_callback,
+                )
+            except Exception as exc:
+                if classify_error(message=str(exc)) != ErrorType.CONTEXT_OVERFLOW:
+                    raise
+                logger.warning("Provider reported context overflow; compacting and retrying once")
+                api_messages, self.messages = self._compact_if_needed(
+                    api_messages, tools, force=True
+                )
+                response = self._call_llm(
+                    api_messages,
+                    tools=tools,
+                    stream=stream,
+                    stream_callback=stream_callback,
+                )
 
             choice = response.get("choices", [{}])[0]
             message = choice.get("message", {})
