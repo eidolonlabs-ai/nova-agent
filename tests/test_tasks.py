@@ -90,6 +90,20 @@ def test_read_task_output(tmp_path):
     assert "hello world" in output
 
 
+def test_task_output_keeps_tail_when_output_exceeds_limit(tmp_path):
+    mgr = BackgroundTaskManager(
+        tasks_dir=tmp_path / "tasks", config={"tasks": {"max_output_bytes": 100}}
+    )
+    task_id = mgr.create_shell_task(
+        'python3 -c \'print("head" * 1000); print("TAIL_MARKER")\'', "large output"
+    )
+
+    time.sleep(0.5)
+    output = mgr.read_task_output(task_id)
+    assert "TAIL_MARKER" in output
+    assert "output truncated" in output
+
+
 def test_task_manifest_survives_manager_recreation(tmp_path):
     first = _make_manager(tmp_path)
     task_id = first.create_shell_task("printf persisted", "persisted")

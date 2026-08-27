@@ -54,6 +54,8 @@ When context is removed, Nova may need to search for:
 - Errors and their resolutions.
 - Work that was discussed but is no longer in the active window.
 
+After successful automatic compaction, the request sent to the model includes a short recovery note explaining that older history was removed and should be recovered with `search_messages` followed by `read_session`. The note is ephemeral and is not persisted as conversation content.
+
 For durable project facts, prefer project context files or wiki memory. Session history is best for recovering conversation-specific details.
 
 ## Historical Retrieval

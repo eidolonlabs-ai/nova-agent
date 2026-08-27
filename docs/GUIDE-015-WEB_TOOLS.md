@@ -111,7 +111,7 @@ before large jobs.
 | Credit spend | `web_crawl` and `web_extract` are **not** read-only — every page they process costs Firecrawl credits and starts a server-side job, so they require confirmation in `ask` mode and are excluded from parallel read-only dispatch |
 | Local path confinement | `web_parse` runs the same path-safety checks as `read_file`/`write_file`: sensitive paths (`.ssh`, `.aws`, `.env`, …) and protected prefixes (`/etc`, `/proc`, …) are denied, and files outside known workspaces are rejected |
 | Key leakage | Error messages are sanitized: anything matching `fc-…` or `Bearer …` is redacted before reaching the transcript |
-| Unreachable targets | `localhost`, `127.0.0.1`, `169.254.x`, and RFC1918 addresses are rejected up front — Firecrawl fetches from its own infrastructure and cannot reach them |
+| Unreachable targets | `localhost`, loopback, private, link-local, unspecified, and multicast IP addresses are rejected up front — Firecrawl fetches from its own infrastructure and cannot reach them |
 | Non-HTTP schemes | Only `http` and `https` are accepted |
 | Safe profile | `config-safe.yaml.example` sets `web.enabled: false` |
 

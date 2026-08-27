@@ -208,17 +208,32 @@ class BackgroundTaskManager:
         return task_id
 
     def _capture_output(self, proc: subprocess.Popen, output_file: Path) -> None:
-        """Drain a child pipe while retaining only the configured output limit."""
+        """Drain a child pipe while retaining the beginning and end of output."""
         if proc.stdout is None:
             return
-        remaining = self.max_output_bytes
+        head_limit = max(1, int(self.max_output_bytes * 0.7))
+        tail_limit = max(1, int(self.max_output_bytes * 0.2))
+        head = bytearray()
+        tail = bytearray()
+        complete = bytearray()
+        total_read = 0
         try:
+            while chunk := proc.stdout.read(8192):
+                total_read += len(chunk)
+                if len(complete) <= self.max_output_bytes:
+                    complete.extend(chunk[: max(0, self.max_output_bytes + 1 - len(complete))])
+                if len(head) < head_limit:
+                    head.extend(chunk[: head_limit - len(head)])
+                tail.extend(chunk)
+                if len(tail) > tail_limit:
+                    del tail[:-tail_limit]
             with output_file.open("wb") as output:
-                while chunk := proc.stdout.read(8192):
-                    if remaining > 0:
-                        kept = chunk[:remaining]
-                        output.write(kept)
-                        remaining -= len(kept)
+                if total_read <= self.max_output_bytes:
+                    output.write(complete)
+                else:
+                    output.write(head)
+                    output.write(b"\n\n[...output truncated...]\n\n")
+                    output.write(tail)
         finally:
             proc.stdout.close()
 

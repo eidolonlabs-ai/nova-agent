@@ -5,6 +5,7 @@ Importing it costs ~0.2s, so the import is deferred to first use rather than
 run at module import time.
 """
 
+import ipaddress
 import logging
 import re
 from typing import Any
@@ -275,8 +276,18 @@ def validate_url(url: str) -> str:
     host = (parsed.hostname or "").lower()
     if not host:
         return f"Error: URL has no host: {url}"
-    if host in ("localhost", "127.0.0.1", "0.0.0.0", "::1") or host.endswith(".localhost"):
+    if host.endswith(".localhost"):
         return "Error: Firecrawl runs remotely and cannot reach localhost."
-    if host.startswith(("10.", "192.168.", "169.254.")) or host.startswith("172.1"):
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    if address is not None and (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_unspecified
+        or address.is_multicast
+    ):
         return "Error: Firecrawl runs remotely and cannot reach private network addresses."
     return ""

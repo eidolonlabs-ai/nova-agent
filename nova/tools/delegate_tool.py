@@ -194,7 +194,10 @@ def _run_subagent(
                 subagent.messages = prefill_messages
 
             if cancel_event is not None:
-                subagent._interrupt_check = cancel_event.is_set
+                deadline = start_time + timeout_seconds
+                subagent._interrupt_check = lambda: (
+                    cancel_event.is_set() or time.monotonic() >= deadline
+                )
             result = subagent.run(task, stream=False)
 
         elapsed = time.monotonic() - start_time

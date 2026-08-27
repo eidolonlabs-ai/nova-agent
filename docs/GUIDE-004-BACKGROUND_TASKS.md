@@ -1,7 +1,7 @@
 # Background Tasks
 
 **Status:** ✅ Active  
-**Last Updated:** May 2026  
+**Last Updated:** August 2026
 **Type:** GUIDE (Feature Reference)
 
 > Nova Agent supports fire-and-forget background task execution. Start long-running commands without blocking the conversation, check their status, read output, or stop them at any time.
@@ -83,7 +83,7 @@ Status set to "killed"
 
 ## Task Output
 
-Output is captured to a log file in `~/.nova/tasks/`. `task_output` reads the tail:
+Output is captured to a log file in `~/.nova/tasks/`. The manager continuously drains the child process so a noisy command cannot block on a full pipe. Completed logs retain the beginning and tail when output exceeds the configured cap; `task_output` then reads the requested tail:
 
 ```python
 # Default: last 12,000 bytes
@@ -92,6 +92,8 @@ task_output("b3f8a2c")
 # Custom size
 task_output("b3f8a2c", max_bytes=5000)
 ```
+
+Background commands run with common credential-like environment variables removed (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASSWORD*`, and `*CREDENTIAL*`). Pass only the environment a command genuinely needs through an explicit integration rather than relying on inherited secrets.
 
 ## Listing Tasks
 

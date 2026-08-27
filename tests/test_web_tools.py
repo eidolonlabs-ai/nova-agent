@@ -103,6 +103,21 @@ def test_malformed_web_config_does_not_crash():
     assert fc.get_max_chars({"budgets": {"tool_result_max_chars": "x"}}) == 8000
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://127.0.0.1/test",
+        "http://10.20.30.40/test",
+        "http://172.16.0.1/test",
+        "http://172.31.255.255/test",
+        "http://192.168.1.1/test",
+        "http://[::1]/test",
+    ],
+)
+def test_validate_url_rejects_private_addresses(url):
+    assert "cannot reach private" in fc.validate_url(url)
+
+
 def test_max_chars_respects_configured_budget():
     assert fc.get_max_chars({"budgets": {"tool_result_max_chars": 2000}}) == 2000
 

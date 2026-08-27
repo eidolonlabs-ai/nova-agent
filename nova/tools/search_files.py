@@ -101,7 +101,7 @@ def _search_files(args: dict[str, Any], **kwargs: Any) -> str:
     mode = args.get("mode", "content")
     file_pattern = args.get("file_pattern", "*")
     raw_max = args.get("max_results", _MAX_RESULTS)
-    max_results = min(raw_max if isinstance(raw_max, int) else _MAX_RESULTS, 100)
+    max_results = max(1, min(raw_max if isinstance(raw_max, int) else _MAX_RESULTS, 100))
 
     if not isinstance(pattern, str) or not pattern:
         return "Error: No search pattern provided."

@@ -164,3 +164,14 @@ class TestGitIntegration:
         result = _git_log({"repo": "."})
         assert "Error:" in result
         assert "timeout" in result.lower() or "timed out" in result.lower()
+
+    @patch.dict("os.environ", {"LLM_API_KEY": "secret", "PATH": "/usr/bin"}, clear=True)
+    @patch("nova.tools.git_tool.subprocess.run")
+    def test_git_command_does_not_inherit_credentials(self, mock_run):
+        mock_run.return_value = Mock(returncode=0, stdout="", stderr="")
+
+        _git_status({"repo": "."})
+
+        env = mock_run.call_args.kwargs["env"]
+        assert "LLM_API_KEY" not in env
+        assert env["PATH"] == "/usr/bin"

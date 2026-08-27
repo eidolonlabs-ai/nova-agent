@@ -1,7 +1,7 @@
 # GUIDE-013: Memory System (Obsidian-Compatible Wiki)
 
 **Status:** ✅ Active
-**Last Updated:** May 2026
+**Last Updated:** August 2026
 **Type:** GUIDE (Developer & User Reference)
 
 > Nova's memory is a persistent wiki of Obsidian-compatible markdown notes. Notes survive across sessions, link to each other with `[[wikilinks]]`, and can be browsed directly in Obsidian.
@@ -122,6 +122,8 @@ Notes in `Core/` are **special**: their **full content** is injected into every 
 | `maintenance` | Read-only report: duplicate candidates, orphans, stale notes |
 
 All operations are exposed through a single `wiki` tool — see [Built-in Tools](#built-in-tools).
+
+Mutating operations are protected by both an in-process lock and a vault-local advisory lock, so separate Nova processes do not concurrently overwrite the same note. Read-only lookups and missing-note mutations do not create empty directories. Atomic replacement keeps note writes from exposing partially written files.
 
 ---
 

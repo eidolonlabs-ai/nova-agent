@@ -31,7 +31,7 @@
 | [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md) | ✅ Active | Connect stdio, HTTP, and SSE Model Context Protocol servers |
 | [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) | ✅ Active | Defense-in-depth cascade, allow/deny lists, path rules, opinionated profiles |
 | [GUIDE-009-USING_NOVA](GUIDE-009-USING_NOVA.md) | ✅ Active | Effective use patterns: task descriptions, sessions, wiki memory, tools |
-| [GUIDE-010-ROADMAP](GUIDE-010-ROADMAP.md) | ✅ Active | Project phases, timeline, completed and planned work |
+| [GUIDE-010-ROADMAP](GUIDE-010-ROADMAP.md) | ✅ Active | Priority buckets, release state, completed and planned work |
 | [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) | ✅ Active | Deterministic compaction and searchable historical retrieval |
 | [GUIDE-012-SESSION_MANAGEMENT](GUIDE-012-SESSION_MANAGEMENT.md) | ✅ Active | SQLite session storage, FTS5 search, commands, lifecycle |
 | [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) | ✅ Active | Obsidian-compatible wiki memory: markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance |
@@ -108,10 +108,10 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | ADRs (ADR-NNN) | 3 | ✅ All current |
 | Specs (SPEC-NNN) | 1 | ✅ All current |
 | Releases (RELEASE-NNN) | 1 | ✅ All current |
-| Reports (REPORT-NNN) | 2 | 🟡 ACP work in progress |
+| Reports (REPORT-NNN) | 2 | ✅ Current |
 | Starter skills | 16 | ✅ All current |
 | Root docs (README, CONTRIBUTING, SECURITY, AGENTS) | 4 | ✅ All current |
-| **Total** | **42** | 🟡 |
+| **Total** | **42** | ✅ Current |
 
 **Supported doc type prefixes:** GUIDE · PRD · PERSONA · SPEC · ADR · RUN · RELEASE · STRATEGY · RESEARCH · GTM · REPORT
 

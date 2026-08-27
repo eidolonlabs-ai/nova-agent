@@ -5,6 +5,7 @@ vault directory. Supports wikilinks ([[title]]) and #tags natively.
 """
 
 import contextlib
+import fcntl
 import functools
 import logging
 import os
@@ -26,7 +27,18 @@ def _synchronized(method):
     @functools.wraps(method)
     def wrapper(self, *args, **kwargs):
         with self._mutation_lock:
-            return method(self, *args, **kwargs)
+            outermost = self._mutation_depth == 0
+            lock_file = self._mutation_file.open("a+") if outermost else None
+            if lock_file is not None:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+            self._mutation_depth += 1
+            try:
+                return method(self, *args, **kwargs)
+            finally:
+                self._mutation_depth -= 1
+                if lock_file is not None:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+                    lock_file.close()
 
     return wrapper
 
@@ -38,7 +50,11 @@ class WikiMemory:
         self.vault_path = vault_path
         self.max_prompt_notes = max_prompt_notes
         self._mutation_lock = threading.RLock()
+        self._mutation_depth = 0
         vault_path.mkdir(parents=True, exist_ok=True)
+        self._mutation_file = vault_path / ".nova-mutation.lock"
+        self._mutation_file.touch(exist_ok=True)
+        self._mutation_file.chmod(0o600)
 
     def _note_path(self, title: str, create_parent: bool = True) -> Path:
         """Convert a title (optionally with path prefix) to an absolute .md path.
@@ -132,7 +148,7 @@ class WikiMemory:
         count=0 replaces all occurrences; count=N replaces the first N.
         Returns {"status": "patched", "replacements": N} or an error dict.
         """
-        path = self._note_path(title)
+        path = self._note_path(title, create_parent=False)
         if not path.exists():
             return {"status": "not_found", "error": f"Note not found: '{title}'"}
         parsed = self._parse_note(path)
@@ -185,7 +201,7 @@ class WikiMemory:
     @_synchronized
     def add_tag(self, title: str, tag: str) -> dict:
         """Add a tag to a note's frontmatter. No-op if the tag already exists."""
-        path = self._note_path(title)
+        path = self._note_path(title, create_parent=False)
         if not path.exists():
             return {"status": "not_found", "error": f"Note not found: '{title}'"}
         parsed = self._parse_note(path)
@@ -201,7 +217,7 @@ class WikiMemory:
     @_synchronized
     def remove_tag(self, title: str, tag: str) -> dict:
         """Remove a tag from a note's frontmatter. No-op if the tag is absent."""
-        path = self._note_path(title)
+        path = self._note_path(title, create_parent=False)
         if not path.exists():
             return {"status": "not_found", "error": f"Note not found: '{title}'"}
         parsed = self._parse_note(path)
@@ -216,7 +232,7 @@ class WikiMemory:
     @_synchronized
     def pin(self, title: str) -> dict:
         """Set inject:true on a note so its full content appears in every system prompt."""
-        path = self._note_path(title)
+        path = self._note_path(title, create_parent=False)
         if not path.exists():
             return {"status": "not_found", "error": f"Note not found: '{title}'"}
         parsed = self._parse_note(path)
@@ -300,7 +316,7 @@ class WikiMemory:
     @_synchronized
     def delete(self, title: str) -> bool:
         """Delete a note by title. Returns True if deleted."""
-        path = self._note_path(title)
+        path = self._note_path(title, create_parent=False)
         if path.exists():
             path.unlink()
             return True

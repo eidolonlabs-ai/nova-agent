@@ -489,7 +489,7 @@ retry:
 | [Background Tasks](GUIDE-004-BACKGROUND_TASKS.md) | GUIDE | Fire-and-forget task execution |
 | [MCP Integration](GUIDE-007-MCP_INTEGRATION.md) | GUIDE | Connect to external MCP servers |
 | [Cost Tracking](GUIDE-005-COST_TRACKING.md) | GUIDE | Token usage and dollar cost tracking |
-| [Roadmap](GUIDE-010-ROADMAP.md) | GUIDE | Project phases, timeline, and targets |
+| [Roadmap](GUIDE-010-ROADMAP.md) | GUIDE | Priority buckets, release state, and planned work |
 | [Context Compression](GUIDE-011-CONTEXT_COMPRESSION.md) | GUIDE | Three-tier context management strategy |
 | [Session Management](GUIDE-012-SESSION_MANAGEMENT.md) | GUIDE | SQLite sessions, FTS5 search, slash commands |
 | [Memory System](GUIDE-013-MEMORY_SYSTEM.md) | GUIDE | Obsidian-compatible wiki memory, `Core/` auto-inject, maintenance |

@@ -11,9 +11,8 @@
 | Item | Current State |
 |------|---------------|
 | Branch | `main` |
-| Latest ACP commit | `b00c0dc` — session migration and release hardening |
-| Remote relationship | `main` is synced with `origin/main` |
-| Test baseline | 941 tests passing, 84.52% coverage |
+| Current implementation | ACP lifecycle, workspace isolation, cancellation, and tool-call progress are implemented |
+| Test baseline | 1169 tests passing, 83.72% coverage |
 | Quality gates | Ruff, formatting, mypy, and pytest passing locally |
 | Next patch | ACP permission bridging and client-provided MCP configuration |
 
@@ -61,8 +60,8 @@ Make Nova Agent interoperable with ACP-compatible editors through the official `
 | Ruff | ✅ Pass |
 | Format check | ✅ Pass |
 | Mypy | ✅ Pass |
-| Pytest | ✅ 941 passed |
-| Coverage | ✅ 84.42% |
+| Pytest | ✅ 1169 passed |
+| Coverage | ✅ 83.72% |
 | Session replay smoke | ✅ User and assistant history replayed in order |
 | Workspace smoke | ✅ Distinct context and relative-write isolation |
 

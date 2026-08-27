@@ -241,3 +241,12 @@ def test_search_files_invalid_max_results():
 
     result = _search_files({"pattern": "hello", "path": str(tmpdir), "max_results": "abc"})
     assert "a.txt" in result
+
+
+def test_search_files_clamps_nonpositive_max_results():
+    tmpdir = Path(tempfile.mkdtemp())
+    (tmpdir / "a.txt").write_text("hello\n", encoding="utf-8")
+
+    result = _search_files({"pattern": "hello", "path": str(tmpdir), "max_results": 0})
+    assert "a.txt" in result
+    assert "limited to 1 results" in result

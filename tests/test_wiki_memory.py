@@ -211,6 +211,25 @@ def test_read_returns_none_for_missing(vault: WikiMemory):
     assert vault.read("Nonexistent") is None
 
 
+def test_read_and_delete_missing_nested_note_do_not_create_directories(vault: WikiMemory):
+    assert vault.read("Missing/Nested") is None
+    assert not (vault.vault_path / "Missing").exists()
+
+
+@pytest.mark.parametrize("method", ["patch", "add_tag", "remove_tag", "pin"])
+def test_missing_note_mutations_do_not_create_directories(vault: WikiMemory, method: str):
+    if method == "patch":
+        result = vault.patch("Missing/Nested", "x", "y")
+    elif method in {"add_tag", "remove_tag"}:
+        result = getattr(vault, method)("Missing/Nested", "x")
+    else:
+        result = vault.pin("Missing/Nested")
+    assert result["status"] == "not_found"
+    assert not (vault.vault_path / "Missing").exists()
+    assert not vault.delete("Missing/Nested")
+    assert not (vault.vault_path / "Missing").exists()
+
+
 def test_read_returns_frontmatter_and_content(vault: WikiMemory):
     vault.write("My Note", "Some content", tags=["foo"])
     note = vault.read("My Note")
