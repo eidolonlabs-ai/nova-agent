@@ -11,6 +11,7 @@ import pytest
 from nova.display import (
     StreamingReasoningBox,
     extract_reasoning_blocks,
+    resolve_tui_local_command,
     split_reasoning_and_response,
     strip_reasoning_tags,
 )
@@ -339,3 +340,42 @@ class TestStreamingReasoningBoxFlush:
         box.flush()
         assert box._in_reasoning is False
         assert box._prefilt_buf == ""
+
+
+# ─── resolve_tui_local_command ───────────────────────────────────────────────
+#
+# This is the routing decision at the heart of the TUI's slash-command
+# dispatch. It must return None (fall through to on_input) for anything that
+# isn't a TUI-local action — including skill commands and names unknown to
+# commands.py — otherwise those commands are silently rejected before
+# nova.command_handlers.dispatch_command ever sees them.
+
+
+class TestResolveTuiLocalCommand:
+    def test_quit_and_exit_resolve_to_quit(self):
+        assert resolve_tui_local_command("quit") == "quit"
+        assert resolve_tui_local_command("exit") == "quit"
+
+    def test_help_resolves_to_help(self):
+        assert resolve_tui_local_command("help") == "help"
+
+    def test_clear_resolves_to_clear(self):
+        assert resolve_tui_local_command("clear") == "clear"
+
+    def test_known_non_local_command_falls_through(self):
+        # "status" (and its alias "st") is a real command_handlers.py handler,
+        # not a TUI-local action — it must fall through to on_input.
+        assert resolve_tui_local_command("status") is None
+        assert resolve_tui_local_command("st") is None
+        assert resolve_tui_local_command("new") is None
+        assert resolve_tui_local_command("undo") is None
+
+    def test_unknown_command_falls_through(self):
+        # Unresolved names (e.g. a skill invoked as /my-skill) must not be
+        # rejected here — on_input resolves skills via dispatch_command.
+        assert resolve_tui_local_command("my-custom-skill") is None
+        assert resolve_tui_local_command("totally_unknown_xyz") is None
+
+    def test_case_insensitive_resolution(self):
+        assert resolve_tui_local_command("QUIT") == "quit"
+        assert resolve_tui_local_command("Help") == "help"

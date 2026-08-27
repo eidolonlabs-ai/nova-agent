@@ -34,7 +34,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("history", "Show conversation history", "Session"),
     CommandDef("undo", "Remove the last exchange", "Session"),
     CommandDef("retry", "Resend the last message", "Session"),
-    CommandDef("status", "Show session info", "Session"),
+    CommandDef("status", "Show session info", "Session", aliases=("st",)),
     CommandDef("sessions", "List recent sessions", "Session"),
     CommandDef("resume", "Resume a previous session", "Session", args_hint="[id]"),
     CommandDef("title", "Set a title for this session", "Session", args_hint="[name]"),

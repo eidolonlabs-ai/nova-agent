@@ -70,6 +70,22 @@ def test_get_registered_commands_returns_set(agent):
     assert len(cmds) > 0
 
 
+def test_command_registries_do_not_drift():
+    """Every dispatchable handler name/alias must be known to commands.py.
+
+    commands.py is the source of truth for autocomplete and TUI resolution;
+    a handler the TUI cannot resolve is unreachable in the chat loop.
+    """
+    from nova.commands import resolve_command
+
+    # Handlers that are intentionally resolved dynamically (skills) are excluded;
+    # only static @command_handler names/aliases are checked here.
+    for name in _HANDLERS:
+        assert resolve_command(name) is not None, (
+            f"Handler '{name}' is not in commands.py COMMAND_REGISTRY (drift)"
+        )
+
+
 # ─── cmd_new ─────────────────────────────────────────────────────────────────
 
 

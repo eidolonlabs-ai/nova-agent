@@ -189,6 +189,31 @@ THINKING_VERBS = (
 )
 
 
+_TUI_LOCAL_ACTIONS = frozenset({"quit", "help", "clear"})
+
+
+def resolve_tui_local_command(cmd_name: str) -> str | None:
+    """Return the TUI-local action for a slash command, or None to fall through.
+
+    Only quit/exit, help, and clear are handled directly by the input loop.
+    Everything else — including skill commands (e.g. ``/my-skill``) and names
+    unknown to commands.py — must fall through to ``on_input``, which resolves
+    skills and dispatches command handlers. Returning None here (rather than
+    rejecting unresolved commands outright) is what keeps the TUI's command
+    routing consistent with nova.command_handlers.dispatch_command.
+    """
+    from nova.commands import resolve_command
+
+    cmd_def = resolve_command(cmd_name)
+    if cmd_def is None:
+        return None
+    if cmd_def.name in ("quit", "exit"):
+        return "quit"
+    if cmd_def.name in _TUI_LOCAL_ACTIONS:
+        return cmd_def.name
+    return None
+
+
 class NovaTUI:
     """prompt_toolkit Application-based TUI.
 
@@ -303,7 +328,7 @@ class NovaTUI:
         from prompt_toolkit.styles import Style
         from prompt_toolkit.widgets import TextArea
 
-        from nova.commands import SlashCompleter, get_commands_by_category, resolve_command
+        from nova.commands import SlashCompleter, get_commands_by_category
 
         style = Style.from_dict(
             {
@@ -463,23 +488,22 @@ class NovaTUI:
                 if text.startswith("/"):
                     parts = text[1:].split(None, 1)
                     cmd_name = parts[0].lower()
-                    cmd_def = resolve_command(cmd_name)
+                    action = resolve_tui_local_command(cmd_name)
 
-                    if cmd_def is None:
-                        _cprint(f"{_DIM}Unknown command: /{cmd_name}  (type /help){_RST}")
-                        continue
-
-                    if cmd_def.name in ("quit", "exit"):
+                    # Built-in TUI-local commands handled here; everything else
+                    # (including skill commands and unknown names) falls through
+                    # to on_input, which resolves skills and dispatches handlers.
+                    if action == "quit":
                         self._should_exit.set()
                         app.exit()
                         return
-                    if cmd_def.name == "help":
+                    if action == "help":
                         _show_help()
                         continue
-                    if cmd_def.name == "clear":
+                    if action == "clear":
                         _cprint("\033[2J\033[H")
                         continue
-                    # All other slash commands → agent (with user echo)
+                    # All other slash commands → on_input (with user echo)
 
                 # Echo the user message into scrollback so it's preserved
                 _cprint(f"{_CYAN}❯ {text}{_RST}")
