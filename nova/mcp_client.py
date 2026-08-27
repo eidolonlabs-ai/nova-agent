@@ -192,9 +192,10 @@ class _HttpTransport:
 
     def __init__(self, config: McpHttpConfig) -> None:
         self.config = config
+        headers = {"Accept": "application/json, text/event-stream"}
+        headers.update(config.headers)
         self._client = httpx.Client(
-            base_url=config.url,
-            headers=config.headers,
+            headers=headers,
             timeout=config.timeout,
         )
         self._next_id: int = 0
@@ -213,6 +214,18 @@ class _HttpTransport:
         """Close the HTTP client."""
         self._client.close()
 
+    @staticmethod
+    def _response_json(response: httpx.Response) -> dict[str, Any]:
+        """Decode a JSON or single-event SSE MCP response."""
+        content_type = response.headers.get("content-type", "")
+        if "text/event-stream" not in content_type:
+            return response.json()
+
+        for line in response.text.splitlines():
+            if line.startswith("data:"):
+                return json.loads(line[5:].strip())
+        raise ValueError("MCP SSE response contained no data event")
+
     def send_request(self, method: str, params: dict[str, Any] | None = None) -> dict:
         """Send a JSON-RPC request via POST and return the response."""
         request_id = self._next_id
@@ -223,11 +236,11 @@ class _HttpTransport:
             "method": method,
             "params": params or {},
         }
-        headers = dict(self.config.headers)
+        headers = dict(self._client.headers)
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
 
-        response = self._client.post("/", json=body, headers=headers)
+        response = self._client.post(self.config.url, json=body, headers=headers)
         response.raise_for_status()
 
         # Capture session ID if provided
@@ -235,7 +248,7 @@ class _HttpTransport:
         if session_id:
             self._session_id = session_id
 
-        return response.json()
+        return self._response_json(response)
 
     def send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
         """Send a JSON-RPC notification via POST (no response expected)."""
@@ -244,11 +257,11 @@ class _HttpTransport:
             "method": method,
             "params": params or {},
         }
-        headers = dict(self.config.headers)
+        headers = dict(self._client.headers)
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
 
-        self._client.post("/", json=body, headers=headers)
+        self._client.post(self.config.url, json=body, headers=headers)
 
     def _initialize(self) -> bool:
         """Run the MCP initialization handshake."""
@@ -263,9 +276,10 @@ class _HttpTransport:
                 "clientInfo": {"name": "nova-agent", "version": __version__},
             },
         }
-        headers = dict(self.config.headers)
-        response = self._client.post("/", json=init_request, headers=headers)
+        headers = dict(self._client.headers)
+        response = self._client.post(self.config.url, json=init_request, headers=headers)
         response.raise_for_status()
+        self._response_json(response)
 
         # Capture session ID
         session_id = response.headers.get("Mcp-Session-Id")

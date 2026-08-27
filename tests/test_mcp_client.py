@@ -165,6 +165,7 @@ def test_http_transport_send_request(mock_client_cls):
 
     assert response["result"]["content"][0]["text"] == "hello"
     mock_client.post.assert_called_once()
+    assert mock_client.post.call_args.args[0] == "https://api.example.com/mcp"
     transport.disconnect()
 
 
@@ -183,6 +184,16 @@ def test_http_transport_session_id_capture(mock_client_cls):
 
     assert transport._session_id == "sess-123"
     transport.disconnect()
+
+
+def test_http_transport_decodes_sse_response():
+    response = MagicMock()
+    response.headers = {"content-type": "text/event-stream"}
+    response.text = 'event: message\ndata: {"result": {"value": "ok"}}\n\n'
+
+    result = _HttpTransport._response_json(response)
+
+    assert result == {"result": {"value": "ok"}}
 
 
 # ── _SseTransport — Unit Tests ──────────────────────────────────────────────
