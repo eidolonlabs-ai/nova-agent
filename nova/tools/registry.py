@@ -9,7 +9,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from nova.hooks import EVENT_POST_TOOL_CALL, EVENT_PRE_TOOL_CALL
+from nova.observability import redact
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +26,12 @@ _READ_ONLY_TOOLS: frozenset[str] = frozenset(
         "search_files",
         "search_sessions",
         "web_search",
+        "web_scrape",
+        "web_map",
+        "web_crawl",
+        "web_extract",
+        "web_dev_search",
+        "web_usage",
         "http_get",
         "skills_list",
         "skill_view",
@@ -93,6 +99,11 @@ class ToolRegistry:
         verifier: Callable | None = None,
     ):
         """Register a tool."""
+        existing = self._tools.get(name)
+        if existing is not None:
+            if existing.handler is not handler or existing.schema != schema:
+                logger.error("Tool name collision for '%s'; keeping the first registration", name)
+            return
         # Auto-detect read-only status if not explicitly set
         if not is_read_only:
             is_read_only = name in _READ_ONLY_TOOLS
@@ -110,7 +121,9 @@ class ToolRegistry:
         self._generation += 1
         logger.debug("Registered tool: %s", name)
 
-    def get_definitions(self, tool_names: set | None = None) -> list[dict]:
+    def get_definitions(
+        self, tool_names: set | None = None, config: dict | None = None
+    ) -> list[dict]:
         """Get tool schema definitions for API calls.
 
         Returns tools in OpenAI-compatible format:
@@ -122,7 +135,13 @@ class ToolRegistry:
         tools = []
         for name, entry in self._tools.items():
             if tool_names is None or name in tool_names:
-                # Skip check_fn for now (simplified)
+                if entry.check_fn is not None:
+                    try:
+                        if not entry.check_fn(config or {}):
+                            continue
+                    except Exception:
+                        logger.exception("Tool availability check failed for '%s'", name)
+                        continue
                 tools.append(
                     {
                         "type": "function",
@@ -152,20 +171,14 @@ class ToolRegistry:
         if not entry:
             return f"Error: Unknown tool '{name}'"
 
-        # Fire pre_tool_call hook
-        from nova.hooks import hooks as _hooks
-
-        _hooks.emit(EVENT_PRE_TOOL_CALL, tool_name=name, args=args)
-
         try:
             result = entry.handler(args, **kwargs)
-            # Fire post_tool_call hook
-            _hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=args, result=result)
-            return result
+            if isinstance(result, str):
+                return result
+            return str(result)
         except Exception as e:
-            logger.error("Tool %s failed: %s", name, e)
-            error_result = f"Error: Tool '{name}' failed: {e}"
-            _hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=args, result=error_result)
+            logger.exception("Tool %s failed", name)
+            error_result = f"Error: Tool '{name}' failed: {redact(str(e))}"
             return error_result
 
     def get_tool(self, name: str) -> ToolEntry | None:
@@ -197,7 +210,6 @@ def discover_builtin_tools(config: dict | None = None):
         "nova.tools.terminal",
         "nova.tools.file_ops",
         "nova.tools.search_files",
-        "nova.tools.web",
         "nova.tools.http_client",
         "nova.tools.file_list",
         "nova.tools.git_tool",
@@ -212,6 +224,15 @@ def discover_builtin_tools(config: dict | None = None):
             importlib.import_module(mod_name)
         except Exception as e:
             logger.warning("Could not import tool module %s: %s", mod_name, e)
+
+    # Firecrawl web tools are gated on the SDK being installed and a key being
+    # configured — their schemas cost ~1.7k tokens per request.
+    try:
+        from nova.tools.web import register_web_tools
+
+        register_web_tools(config)
+    except Exception as e:
+        logger.warning("Could not register web tools: %s", e)
 
     # Delegation tool is gated on config flag and agent depth
     try:

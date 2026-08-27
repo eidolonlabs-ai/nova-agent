@@ -9,6 +9,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from nova.tools.path_safety import path_safety_error
 from nova.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def _should_exclude(path: Path) -> bool:
     return any(fnmatch.fnmatch(name, pattern) for pattern in excluded_files)
 
 
-def _list_files(args: dict[str, Any], **kwargs) -> str:
+def _list_files(args: dict[str, Any], **kwargs: Any) -> str:
     """List files matching a glob pattern."""
     pattern = args.get("pattern", "").strip()
     root = args.get("root", ".")
@@ -85,13 +86,21 @@ def _list_files(args: dict[str, Any], **kwargs) -> str:
         return f"Error: Root directory not found: {root}"
     if not root_path.is_dir():
         return f"Error: Root is not a directory: {root}"
+    if error := path_safety_error(root_path, **kwargs):
+        return error
 
     logger.info("Listing files: pattern=%s, root=%s, limit=%d", pattern, root, limit)
 
     try:
         matches: list[str] = []
+        entry_kwargs = dict(kwargs)
+        entry_kwargs["workspace"] = root_path
         for path in sorted(root_path.glob(pattern)):
-            if path.is_file() and not _should_exclude(path):
+            if (
+                path.is_file()
+                and not _should_exclude(path)
+                and path_safety_error(path, **entry_kwargs) is None
+            ):
                 if absolute:
                     matches.append(str(path.absolute()))
                 else:

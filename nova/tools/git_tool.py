@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from nova.tools.path_safety import path_safety_error
 from nova.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -122,6 +123,13 @@ GIT_SHOW_SCHEMA = {
 _MAX_OUTPUT_CHARS = 8000
 
 
+def _reject_option(value: Any, name: str) -> str | None:
+    """Reject values that could be interpreted as git options."""
+    if not isinstance(value, str) or value.startswith("-"):
+        return f"Error: Invalid {name}."
+    return None
+
+
 def _truncate_output(output: str, max_chars: int = _MAX_OUTPUT_CHARS) -> str:
     """Truncate output to fit within budget."""
     if len(output) <= max_chars:
@@ -138,8 +146,12 @@ def _truncate_output(output: str, max_chars: int = _MAX_OUTPUT_CHARS) -> str:
 def _run_git_command(repo: str, *args: str) -> tuple[int, str, str]:
     """Run a git command and return (returncode, stdout, stderr)."""
     repo_path = Path(repo).expanduser()
+    if _reject_option(repo, "repository"):
+        raise ValueError("Invalid repository")
     if not repo_path.exists() or not repo_path.is_dir():
         raise ValueError(f"Repository not found: {repo}")
+    if error := path_safety_error(repo_path):
+        raise ValueError(error)
 
     cmd = ["git"] + list(args)
     logger.info("Running git command: %s (in %s)", " ".join(cmd), repo_path)
@@ -157,7 +169,7 @@ def _run_git_command(repo: str, *args: str) -> tuple[int, str, str]:
         raise TimeoutError("Git command timed out after 30s") from e
 
 
-def _git_status(args: dict[str, Any], **kwargs) -> str:
+def _git_status(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for git_status."""
     repo = args.get("repo", ".")
 
@@ -172,7 +184,7 @@ def _git_status(args: dict[str, Any], **kwargs) -> str:
         return f"Error: {e}"
 
 
-def _git_log(args: dict[str, Any], **kwargs) -> str:
+def _git_log(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for git_log."""
     repo = args.get("repo", ".")
     limit = min(int(args.get("limit", 20)), 100)
@@ -188,7 +200,7 @@ def _git_log(args: dict[str, Any], **kwargs) -> str:
         return f"Error: {e}"
 
 
-def _git_diff(args: dict[str, Any], **kwargs) -> str:
+def _git_diff(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for git_diff."""
     repo = args.get("repo", ".")
     staged = bool(args.get("staged", False))
@@ -199,7 +211,11 @@ def _git_diff(args: dict[str, Any], **kwargs) -> str:
         if staged:
             cmd.append("--cached")
         if file_path:
-            cmd.append(file_path)
+            if error := _reject_option(file_path, "file_path"):
+                return error
+            if error := path_safety_error(Path(repo) / file_path, **kwargs):
+                return error
+            cmd.extend(("--", file_path))
 
         returncode, stdout, stderr = _run_git_command(repo, *cmd)
         if returncode != 0:
@@ -211,16 +227,20 @@ def _git_diff(args: dict[str, Any], **kwargs) -> str:
         return f"Error: {e}"
 
 
-def _git_blame(args: dict[str, Any], **kwargs) -> str:
+def _git_blame(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for git_blame."""
     repo = args.get("repo", ".")
     file_path = args.get("file_path", "")
 
     if not file_path:
         return "Error: file_path is required."
+    if error := _reject_option(file_path, "file_path"):
+        return error
+    if error := path_safety_error(Path(repo) / file_path, **kwargs):
+        return error
 
     try:
-        returncode, stdout, stderr = _run_git_command(repo, "blame", file_path)
+        returncode, stdout, stderr = _run_git_command(repo, "blame", "--", file_path)
         if returncode != 0:
             return f"Error: {stderr.strip()}"
         return _truncate_output(stdout)
@@ -228,7 +248,7 @@ def _git_blame(args: dict[str, Any], **kwargs) -> str:
         return f"Error: {e}"
 
 
-def _git_show(args: dict[str, Any], **kwargs) -> str:
+def _git_show(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for git_show."""
     repo = args.get("repo", ".")
     rev = args.get("rev", "").strip()
@@ -236,6 +256,12 @@ def _git_show(args: dict[str, Any], **kwargs) -> str:
 
     if not rev:
         return "Error: rev is required."
+    if error := _reject_option(rev, "rev"):
+        return error
+    if file_path and (error := _reject_option(file_path, "file_path")):
+        return error
+    if file_path and (error := path_safety_error(Path(repo) / file_path, **kwargs)):
+        return error
 
     try:
         spec = f"{rev}:{file_path}" if file_path else rev

@@ -10,6 +10,7 @@ Nova-Agent's minimalist ethos.
 
 import fnmatch
 import logging
+import re
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any
@@ -47,6 +48,13 @@ _SENSITIVE_PATH_PATTERNS: tuple[str, ...] = (
     "*/.docker/config.json",
     "*/.kube/config",
     "*/.nova/credentials.json",
+    "*/.nova/config.yaml",
+    "*/.netrc",
+    "*/.git-credentials",
+    "*/.env",
+    "*/.env.*",
+    "*/.env.*/*",
+    "*/.npmrc",
 )
 
 # Commands that are always denied (fnmatch patterns)
@@ -199,9 +207,11 @@ class PermissionChecker:
 
     def _matches_denied_command(self, command: str) -> bool:
         """Check if a command matches any deny pattern."""
-        cmd_lower = command.lower().strip()
+        cmd_lower = re.sub(r"\s+", " ", command).strip().lower()
         for pattern in self.settings.denied_commands:
-            if fnmatch.fnmatch(cmd_lower, pattern.lower()):
+            normalized_pattern = re.sub(r"\s+", " ", pattern).strip().lower()
+            segments = [cmd_lower, *re.split(r"[;&|]+", cmd_lower)]
+            if any(fnmatch.fnmatch(segment.strip(), normalized_pattern) for segment in segments):
                 return True
         return False
 

@@ -11,12 +11,18 @@ import pytest
 from nova.config import DEFAULT_CONFIG, ConfigError, _deep_merge, _resolve_env_vars, load_config
 
 
-def test_default_config():
+def test_default_config(tmp_path, monkeypatch):
+    """Defaults must not depend on the developer's real ~/.nova/config.yaml."""
+    monkeypatch.setattr("nova.config.get_nova_home", lambda: tmp_path / ".nova")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+
     config = load_config()
     assert "llm" in config
     assert "agent" in config
     assert "budgets" in config
     assert config["web"]["firecrawl_api_key"] == ""
+    assert config["web"]["timeout_seconds"] == 30
     assert config["agent"]["max_iterations"] == 50
 
 

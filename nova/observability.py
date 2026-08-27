@@ -58,6 +58,10 @@ _SECRET_TEXT = re.compile(
     re.IGNORECASE,
 )
 _UNRESOLVED_ENV = re.compile(r"^\$\{?\w+\}?$")
+_RAW_SECRET_TEXT = re.compile(
+    r"(?<![A-Za-z0-9])(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{8,}|"
+    r"AKIA[0-9A-Z]{12,}|xox[baprs]-[A-Za-z0-9-]{8,})(?![A-Za-z0-9])"
+)
 
 
 def _redact_text(value: str) -> str:
@@ -70,7 +74,8 @@ def _redact_text(value: str) -> str:
             f"{quote}[REDACTED]{quote}"
         )
 
-    return _SECRET_TEXT.sub(replace, value)
+    value = _SECRET_TEXT.sub(replace, value)
+    return _RAW_SECRET_TEXT.sub("[REDACTED]", value)
 
 
 def redact_text(value: str) -> str:
@@ -80,6 +85,13 @@ def redact_text(value: str) -> str:
 
 def _normalize_key(key: str) -> str:
     return re.sub(r"[^a-z0-9]", "", key.lower())
+
+
+def _is_secret_key(key: str) -> bool:
+    normalized = _normalize_key(key)
+    return normalized in _SECRET_KEYS or normalized.endswith(
+        ("apikey", "apitoken", "authtoken", "secret", "password", "credential")
+    )
 
 
 def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
@@ -96,9 +108,7 @@ def redact(value: Any, *, limit: int = _MAX_PREVIEW) -> Any:
                     break
                 key_string = str(key)
                 result[key_string] = (
-                    "[REDACTED]"
-                    if _normalize_key(key_string) in _SECRET_KEYS
-                    else _redact(child, depth + 1)
+                    "[REDACTED]" if _is_secret_key(key_string) else _redact(child, depth + 1)
                 )
             return result
         if isinstance(item, (list, tuple, set)):

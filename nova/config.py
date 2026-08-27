@@ -17,7 +17,9 @@ DEFAULT_CONFIG = {
         "base_url": "https://openrouter.ai/api/v1",
     },
     "web": {
+        "enabled": True,
         "firecrawl_api_key": "",
+        "timeout_seconds": 30,
     },
     "agent": {
         "identity": (
@@ -196,6 +198,19 @@ def _validate_config(config: dict[str, Any]) -> None:
         or not 1 <= tasks["max_output_bytes"] <= 10_000_000
     ):
         raise ConfigError("tasks.max_output_bytes must be between 1 and 10000000")
+
+    web = config.get("web", {})
+    if not isinstance(web, dict):
+        raise ConfigError("Config section 'web' must be a mapping")
+    if not isinstance(web.get("enabled", True), bool):
+        raise ConfigError("web.enabled must be a boolean")
+    timeout_seconds = web.get("timeout_seconds", 30)
+    if (
+        isinstance(timeout_seconds, bool)
+        or not isinstance(timeout_seconds, int)
+        or not 1 <= timeout_seconds <= 300
+    ):
+        raise ConfigError("web.timeout_seconds must be an integer between 1 and 300")
 
 
 def _resolve_env_vars(value: Any) -> Any:

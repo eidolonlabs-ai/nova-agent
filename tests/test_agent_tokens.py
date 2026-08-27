@@ -1,5 +1,6 @@
 """Tests for agent token management and truncation."""
 
+import json
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -90,6 +91,31 @@ def test_estimate_messages_tokens_single_message(minimal_config, mock_session_st
     msg = {"role": "user", "content": "Hello, how are you?"}
     tokens = agent._estimate_messages_tokens_cached([msg])
     assert tokens > 0
+
+
+def test_estimate_messages_tokens_accounts_for_large_tool_call_arguments(
+    minimal_config, mock_session_store
+):
+    mock_client = MagicMock(spec=OpenAI)
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_client,
+        session_store=mock_session_store,
+    )
+    message = {
+        "role": "assistant",
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {
+                    "name": "write_file",
+                    "arguments": json.dumps({"content": "x" * 40000}),
+                },
+            }
+        ],
+    }
+    assert agent._estimate_messages_tokens_cached([message]) > 4000
 
 
 def test_truncate_to_token_budget_exact_fit(minimal_config, mock_session_store):

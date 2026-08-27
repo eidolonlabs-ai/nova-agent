@@ -6,6 +6,7 @@ Stores conversation sessions with message history, system prompts, and metadata.
 import atexit
 import json
 import logging
+import re
 import sqlite3
 import uuid
 from contextlib import contextmanager
@@ -31,6 +32,7 @@ class SessionStore:
         """Open a short-lived SQLite connection with production-safe defaults."""
         conn = sqlite3.connect(self.db_path, timeout=5.0)
         try:
+            conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA busy_timeout=5000")
             yield conn
             conn.commit()
@@ -81,6 +83,9 @@ class SessionStore:
                 CREATE INDEX IF NOT EXISTS idx_messages_session
                     ON messages(session_id, idx);
 
+                CREATE INDEX IF NOT EXISTS idx_sessions_updated_at
+                    ON sessions(updated_at);
+
                 CREATE TABLE IF NOT EXISTS session_fts (
                     session_id TEXT PRIMARY KEY,
                     title TEXT,
@@ -103,12 +108,12 @@ class SessionStore:
                     WHERE session_id = new.session_id;
                 END;
             """)
-            self._ensure_fts_trigram(conn)
             columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
             if "tool_call_id" not in columns:
                 conn.execute("ALTER TABLE messages ADD COLUMN tool_call_id TEXT")
             if "reasoning_content" not in columns:
                 conn.execute("ALTER TABLE messages ADD COLUMN reasoning_content TEXT")
+            self._ensure_fts_trigram(conn)
 
     def _ensure_fts_trigram(self, conn: sqlite3.Connection) -> None:
         """Create or migrate session_search to use the FTS5 trigram tokenizer.
@@ -119,19 +124,19 @@ class SessionStore:
         user_version 1 marks the migration as complete.
         """
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version >= 1:
+        if version >= 2:
             return
 
         conn.execute("DROP TABLE IF EXISTS session_search")
         conn.execute(
             "CREATE VIRTUAL TABLE session_search "
-            "USING fts5(session_id, title, content, tokenize='trigram')"
+            "USING fts5(session_id UNINDEXED, title, content, tokenize='trigram')"
         )
         conn.execute(
             "INSERT INTO session_search(session_id, title, content) "
             "SELECT session_id, title, content FROM session_fts"
         )
-        conn.execute("PRAGMA user_version = 1")
+        conn.execute("PRAGMA user_version = 2")
 
     def create_session(
         self,
@@ -143,6 +148,8 @@ class SessionStore:
         """Create a new session."""
         if session_id is None:
             session_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        if not session_id:
+            raise ValueError("session_id must be non-empty")
 
         now = datetime.now().isoformat()
         with self._connection() as conn:
@@ -169,6 +176,8 @@ class SessionStore:
         tool_call_id: str | None = None,
     ) -> int:
         """Add a message to a session. Returns the message index."""
+        if not session_id:
+            raise ValueError("session_id must be non-empty")
         now = datetime.now().isoformat()
         tool_calls_json = json.dumps(tool_calls) if tool_calls else None
 
@@ -236,7 +245,13 @@ class SessionStore:
                     "content": row[1],
                 }
                 if row[2]:
-                    msg["tool_calls"] = json.loads(row[2])
+                    try:
+                        tool_calls = json.loads(row[2])
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        logger.warning("Ignoring malformed tool_calls in session %s", session_id)
+                    else:
+                        if isinstance(tool_calls, list):
+                            msg["tool_calls"] = tool_calls
                 if row[3]:
                     msg["tool_call_id"] = row[3]
                 if row[4]:
@@ -276,6 +291,23 @@ class SessionStore:
             conn.execute(
                 "UPDATE sessions SET system_prompt = ?, updated_at = ? WHERE session_id = ?",
                 (system_prompt, datetime.now().isoformat(), session_id),
+            )
+
+    def update_title(self, session_id: str, title: str):
+        """Update a session title and its search indexes."""
+        now = datetime.now().isoformat()
+        with self._connection() as conn:
+            conn.execute(
+                "UPDATE sessions SET title = ?, updated_at = ? WHERE session_id = ?",
+                (title, now, session_id),
+            )
+            conn.execute(
+                "UPDATE session_fts SET title = ? WHERE session_id = ?",
+                (title, session_id),
+            )
+            conn.execute(
+                "UPDATE session_search SET title = ? WHERE session_id = ?",
+                (title, session_id),
             )
 
     def list_sessions(self, limit: int = 20) -> list[dict]:
@@ -336,11 +368,12 @@ class SessionStore:
 
     def search_sessions(self, query: str, limit: int = 10) -> list[dict]:
         """Search sessions using FTS5 trigram index."""
-        # Strip quotes to avoid unintended FTS5 phrase syntax; trigram handles
-        # substring and multi-term AND matching natively without special operators.
-        fts_query = query.replace('"', "").strip()
-        if not fts_query:
+        # Quote each whitespace-delimited token so user input cannot add FTS syntax.
+        tokens = re.findall(r"\S+", query.strip())
+        if not tokens:
             return []
+        # Quote each token so FTS operators and punctuation are data, not syntax.
+        fts_query = " ".join(f'"{token.replace(chr(34), chr(34) * 2)}"' for token in tokens)
         try:
             with self._connection() as conn:
                 cursor = conn.execute(

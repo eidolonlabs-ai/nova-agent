@@ -349,7 +349,7 @@ def _stream_response(self, payload, callback=None, reasoning_callback=None):
    - **Recommendation:** Add `glob_pattern` parameter; return list of matching files
 
 4. **Web search provider abstraction**
-   - ✅ Bing RSS was replaced with Firecrawl Search API v2; anonymous requests and optional API-key configuration are supported
+   - ✅ Bing RSS was replaced with the official Firecrawl Python SDK; web tools are opt-in and require an API key
    - **Residual:** provider selection and fallback are intentionally not exposed
 
 ### Important Gaps (Nice to Have)

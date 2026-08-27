@@ -17,6 +17,7 @@ import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
+from threading import Event
 from typing import Any
 
 from openai import OpenAI
@@ -133,6 +134,7 @@ def _run_subagent(
     model: str | None,
     timeout_seconds: int,
     context_mode: str,
+    cancel_event: Event | None = None,
 ) -> dict:
     """Core sub-agent execution logic (runs in worker thread)."""
     # Import here to avoid circular imports at module level
@@ -191,7 +193,8 @@ def _run_subagent(
             if prefill_messages:
                 subagent.messages = prefill_messages
 
-            # Run the task
+            if cancel_event is not None:
+                subagent._interrupt_check = cancel_event.is_set
             result = subagent.run(task, stream=False)
 
         elapsed = time.monotonic() - start_time
@@ -233,6 +236,12 @@ def _run_subagent(
             "error": str(e),
             "timeout": False,
         }
+    finally:
+        if subagent is not None:
+            try:
+                subagent.close()
+            except Exception:
+                logger.exception("%s failed to close", log_prefix)
 
 
 def _delegate_task(args: dict[str, Any], **kwargs) -> str:
@@ -253,10 +262,12 @@ def _delegate_task(args: dict[str, Any], **kwargs) -> str:
         "default_timeout_seconds",
         DEFAULT_TIMEOUT_SECONDS,
     )
-    timeout_seconds = min(
-        int(args.get("timeout_seconds", config_default_timeout)),
-        MAX_TIMEOUT_SECONDS,
-    )
+    try:
+        timeout_seconds = max(
+            1, min(int(args.get("timeout_seconds", config_default_timeout)), MAX_TIMEOUT_SECONDS)
+        )
+    except (TypeError, ValueError):
+        timeout_seconds = max(1, min(int(config_default_timeout), MAX_TIMEOUT_SECONDS))
 
     # Validate context_mode
     if context_mode not in ("isolated", "fork"):
@@ -276,8 +287,16 @@ def _delegate_task(args: dict[str, Any], **kwargs) -> str:
             }
         )
 
+    # Older programmatic callers may omit the flag; an explicit false value
+    # must still disable a dispatch that was already registered.
+    if agent.config.get("delegation", {}).get("enabled", True) is False:
+        return json.dumps({"success": False, "error": "Delegation is disabled."})
+
     # Run sub-agent in worker thread with hard timeout
-    with ThreadPoolExecutor(max_workers=1) as executor:
+    executor_context = ThreadPoolExecutor(max_workers=1)
+    executor = executor_context.__enter__()
+    cancel_event = Event()
+    try:
         future = executor.submit(
             _run_subagent,
             task=task,
@@ -286,6 +305,7 @@ def _delegate_task(args: dict[str, Any], **kwargs) -> str:
             model=model,
             timeout_seconds=timeout_seconds,
             context_mode=context_mode,
+            cancel_event=cancel_event,
         )
         try:
             result = future.result(timeout=timeout_seconds)
@@ -294,6 +314,7 @@ def _delegate_task(args: dict[str, Any], **kwargs) -> str:
             if usage and getattr(agent, "cost_tracker", None):
                 agent.cost_tracker.add_usage(**usage)
         except FuturesTimeoutError:
+            cancel_event.set()
             logger.warning("Sub-agent '%s' timed out after %ds", label, timeout_seconds)
             result = {
                 "success": False,
@@ -304,6 +325,10 @@ def _delegate_task(args: dict[str, Any], **kwargs) -> str:
                 "error": f"Sub-agent timed out after {timeout_seconds}s.",
                 "timeout": True,
             }
+    finally:
+        # A timed-out child may be cooperative, but never make the caller wait
+        # for it. Its finally block still closes the child when it exits.
+        executor.shutdown(wait=False, cancel_futures=True)
 
     return json.dumps(result, indent=2)
 

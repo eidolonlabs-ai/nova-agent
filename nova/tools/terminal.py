@@ -7,8 +7,11 @@ Integrates with the permission system for command deny checking.
 import logging
 import os
 import subprocess
+import tempfile
 from typing import Any
 
+from nova.tasks import sanitize_environment
+from nova.tools.path_safety import path_safety_error
 from nova.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -77,7 +80,7 @@ def _is_destructive(command: str) -> bool:
     return any(pattern in cmd_lower for pattern in _DESTRUCTIVE_PATTERNS)
 
 
-def execute_terminal(args: dict[str, Any], **kwargs) -> str:
+def execute_terminal(args: dict[str, Any], **kwargs: Any) -> str:
     """Execute a terminal command."""
     command = args.get("command", "")
     timeout = args.get("timeout", 60)
@@ -103,6 +106,8 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
             return f"Error: Working directory not found: {workdir}"
         if not wd.is_dir():
             return f"Error: Working directory is not a directory: {workdir}"
+        if error := path_safety_error(wd, **kwargs):
+            return error
         workdir = str(wd)
 
     # Permission check — denied commands
@@ -121,32 +126,30 @@ def execute_terminal(args: dict[str, Any], **kwargs) -> str:
     logger.info("Executing%s: %s", destructive_flag, command[:200])
 
     try:
-        safe_env = {
-            key: value
-            for key, value in os.environ.items()
-            if not any(secret in key.upper() for secret in ("KEY", "TOKEN", "SECRET", "PASSWORD"))
-        }
-        result = subprocess.run(
-            command,
-            shell=True,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            cwd=workdir,
-            env=safe_env,
-        )
+        with tempfile.TemporaryFile() as output_file:
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                stdout=output_file,
+                stderr=subprocess.STDOUT,
+                cwd=workdir,
+                env=sanitize_environment(),
+                start_new_session=True,
+            )
+            try:
+                process.wait(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(os.getpgid(process.pid), 9)
+                except OSError:
+                    process.kill()
+                process.wait()
+                return f"Error: Command timed out after {timeout}s."
+            output_file.seek(0)
+            raw = output_file.read(_MAX_OUTPUT_CHARS * 4)
+        output = raw.decode("utf-8", errors="replace")
 
-        output_parts = []
-        if result.stdout:
-            output_parts.append(_truncate_output(result.stdout))
-        if result.stderr:
-            output_parts.append(f"stderr:\n{_truncate_output(result.stderr)}")
-
-        output = "\n".join(output_parts) if output_parts else "(no output)"
-        return f"exit code: {result.returncode}\n{output}"
-
-    except subprocess.TimeoutExpired:
-        return f"Error: Command timed out after {timeout}s."
+        return f"exit code: {process.returncode}\n{_truncate_output(output) if output else '(no output)'}"
     except Exception as e:
         return f"Error: {e}"
 

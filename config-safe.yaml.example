@@ -13,9 +13,10 @@ llm:
   model: "qwen/qwen3.6-flash"
   base_url: "https://openrouter.ai/api/v1"  # any OpenAI-compatible endpoint
 
-# Anonymous Firecrawl search is available without credentials. Keep telemetry
-# disabled in this safe profile.
+# Web tools are disabled in this profile: they send URLs and (for web_parse)
+# local file contents to a third-party API. Keep telemetry disabled too.
 web:
+  enabled: false
   firecrawl_api_key: ""
 observability:
   enabled: false

@@ -12,6 +12,7 @@ llm:
   model: "qwen/qwen3.6-flash"
   base_url: "https://openrouter.ai/api/v1"  # any OpenAI-compatible endpoint
 
-# Optional Firecrawl web search key. Anonymous requests are supported.
+# Firecrawl web tools (search/scrape/crawl/extract). Needs an API key and
+# pip install 'nova-agent[web]'; omit this section to leave them off.
 # web:
 #   firecrawl_api_key: "${FIRECRAWL_API_KEY}"

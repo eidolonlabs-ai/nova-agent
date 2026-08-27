@@ -6,13 +6,12 @@ the workspace.
 
 from __future__ import annotations
 
-import contextlib
 import logging
 import re
-import tempfile
 from pathlib import Path
 from typing import Any
 
+from nova.tools.path_safety import path_safety_error
 from nova.tools.registry import registry
 
 logger = logging.getLogger(__name__)
@@ -96,38 +95,10 @@ _BLOCKED_PREFIXES: tuple[str, ...] = (
 
 def _is_path_safe(path: Path) -> str | None:
     """Check if a search path is safe to access. Returns error message or None if safe."""
-    try:
-        resolved = path.resolve()
-    except (OSError, ValueError):
-        return f"Error: Cannot resolve path: {path}"
-
-    path_str = str(resolved)
-
-    if path_str in _BLOCKED_PATHS:
-        return f"Error: Access denied to protected path: {path}"
-
-    for prefix in _BLOCKED_PREFIXES:
-        if path_str.startswith(prefix):
-            return f"Error: Access denied to protected path: {path}"
-
-    # Only allow paths within known safe workspaces (home, /tmp, cwd, temp)
-    workspace_dirs: list[Path] = [
-        Path.home().resolve(),
-        Path("/tmp").resolve(),
-        Path(tempfile.gettempdir()).resolve(),
-    ]
-    with contextlib.suppress(OSError):
-        workspace_dirs.append(Path.cwd().resolve())
-
-    for ws in workspace_dirs:
-        if path_str.startswith(str(ws)):
-            return None
-
-    logger.debug("Search path resolved outside known workspaces: %s", path_str)
-    return f"Error: Access denied to path outside workspace: {path}"
+    return path_safety_error(path)
 
 
-def _search_files(args: dict[str, Any], **kwargs) -> str:
+def _search_files(args: dict[str, Any], **kwargs: Any) -> str:
     """Search for a pattern across files."""
     pattern = args.get("pattern", "")
     search_path = Path(args.get("path", ".")).expanduser()
@@ -142,10 +113,11 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
         return f"Error: Path not found: {search_path}"
 
     # Security check — prevent searching arbitrary system paths
-    if error := _is_path_safe(search_path):
+    if error := path_safety_error(search_path, **kwargs):
         return error
 
     # Compile regex if needed
+    regex: re.Pattern[str] | None = None
     if mode == "regex":
         try:
             regex = re.compile(pattern)
@@ -160,7 +132,7 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
         if done:
             break
 
-        if not file_path.is_file():
+        if not file_path.is_file() or path_safety_error(file_path, **kwargs):
             continue
 
         # Skip hidden/binary dirs
@@ -176,7 +148,7 @@ def _search_files(args: dict[str, Any], **kwargs) -> str:
 
         for line_num, line in enumerate(content.split("\n"), 1):
             if mode == "regex":
-                if regex.search(line):
+                if regex is not None and regex.search(line):
                     preview = line.strip()[:_MAX_PREVIEW_CHARS]
                     matches.append((str(file_path), line_num, preview))
             else:

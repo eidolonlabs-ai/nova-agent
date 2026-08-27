@@ -477,9 +477,7 @@ class NovaTUI:
                         _show_help()
                         continue
                     if cmd_def.name == "clear":
-                        import subprocess
-
-                        subprocess.run(["clear"], check=False)
+                        _cprint("\033[2J\033[H")
                         continue
                     # All other slash commands → agent (with user echo)
 
@@ -491,6 +489,8 @@ class NovaTUI:
                 self._invalidate()
                 try:
                     on_input(text)
+                except Exception as exc:
+                    _cprint(f"{_DIM}Agent error: {exc}{_RST}")
                 finally:
                     self._agent_running.clear()
                     self._interrupt_requested.clear()

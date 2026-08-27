@@ -109,6 +109,23 @@ def test_redact_preserves_ordinary_token_auth_and_access_text():
     assert redact_text(text) == text
 
 
+def test_redact_covers_environment_key_names_and_raw_token_shapes():
+    value = {
+        "LLM_API_KEY": "sk-or-v1-secret-value",
+        "OPENROUTER_API_KEY": "sk-or-v1-another-secret",
+        "FIRECRAWL_API_KEY": "fc-secret-value",
+        "github": "ghp_1234567890abcdefgh",
+        "aws": "AKIA1234567890ABCDEF",
+    }
+    result = redact(value)
+    assert all(result[key] == "[REDACTED]" for key in value)
+
+
+def test_redact_covers_raw_tokens_in_unstructured_text():
+    result = redact_text("sk-or-v1-secret-value ghp_1234567890abcdefgh AKIA1234567890ABCDEF")
+    assert result == "[REDACTED] [REDACTED] [REDACTED]"
+
+
 def test_adapter_emits_run_llm_tool_policy_and_verification_observations():
     client = MagicMock()
     root = MagicMock()

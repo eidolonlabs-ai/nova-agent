@@ -88,8 +88,8 @@ class HookRegistry:
             try:
                 result = callback(**kwargs)
                 results.append(result)
-            except Exception as e:
-                logger.error("Hook error on event '%s': %s", event, e)
+            except Exception:
+                logger.exception("Hook error on event '%s'", event)
         return results
 
     def has_listeners(self, event: str) -> bool:

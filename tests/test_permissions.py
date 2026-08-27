@@ -175,6 +175,23 @@ def test_custom_denied_commands():
     assert result.allowed is False
 
 
+def test_denied_command_normalizes_whitespace_and_shell_segments():
+    checker = PermissionChecker(PermissionSettings(mode=PermissionMode.AUTO))
+    result = checker.evaluate("terminal", command="printf x;  rm\t-rf   /")
+    assert result.allowed is False
+
+
+def test_sensitive_credential_paths_blocked():
+    checker = PermissionChecker(PermissionSettings(mode=PermissionMode.AUTO))
+    for path in (
+        "/tmp/.env.production",
+        "/tmp/.netrc",
+        "/tmp/.git-credentials",
+        "/tmp/.nova/config.yaml",
+    ):
+        assert checker.evaluate("read_file", file_path=path).allowed is False
+
+
 # ── Path Rules ──────────────────────────────────────────────────────────────
 
 

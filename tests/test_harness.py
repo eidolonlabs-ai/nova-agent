@@ -102,14 +102,23 @@ def test_inconclusive_interruption_is_not_completed():
     assert derive_run_status(trace.run, has_output=False) == "inconclusive"
 
 
-def test_later_verified_recovery_supersedes_earlier_failed_attempt():
+def test_later_verified_recovery_does_not_clear_failure():
     trace = HarnessTrace("run-4", "recover")
     first = trace.start_tool("call-1", "write_file", {})
     trace.finish_tool(first, outcome="failed", verification=VerificationResult("failed"))
     second = trace.start_tool("call-2", "write_file", {})
     trace.finish_tool(second, outcome="completed", verification=VerificationResult("verified"))
 
-    assert derive_run_status(trace.run) == "verified"
+    assert derive_run_status(trace.run) == "failed"
+
+
+def test_finish_does_not_clear_failed_status():
+    trace = HarnessTrace("run-sticky", "retry")
+    trace.finish(status="failed", output="failed")
+
+    result = trace.finish(status="verified", output="recovered")
+
+    assert result.status == "failed"
 
 
 def test_inconclusive_after_failed_verification_does_not_clear_failure():

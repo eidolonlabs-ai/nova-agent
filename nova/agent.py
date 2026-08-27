@@ -10,6 +10,7 @@ import contextvars
 import copy
 import json
 import logging
+import sqlite3
 import time
 import uuid
 from collections.abc import Callable
@@ -39,12 +40,10 @@ from nova.prompt import build_system_prompt
 from nova.retry import retry_with_backoff
 from nova.session import SessionStore
 from nova.tokens import (
-    estimate_messages_tokens,
     estimate_tokens,
-    estimate_tool_tokens,
     estimate_total_request_tokens,
 )
-from nova.tools.registry import _READ_ONLY_TOOLS, discover_builtin_tools, registry
+from nova.tools.registry import discover_builtin_tools, registry
 from nova.wiki_memory import WikiMemory
 
 logger = logging.getLogger(__name__)
@@ -523,7 +522,7 @@ class NovaAgent:
                 permission = self.permission_checker.evaluate(
                     name,
                     is_read_only=entry.is_read_only,
-                    file_path=args.get("path"),
+                    file_path=self._permission_path(args),
                     command=args.get("command"),
                 )
                 collector.policy(
@@ -591,8 +590,8 @@ class NovaAgent:
             return f"Error: Unknown tool: {name}"
         is_read_only = entry.is_read_only if entry else False
 
-        # Extract file_path and command for permission evaluation
-        file_path = arguments.get("path")
+        # Resolve the path-bearing argument used by this tool before policy.
+        file_path = self._permission_path(arguments)
         command = arguments.get("command")
 
         perm_result = self.permission_checker.evaluate(
@@ -635,8 +634,10 @@ class NovaAgent:
                     config=self.config,
                     wiki=self.wiki,
                     session_store=self.session_store,
+                    workspace=self.workspace,
                     agent=self,
                 )
+                hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=arguments, result=result)
             except Exception as exc:
                 result = f"Error: Tool '{name}' failed: {type(exc).__name__}"
                 self.observability.tool(
@@ -646,9 +647,6 @@ class NovaAgent:
                     name, status="failed", error_type=type(exc).__name__
                 )
                 return result
-
-            # Fire post_tool_call hook
-            hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=arguments, result=result)
 
             # Retry on transient errors (timeout, network, rate-limit)
             is_transient = (
@@ -710,6 +708,15 @@ class NovaAgent:
                 arguments["repo"] = str(self.workspace / repo)
         return arguments
 
+    @staticmethod
+    def _permission_path(arguments: dict[str, Any]) -> str | None:
+        """Return the path-like argument that must go through policy checks."""
+        for key in ("path", "file_path", "root", "repo", "workdir"):
+            value = arguments.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return None
+
     def _execute_tool_calls_parallel(
         self,
         tool_calls: list[dict],
@@ -726,7 +733,8 @@ class NovaAgent:
 
         for idx, tc in enumerate(tool_calls):
             fn_name = tc.get("function", {}).get("name", "")
-            if fn_name in _READ_ONLY_TOOLS:
+            entry = registry.get_tool(fn_name)
+            if entry is not None and entry.is_read_only:
                 read_only_calls.append((idx, tc))
             else:
                 write_calls.append((idx, tc))
@@ -770,7 +778,12 @@ class NovaAgent:
                 fn_name = tc.get("function", {}).get("name", "")
                 if fn_name:
                     tool_cb(fn_name)
-            results[idx] = self._execute_tool_call(tc)
+            try:
+                results[idx] = self._execute_tool_call(tc)
+            except Exception as exc:
+                fn_name = tc.get("function", {}).get("name", "")
+                logger.exception("Sequential tool call '%s' failed", fn_name)
+                results[idx] = f"Error: Tool '{fn_name}' failed: {type(exc).__name__}"
             self._report_tool_result(tc, results[idx] or "")
 
         return [r if r is not None else "Error: Unexpected None result" for r in results]
@@ -804,17 +817,15 @@ class NovaAgent:
         total = 0
         for msg in messages:
             content = msg.get("content", "")
-            if isinstance(content, str):
-                key = hash(content)
-            else:
-                key = hash(json.dumps(content, ensure_ascii=False, sort_keys=True))
+            serialized = json.dumps(msg, ensure_ascii=False, sort_keys=True, default=str)
+            key = hash(serialized)
 
             if key not in self._token_cache:
                 if len(self._token_cache) >= 2048:
                     # Evict a random entry to stay bounded
                     self._token_cache.pop(next(iter(self._token_cache)))
                 if isinstance(content, str):
-                    self._token_cache[key] = estimate_tokens(content)
+                    subtotal = estimate_tokens(content)
                 elif isinstance(content, list):
                     subtotal = 0
                     for part in content:
@@ -822,9 +833,14 @@ class NovaAgent:
                             subtotal += estimate_tokens(part.get("text", "") or "")
                         elif isinstance(part, str):
                             subtotal += estimate_tokens(part)
-                    self._token_cache[key] = subtotal
                 else:
-                    self._token_cache[key] = 0
+                    subtotal = 0
+                tool_calls = msg.get("tool_calls")
+                if tool_calls:
+                    subtotal += estimate_tokens(
+                        json.dumps(tool_calls, ensure_ascii=False, default=str)
+                    )
+                self._token_cache[key] = subtotal
             total += self._token_cache[key] + 4  # +4 for message framing
 
         return total
@@ -896,7 +912,7 @@ class NovaAgent:
         """
         # Add user message
         self.messages.append({"role": "user", "content": user_message})
-        self.session_store.add_message(self.session_id or "", "user", user_message)
+        self._persist_message(self.session_id or "", "user", user_message)
 
         # Build messages for API
         self.messages = _normalize_message_history(self.messages)
@@ -921,7 +937,7 @@ class NovaAgent:
             api_messages.extend(self.messages)
 
         # Get tool definitions
-        tools = registry.get_definitions()
+        tools = self._get_tool_definitions()
 
         # Main tool-calling loop
         max_iterations = self.config["agent"]["max_iterations"]
@@ -937,10 +953,10 @@ class NovaAgent:
             iteration += 1
 
             # Check context window — apply microcompact if approaching budget
-            total_tokens = (
-                self._estimate_messages_tokens_cached(api_messages)
-                + estimate_tokens(self._system_prompt or "")
-                + (estimate_tool_tokens(tools) if tools else 0)
+            total_tokens = estimate_total_request_tokens(
+                api_messages,
+                system_prompt="",
+                tools=tools,
             )
             compression_cfg = self.config.get("compression", {})
             microcompact_cfg = self.config.get("microcompact", {})
@@ -949,13 +965,20 @@ class NovaAgent:
                 context_window = get_model_context_window(
                     self.config["llm"]["model"],
                 )
-                threshold = int(context_window * compression_cfg.get("threshold_percent", 0.40))
+                reserve_tokens = max(0, int(compression_cfg.get("reserve_tokens", 0)))
+                threshold = max(
+                    1,
+                    int(context_window * compression_cfg.get("threshold_percent", 0.40))
+                    - reserve_tokens,
+                )
 
                 # Tier 1: Microcompact — strip old tool content (cheap, no LLM call)
                 if microcompact_cfg.get("enabled", True) and total_tokens >= threshold:
                     keep_recent = microcompact_cfg.get("keep_recent", 6)
                     compacted = microcompact_messages(api_messages, keep_recent=keep_recent)
-                    compacted_tokens = estimate_messages_tokens(compacted)
+                    compacted_tokens = estimate_total_request_tokens(
+                        compacted, system_prompt="", tools=tools
+                    )
                     savings = total_tokens - compacted_tokens
                     if savings > 0:
                         logger.info(
@@ -989,9 +1012,7 @@ class NovaAgent:
                         # Sync self.messages with compressed state.
                         self.messages = self._conversation_messages_from_api(compressed)
                         total_tokens = estimate_total_request_tokens(
-                            api_messages,
-                            system_prompt=self._system_prompt or "",
-                            tools=tools,
+                            api_messages, system_prompt="", tools=tools
                         )
                         t2_savings = tokens_before_t2 - total_tokens
                         logger.info(
@@ -1046,10 +1067,10 @@ class NovaAgent:
                 assistant_msg["reasoning_content"] = reasoning_content
 
             self.messages.append(assistant_msg)
-            self.session_store.add_message(
+            self._persist_message(
                 self.session_id or "",
                 "assistant",
-                content or "" if not tool_calls else "",
+                content or "",
                 tool_calls=tool_calls,
                 reasoning_content=reasoning_content,
             )
@@ -1085,7 +1106,7 @@ class NovaAgent:
                         "tool_call_id": call_id,
                     }
                     self.messages.append(interrupted_result)
-                    self.session_store.add_message(
+                    self._persist_message(
                         self.session_id or "",
                         "tool",
                         interrupted_result["content"],
@@ -1112,7 +1133,7 @@ class NovaAgent:
                     "tool_call_id": call_id,
                 }
                 self.messages.append(tool_result_msg)
-                self.session_store.add_message(
+                self._persist_message(
                     self.session_id or "",
                     "tool",
                     result,
@@ -1121,3 +1142,35 @@ class NovaAgent:
                 api_messages.append(tool_result_msg)
 
         return f"[Max iterations ({max_iterations}) reached]"
+
+    def _persist_message(self, session_id: str, role: str, content: str, **kwargs: Any) -> None:
+        """Persist a message without making a transient DB outage kill the turn."""
+        try:
+            self.session_store.add_message(session_id, role, content, **kwargs)
+        except sqlite3.Error as exc:
+            logger.warning("Could not persist %s message: %s", role, type(exc).__name__)
+
+    def _get_tool_definitions(self) -> list[dict[str, Any]]:
+        """Return the tools available to this agent instance.
+
+        The registry is process-global for backwards compatibility, so
+        per-agent configuration gates must be applied when building the
+        provider request rather than only during import-time registration.
+        """
+        definitions = registry.get_definitions(config=self.config)
+        web_config = self.config.get("web", {})
+        web_enabled = isinstance(web_config, dict) and web_config.get("enabled", True)
+        has_web_key = isinstance(web_config, dict) and bool(web_config.get("firecrawl_api_key"))
+        delegation = self.config.get("delegation", {})
+        delegation_enabled = isinstance(delegation, dict) and delegation.get("enabled", False)
+        depth = self.config.get("_subagent_depth", 0)
+        max_depth = delegation.get("max_spawn_depth", 2) if isinstance(delegation, dict) else 2
+        available: list[dict[str, Any]] = []
+        for definition in definitions:
+            name = definition.get("function", {}).get("name")
+            if name and name.startswith("web_") and (not web_enabled or not has_web_key):
+                continue
+            if name == "delegate_task" and (not delegation_enabled or depth >= max_depth):
+                continue
+            available.append(definition)
+        return available

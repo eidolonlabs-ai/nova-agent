@@ -141,6 +141,17 @@ class TestListFiles:
         assert "Error:" in result
         assert "not a directory" in result.lower()
 
+    def test_list_rejects_system_root(self):
+        result = _list_files({"pattern": "*", "root": "/"})
+        assert "denied" in result.lower()
+
+    def test_list_rejects_symlink_escape(self, temp_project, tmp_path):
+        outside = tmp_path / "outside.txt"
+        outside.write_text("secret")
+        (temp_project / "escape.txt").symlink_to(outside)
+        result = _list_files({"pattern": "*", "root": str(temp_project)})
+        assert "escape.txt" not in result
+
     def test_list_large_result_truncation(self, temp_project):
         """Test that large results show truncation."""
         # Create many files

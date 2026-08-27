@@ -74,12 +74,14 @@ Every tool call is evaluated through these checks, in order:
 Tools are classified as read-only or mutating:
 
 **Read-only** (never need confirmation):
-- `read_file`, `search_files`, `web_search`
+- `read_file`, `search_files`, `list_files`
+- `web_search`, `web_scrape`, `web_map`, `web_crawl`, `web_extract`, `web_dev_search`, `web_usage`
 - `skills_list`, `skill_view`
 
 **Mutating** (require confirmation in `ask` mode):
 - `write_file`, `patch_file`, `terminal`
 - `skill_manage`, `wiki`, `delegate_task`
+- `web_parse` — uploads local file contents to a third-party API
 
 ## Tool-Level Permission Checking
 

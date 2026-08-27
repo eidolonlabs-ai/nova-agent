@@ -46,7 +46,7 @@ All contributions must pass:
 - **Linting**: `ruff check .` — no errors
 - **Formatting**: `ruff format --check .` — no diffs
 - **Type checking**: `mypy nova/` — 0 errors in all files
-- **Tests**: `pytest` — all tests must pass (currently 941), coverage ≥ 70%
+- **Tests**: `pytest` — all tests must pass, coverage ≥ 70%
 
 Run the full CI check before submitting:
 
@@ -59,7 +59,7 @@ ruff check . && ruff format --check . && mypy nova/ && pytest
 ### Writing Tests
 
 - New features should include tests
-- Use dependency injection for isolated testing — pass mock `http_client`, `session_store`, and `wiki_memory_store` to `NovaAgent`
+- Use dependency injection for isolated testing — pass mock `openai_client`, `session_store`, and `wiki_memory_store` to `NovaAgent`
 - Place tests in `tests/` with the naming convention `test_<module>.py`
 
 ### Test Structure
@@ -72,7 +72,7 @@ def test_something():
 
     agent = NovaAgent(
         config=config,
-        http_client=mock_client,
+        openai_client=mock_client,
         session_store=session_store,
     )
 
@@ -119,7 +119,7 @@ Use conventional commit format:
 ## Architecture Guidelines
 
 - **Explicit token budgets** at every layer
-- **Dependency injection** for testability (http_client, session_store, wiki_memory_store)
+- **Dependency injection** for testability (openai_client, session_store, wiki_memory_store)
 - **Two-tier tool descriptions** — compact list in prompt + JSON schemas to API
 - **Head/tail truncation** (70/20 ratio) for long content
 - **Prompt mode gating** — full/minimal/none for different agent types

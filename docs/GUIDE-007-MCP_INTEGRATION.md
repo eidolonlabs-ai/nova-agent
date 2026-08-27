@@ -1,6 +1,6 @@
 # MCP Integration
 
-**Status:** ✅ Active  
+**Status:** 📋 Planned
 **Last Updated:** May 2026  
 **Type:** GUIDE (Feature Reference)
 

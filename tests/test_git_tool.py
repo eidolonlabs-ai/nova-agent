@@ -42,6 +42,10 @@ class TestGitStatus:
         result = _git_status({"repo": "."})
         assert "Error:" in result
 
+    def test_git_status_rejects_protected_repository(self):
+        result = _git_status({"repo": "/etc"})
+        assert "Access denied" in result
+
 
 class TestGitLog:
     """Tests for git_log tool."""
@@ -84,6 +88,13 @@ class TestGitDiff:
         result = _git_diff({"repo": "."})
         assert "No differences" in result
 
+    def test_git_diff_rejects_output_option_without_modifying_file(self, tmp_path):
+        target = tmp_path / "target.txt"
+        target.write_text("keep")
+        result = _git_diff({"repo": ".", "file_path": f"--output={target}"})
+        assert "invalid file_path" in result.lower()
+        assert target.read_text() == "keep"
+
 
 class TestGitBlame:
     """Tests for git_blame tool."""
@@ -122,6 +133,10 @@ class TestGitShow:
         """Test show without rev."""
         result = _git_show({"repo": ".", "rev": ""})
         assert "Error:" in result
+
+    def test_git_show_rejects_path_outside_repository(self, tmp_path):
+        result = _git_show({"repo": str(tmp_path), "rev": "HEAD", "file_path": "/etc/passwd"})
+        assert "Access denied" in result
 
 
 class TestGitIntegration:

@@ -27,11 +27,11 @@ Made Nova safe to run and extensible for real-world use.
 - ✅ Hook/callback system (pre/post tool call, LLM call, session lifecycle)
 - ✅ Cost tracking (per-model pricing, dollar estimation)
 - ✅ Background task system (fire-and-forget shell execution)
-- ✅ MCP integration (stdio, HTTP, SSE servers)
+- 📋 MCP integration (stdio, HTTP, SSE servers; client implementation not yet wired into runtime)
 - ✅ Sub-agent delegation (worker thread with own budget and timeout)
 - ✅ Automatic retry (exponential backoff + jitter)
 - ✅ Prompt mode gating (full for main agent, minimal for sub-agents)
-- ✅ Web search via Firecrawl Search API v2 (optional API key)
+- ✅ Firecrawl web tools via the official Python SDK (search, scrape, map, crawl, extract, parse)
 - ✅ Obsidian-compatible wiki memory (markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance)
 - ✅ ACP stdio server (session lifecycle, workspace isolation, tool-call progress)
 

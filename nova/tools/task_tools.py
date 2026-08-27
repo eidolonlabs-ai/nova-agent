@@ -108,14 +108,16 @@ def _task_create(args: dict[str, Any], **kwargs) -> str:
     command = args.get("command", "")
     description = args.get("description", "")
 
-    if not command:
+    if not isinstance(command, str) or not command.strip():
         return json.dumps({"success": False, "error": "Command is required."})
+    if not isinstance(description, str):
+        description = ""
 
     mgr = get_task_manager()
     task_cfg = kwargs.get("config", {}).get("tasks", {})
     max_concurrent = task_cfg.get("max_concurrent", 4)
     running = sum(1 for task in mgr.list_tasks(status="running"))
-    if isinstance(max_concurrent, int) and running >= max_concurrent:
+    if isinstance(max_concurrent, int) and max_concurrent > 0 and running >= max_concurrent:
         return json.dumps(
             {"success": False, "error": f"Maximum of {max_concurrent} concurrent tasks reached."}
         )
@@ -133,7 +135,7 @@ def _task_create(args: dict[str, Any], **kwargs) -> str:
 def _task_status(args: dict[str, Any], **kwargs) -> str:
     """Check the status of a background task."""
     task_id = args.get("task_id", "")
-    if not task_id:
+    if not isinstance(task_id, str) or not task_id.strip():
         return json.dumps({"success": False, "error": "task_id is required."})
 
     mgr = get_task_manager()
@@ -162,7 +164,7 @@ def _task_status(args: dict[str, Any], **kwargs) -> str:
 def _task_output(args: dict[str, Any], **kwargs) -> str:
     """Read the output of a background task."""
     task_id = args.get("task_id", "")
-    if not task_id:
+    if not isinstance(task_id, str) or not task_id.strip():
         return json.dumps({"success": False, "error": "task_id is required."})
 
     raw_max_bytes = args.get("max_bytes", 12000)
@@ -178,7 +180,7 @@ def _task_output(args: dict[str, Any], **kwargs) -> str:
 def _task_stop(args: dict[str, Any], **kwargs) -> str:
     """Stop a running background task."""
     task_id = args.get("task_id", "")
-    if not task_id:
+    if not isinstance(task_id, str) or not task_id.strip():
         return json.dumps({"success": False, "error": "task_id is required."})
 
     mgr = get_task_manager()

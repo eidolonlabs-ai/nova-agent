@@ -5,10 +5,12 @@ vault directory. Supports wikilinks ([[title]]) and #tags natively.
 """
 
 import contextlib
+import functools
 import logging
 import os
 import re
 import tempfile
+import threading
 from collections import deque
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -20,15 +22,25 @@ logger = logging.getLogger(__name__)
 _INVALID_CHARS = re.compile(r'[\\:*?"<>|]')
 
 
+def _synchronized(method):
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._mutation_lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
+
+
 class WikiMemory:
     """File-based wiki memory backed by an Obsidian-compatible vault."""
 
     def __init__(self, vault_path: Path, max_prompt_notes: int = 10):
         self.vault_path = vault_path
         self.max_prompt_notes = max_prompt_notes
+        self._mutation_lock = threading.RLock()
         vault_path.mkdir(parents=True, exist_ok=True)
 
-    def _note_path(self, title: str) -> Path:
+    def _note_path(self, title: str, create_parent: bool = True) -> Path:
         """Convert a title (optionally with path prefix) to an absolute .md path.
 
         Rejects empty titles, dot-only titles, and titles that would escape
@@ -49,11 +61,12 @@ class WikiMemory:
             and path.resolve() != vault_resolved
         ):
             raise ValueError(f"Invalid note title (escapes vault): {title!r}")
-        path.parent.mkdir(parents=True, exist_ok=True)
+        if create_parent:
+            path.parent.mkdir(parents=True, exist_ok=True)
         return path
 
     def _parse_note(self, path: Path) -> dict:
-        return self._parse_note_text(path.read_text(encoding="utf-8"))
+        return self._parse_note_text(path.read_text(encoding="utf-8", errors="replace"))
 
     def _parse_note_text(self, text: str) -> dict:
         frontmatter: dict = {}
@@ -62,7 +75,8 @@ class WikiMemory:
             end = text.find("\n---\n", 4)
             if end != -1:
                 with contextlib.suppress(yaml.YAMLError):
-                    frontmatter = yaml.safe_load(text[4:end]) or {}
+                    loaded = yaml.safe_load(text[4:end])
+                    frontmatter = loaded if isinstance(loaded, dict) else {}
                 content = text[end + 5 :]
         return {"frontmatter": frontmatter, "content": content.lstrip("\n")}
 
@@ -82,6 +96,7 @@ class WikiMemory:
             os.unlink(tmp)
             raise
 
+    @_synchronized
     def write(self, title: str, content: str, tags: list[str] | None = None) -> dict:
         """Create or overwrite a note."""
         path = self._note_path(title)
@@ -98,6 +113,7 @@ class WikiMemory:
         self._write_atomic(path, self._format_note(frontmatter, content))
         return {"status": "written", "path": str(path.relative_to(self.vault_path))}
 
+    @_synchronized
     def append(self, title: str, content: str) -> dict:
         """Append content to an existing note, or create it if absent."""
         path = self._note_path(title)
@@ -109,6 +125,7 @@ class WikiMemory:
         self._write_atomic(path, self._format_note(parsed["frontmatter"], new_content))
         return {"status": "appended", "path": str(path.relative_to(self.vault_path))}
 
+    @_synchronized
     def patch(self, title: str, old_text: str, new_text: str, count: int = 0) -> dict:
         """Replace occurrences of old_text with new_text in a note's content.
 
@@ -136,6 +153,7 @@ class WikiMemory:
             "replacements": replacements,
         }
 
+    @_synchronized
     def vault_replace(self, old_text: str, new_text: str, count: int = 0) -> dict:
         """Replace old_text with new_text across every note in the vault.
 
@@ -147,7 +165,7 @@ class WikiMemory:
         for md_file in sorted(self.vault_path.rglob("*.md")):
             try:
                 parsed = self._parse_note(md_file)
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             original = parsed["content"]
             if old_text not in original:
@@ -164,6 +182,7 @@ class WikiMemory:
             total += n
         return {"patched_notes": patched, "total_replacements": total}
 
+    @_synchronized
     def add_tag(self, title: str, tag: str) -> dict:
         """Add a tag to a note's frontmatter. No-op if the tag already exists."""
         path = self._note_path(title)
@@ -179,6 +198,7 @@ class WikiMemory:
         self._write_atomic(path, self._format_note(parsed["frontmatter"], parsed["content"]))
         return {"status": "added", "tag": tag, "path": str(path.relative_to(self.vault_path))}
 
+    @_synchronized
     def remove_tag(self, title: str, tag: str) -> dict:
         """Remove a tag from a note's frontmatter. No-op if the tag is absent."""
         path = self._note_path(title)
@@ -193,6 +213,7 @@ class WikiMemory:
         self._write_atomic(path, self._format_note(parsed["frontmatter"], parsed["content"]))
         return {"status": "removed", "tag": tag, "path": str(path.relative_to(self.vault_path))}
 
+    @_synchronized
     def pin(self, title: str) -> dict:
         """Set inject:true on a note so its full content appears in every system prompt."""
         path = self._note_path(title)
@@ -206,9 +227,10 @@ class WikiMemory:
         self._write_atomic(path, self._format_note(parsed["frontmatter"], parsed["content"]))
         return {"status": "pinned", "path": str(path.relative_to(self.vault_path))}
 
+    @_synchronized
     def unpin(self, title: str) -> dict:
         """Remove inject:true from a note's frontmatter."""
-        path = self._note_path(title)
+        path = self._note_path(title, create_parent=False)
         if not path.exists():
             return {"status": "not_found", "error": f"Note not found: '{title}'"}
         parsed = self._parse_note(path)
@@ -221,7 +243,7 @@ class WikiMemory:
 
     def read(self, title: str) -> dict | None:
         """Return parsed note or None if not found."""
-        path = self._note_path(title)
+        path = self._note_path(title, create_parent=False)
         if not path.exists():
             return None
         return self._parse_note(path)
@@ -233,7 +255,7 @@ class WikiMemory:
         for md_file in sorted(self.vault_path.rglob("*.md")):
             try:
                 text = md_file.read_text(encoding="utf-8")
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             if query_lower not in text.lower():
                 continue
@@ -253,12 +275,12 @@ class WikiMemory:
         notes = []
         for md_file in sorted(
             self.vault_path.rglob("*.md"),
-            key=lambda f: f.stat().st_mtime,
+            key=lambda f: _safe_mtime(f),
             reverse=True,
         ):
             try:
                 parsed = self._parse_note(md_file)
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             note_tags = parsed["frontmatter"].get("tags") or []
             if tag and tag not in note_tags:
@@ -275,6 +297,7 @@ class WikiMemory:
             )
         return notes
 
+    @_synchronized
     def delete(self, title: str) -> bool:
         """Delete a note by title. Returns True if deleted."""
         path = self._note_path(title)
@@ -294,7 +317,7 @@ class WikiMemory:
         for md_file in self.vault_path.rglob("*.md"):
             try:
                 parsed = self._parse_note(md_file)
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             title = parsed["frontmatter"].get("title", md_file.stem)
             content = parsed["content"]
@@ -303,7 +326,7 @@ class WikiMemory:
             try:
                 modified = datetime.fromisoformat(modified_str)
             except (ValueError, TypeError):
-                modified = datetime.fromtimestamp(md_file.stat().st_mtime)
+                modified = datetime.fromtimestamp(_safe_mtime(md_file))
             notes_data.append(
                 {
                     "title": title,
@@ -396,7 +419,7 @@ class WikiMemory:
                 continue
             try:
                 parsed = self._parse_note(path)
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
 
             content = parsed["content"]
@@ -436,7 +459,7 @@ class WikiMemory:
         for md_file in sorted(self.vault_path.rglob("*.md")):
             try:
                 text = md_file.read_text(encoding="utf-8")
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             if not pattern.search(text):
                 continue
@@ -450,6 +473,7 @@ class WikiMemory:
             )
         return results
 
+    @_synchronized
     def rename(self, old_title: str, new_title: str) -> dict:
         """Rename a note and update all [[wikilinks]] that point to the old title.
 
@@ -478,7 +502,7 @@ class WikiMemory:
                 continue
             try:
                 text = md_file.read_text(encoding="utf-8")
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             if not pattern.search(text):
                 continue
@@ -502,19 +526,20 @@ class WikiMemory:
         for md_file in self.vault_path.rglob("*.md"):
             try:
                 parsed = self._parse_note(md_file)
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             for tag in parsed["frontmatter"].get("tags") or []:
                 tag_counts[tag] = tag_counts.get(tag, 0) + 1
         return dict(sorted(tag_counts.items(), key=lambda x: (-x[1], x[0])))
 
+    @_synchronized
     def rename_tag(self, old_tag: str, new_tag: str) -> dict:
         """Rename (or delete when new_tag is empty) a tag globally across all notes."""
         updated: list[str] = []
         for md_file in self.vault_path.rglob("*.md"):
             try:
                 parsed = self._parse_note(md_file)
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             tags = parsed["frontmatter"].get("tags") or []
             if old_tag not in tags:
@@ -539,7 +564,7 @@ class WikiMemory:
         for md_file in self.vault_path.rglob("*.md"):
             try:
                 parsed = self._parse_note(md_file)
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             title = parsed["frontmatter"].get("title", md_file.stem)
             index[title.lower()] = md_file
@@ -564,7 +589,7 @@ class WikiMemory:
         for md_file in self.vault_path.rglob("*.md"):
             try:
                 parsed = self._parse_note(md_file)
-            except OSError:
+            except (OSError, UnicodeError):
                 continue
             rel = md_file.relative_to(self.vault_path)
             if rel.parts and rel.parts[0] == "Core":
@@ -576,7 +601,7 @@ class WikiMemory:
 
         core.sort(key=lambda x: x[0])
         pinned.sort(key=lambda x: x[0])
-        recent.sort(key=lambda x: x[0].stat().st_mtime, reverse=True)
+        recent.sort(key=lambda x: _safe_mtime(x[0]), reverse=True)
 
         core_block = self._format_full_block(
             core, core_max_chars, "wiki_core", "Always-in-context facts"
@@ -590,9 +615,18 @@ class WikiMemory:
             return ""
 
         parts = [b for b in (core_block, pinned_block, index_block) if b]
-        result = "\n\n".join(parts)
-        if len(result) > max_chars:
-            result = result[:max_chars] + "\n[...truncated]"
+        result = ""
+        for block in parts:
+            separator = "\n\n" if result else ""
+            remaining = max_chars - len(result) - len(separator)
+            if remaining <= 0:
+                break
+            if len(block) > remaining:
+                block = _truncate_xml(block, remaining)
+            result += separator + block
+            if len(block) < remaining:
+                continue
+            break
         return result
 
     def _format_full_block(
@@ -603,18 +637,22 @@ class WikiMemory:
         header: str,
     ) -> str:
         """Render a list of pre-parsed notes as a full-content XML block."""
-        sections = []
-        total = 0
+        sections: list[str] = []
+        total = len(f"<{xml_tag}>\n{header}:\n\n</{xml_tag}>")
         for md_file, parsed in notes:
             title = parsed["frontmatter"].get("title", md_file.stem)
             content = parsed["content"].strip()
             if not content:
                 continue
             section = f"### [[{title}]]\n{content}"
-            if total + len(section) > max_chars:
-                break
+            remaining = max_chars - total - (2 if sections else 0)
+            if remaining <= 0:
+                continue
+            if len(section) > remaining:
+                # Do not let one large Core note hide all subsequent notes.
+                continue
             sections.append(section)
-            total += len(section)
+            total += len(section) + (2 if len(sections) > 1 else 0)
         if not sections:
             return ""
         return f"<{xml_tag}>\n{header}:\n\n" + "\n\n".join(sections) + f"\n</{xml_tag}>"
@@ -691,3 +729,29 @@ def _excerpt(text: str, query: str, window: int = 120) -> str:
     if end < len(text):
         snippet += "…"
     return snippet
+
+
+def _safe_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
+def _truncate_xml(text: str, max_chars: int) -> str:
+    """Trim rendered memory while retaining its outer XML element."""
+    if max_chars <= 0:
+        return ""
+    opening_end = text.find("\n")
+    closing_start = text.rfind("\n</")
+    if opening_end == -1 or closing_start <= opening_end:
+        return text[:max_chars]
+    opening = text[: opening_end + 1]
+    closing = text[closing_start:]
+    if len(opening) + len(closing) >= max_chars:
+        return (opening + closing)[:max_chars]
+    return (
+        opening
+        + text[opening_end + 1 : opening_end + 1 + max_chars - len(opening) - len(closing)]
+        + closing
+    )

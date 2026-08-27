@@ -22,6 +22,7 @@ class UsageDelta(TypedDict, total=False):
     output_tokens: int
     input_cost: float
     output_cost: float
+    total_cost: float
 
 
 # Approximate per-model pricing (USD per 1M tokens)
@@ -55,6 +56,7 @@ class UsageSnapshot:
     output_tokens: int = 0
     input_cost: float = 0.0
     output_cost: float = 0.0
+    reported_total_cost: float | None = None
 
     @property
     def total_tokens(self) -> int:
@@ -62,6 +64,8 @@ class UsageSnapshot:
 
     @property
     def total_cost(self) -> float:
+        if self.reported_total_cost is not None:
+            return self.reported_total_cost
         return self.input_cost + self.output_cost
 
 
@@ -80,6 +84,11 @@ class CostTracker:
 
     model: str = ""
     _usage: UsageSnapshot = field(default_factory=UsageSnapshot)
+    _reported_total_cost: float | None = None
+
+    def __post_init__(self) -> None:
+        if self.model and self.model not in _MODEL_PRICING:
+            logger.warning("No pricing data for model %r; using default estimate", self.model)
 
     def add_usage(
         self,
@@ -88,13 +97,24 @@ class CostTracker:
         output_tokens: int = 0,
         input_cost: float | None = None,
         output_cost: float | None = None,
+        total_cost: float | None = None,
     ) -> None:
         """Add usage from an API response.
 
         If costs are not provided, they are estimated from the model's
         pricing table.
         """
-        if input_cost is None or output_cost is None:
+        if input_tokens < 0 or output_tokens < 0:
+            raise ValueError("token counts cannot be negative")
+        for cost in (input_cost, output_cost, total_cost):
+            if cost is not None and cost < 0:
+                raise ValueError("costs cannot be negative")
+
+        if total_cost is not None:
+            self._reported_total_cost = (self._reported_total_cost or 0.0) + total_cost
+            input_cost = 0.0
+            output_cost = 0.0
+        elif input_cost is None or output_cost is None:
             estimated = self._estimate_cost(input_tokens, output_tokens)
             if input_cost is None:
                 input_cost = estimated["input"]
@@ -106,6 +126,7 @@ class CostTracker:
             output_tokens=self._usage.output_tokens + output_tokens,
             input_cost=self._usage.input_cost + input_cost,
             output_cost=self._usage.output_cost + output_cost,
+            reported_total_cost=self._reported_total_cost,
         )
 
     def _estimate_cost(self, input_tokens: int, output_tokens: int) -> dict[str, float]:
@@ -124,6 +145,7 @@ class CostTracker:
     def reset(self) -> None:
         """Reset the tracker to zero."""
         self._usage = UsageSnapshot()
+        self._reported_total_cost = None
 
     def format_summary(self) -> str:
         """Return a human-readable usage summary."""
@@ -131,9 +153,12 @@ class CostTracker:
         lines = [
             f"Tokens: {t.total_tokens:,} total ({t.input_tokens:,} in, {t.output_tokens:,} out)",
         ]
-        if t.total_cost > 0:
+        total_cost = (
+            self._reported_total_cost if self._reported_total_cost is not None else t.total_cost
+        )
+        if total_cost > 0:
             lines.append(
-                f"Cost: ${t.total_cost:.6f} (${t.input_cost:.6f} in, ${t.output_cost:.6f} out)"
+                f"Cost: ${total_cost:.6f} (${t.input_cost:.6f} in, ${t.output_cost:.6f} out)"
             )
         return " | ".join(lines)
 
@@ -157,5 +182,6 @@ def extract_usage_from_response(response_data: dict) -> UsageDelta:
         # OpenRouter reports `cost` for the complete request.
         result["input_cost"] = usage["cost"]
         result["output_cost"] = 0.0
+        result["total_cost"] = usage["cost"]
 
     return result

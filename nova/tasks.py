@@ -15,6 +15,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,18 @@ STATUS_FAILED = "failed"
 STATUS_KILLED = "killed"
 
 TERMINAL_STATUSES = {STATUS_COMPLETED, STATUS_FAILED, STATUS_KILLED}
+_DEFAULT_MAX_OUTPUT_BYTES = 100_000
+_DEFAULT_MAX_LIFETIME_SECONDS = 3600
+
+
+def sanitize_environment() -> dict[str, str]:
+    """Return an environment without common credential variables."""
+    secret_markers = ("KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL")
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if not any(marker in key.upper() for marker in secret_markers)
+    }
 
 
 @dataclass
@@ -61,13 +74,19 @@ class BackgroundTaskManager:
         mgr.stop_task(task_id)  # SIGTERM → SIGKILL
     """
 
-    def __init__(self, tasks_dir: Path | None = None) -> None:
+    def __init__(self, tasks_dir: Path | None = None, config: dict[str, Any] | None = None) -> None:
         if tasks_dir is None:
             from nova.config import get_nova_home
 
             tasks_dir = get_nova_home() / "tasks"
         self.tasks_dir = tasks_dir
         self.tasks_dir.mkdir(parents=True, exist_ok=True)
+        self.tasks_dir.chmod(0o700)
+        task_config = (config or {}).get("tasks", {})
+        self.max_output_bytes = int(task_config.get("max_output_bytes", _DEFAULT_MAX_OUTPUT_BYTES))
+        self.max_lifetime_seconds = int(
+            task_config.get("max_lifetime_seconds", _DEFAULT_MAX_LIFETIME_SECONDS)
+        )
 
         self._tasks: dict[str, TaskRecord] = {}
         self._processes: dict[str, subprocess.Popen] = {}
@@ -109,15 +128,22 @@ class BackgroundTaskManager:
 
         # Start the process
         try:
-            with open(output_file, "w", encoding="utf-8") as f:
-                proc = subprocess.Popen(
-                    command,
-                    shell=True,
-                    stdout=f,
-                    stderr=subprocess.STDOUT,
-                    cwd=task.cwd,
-                    start_new_session=True,  # New process group for clean kill
-                )
+            output_file.touch(mode=0o600, exist_ok=True)
+            output_file.chmod(0o600)
+            proc = subprocess.Popen(
+                command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                cwd=task.cwd,
+                env=sanitize_environment(),
+                start_new_session=True,
+            )
+            threading.Thread(
+                target=self._capture_output,
+                args=(proc, output_file),
+                daemon=True,
+            ).start()
             task.pid = proc.pid
 
             with self._lock:
@@ -140,6 +166,18 @@ class BackgroundTaskManager:
             self._notify_completion(task)
 
         return task_id
+
+    def _capture_output(self, proc: subprocess.Popen, output_file: Path) -> None:
+        """Drain a child pipe while retaining only the configured output limit."""
+        if proc.stdout is None:
+            return
+        remaining = self.max_output_bytes
+        with output_file.open("wb") as output:
+            while chunk := proc.stdout.read(8192):
+                if remaining > 0:
+                    kept = chunk[:remaining]
+                    output.write(kept)
+                    remaining -= len(kept)
 
     def get_task(self, task_id: str) -> TaskRecord | None:
         """Get a task record by ID."""
@@ -290,10 +328,19 @@ class BackgroundTaskManager:
     def _watch_process(self, task_id: str, proc: subprocess.Popen) -> None:
         """Watch a process for completion and update task status."""
         try:
+            return_code = proc.wait(timeout=self.max_lifetime_seconds)
+        except subprocess.TimeoutExpired:
+            with suppress(OSError):
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             return_code = proc.wait()
+            logger.warning("Background task %s exceeded lifetime limit", task_id)
+            timed_out = True
         except Exception as e:
             return_code = -1
+            timed_out = False
             logger.error("Error watching task %s: %s", task_id, e)
+        else:
+            timed_out = False
 
         should_notify = False
         with self._lock:
@@ -304,7 +351,11 @@ class BackgroundTaskManager:
             if task and task.status not in TERMINAL_STATUSES:
                 task.return_code = return_code
                 task.ended_at = time.time()
-                task.status = STATUS_COMPLETED if return_code == 0 else STATUS_FAILED
+                task.status = (
+                    STATUS_FAILED
+                    if timed_out
+                    else (STATUS_COMPLETED if return_code == 0 else STATUS_FAILED)
+                )
                 should_notify = True
 
         if task and should_notify:

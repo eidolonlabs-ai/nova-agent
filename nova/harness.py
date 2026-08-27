@@ -102,7 +102,10 @@ class HarnessTrace:
     def finish(self, *, status: RunStatus, output: Any = None) -> RunTrace:
         with self._lock:
             self.run.completed_at = time.monotonic()
-            self.run.status = status
+            if self.run.status == "failed" or status == "failed":
+                self.run.status = "failed"
+            else:
+                self.run.status = status
             self.run.output = None if output is None else str(redact(output))
             return self.run
 
@@ -111,7 +114,7 @@ def derive_run_status(trace: RunTrace, *, has_output: bool = True) -> RunStatus:
     verifications = [t.verification for t in trace.tool_traces if t.verification is not None]
     status: VerificationStatus | None = None
     for verification in verifications:
-        if verification.status == "verified":
+        if verification.status == "verified" and status != "failed":
             status = "verified"
         elif verification.status == "failed":
             status = "failed"

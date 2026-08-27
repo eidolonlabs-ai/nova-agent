@@ -1,5 +1,6 @@
 """Tests for the background task manager."""
 
+import os
 import time
 from pathlib import Path
 
@@ -55,6 +56,26 @@ def test_create_shell_task_with_cwd(tmp_path):
     time.sleep(0.5)
     output = mgr.read_task_output(task_id)
     assert str(tmp_path) in output
+
+
+def test_task_directory_and_log_permissions(tmp_path):
+    mgr = _make_manager(tmp_path)
+    task_id = mgr.create_shell_task("echo secret", "permissions")
+    time.sleep(0.2)
+    task = mgr.get_task(task_id)
+    assert mgr.tasks_dir.stat().st_mode & 0o777 == 0o700
+    assert task.output_file.stat().st_mode & 0o777 == 0o600
+
+
+def test_task_sanitizes_secret_environment(tmp_path):
+    os.environ["NOVA_TEST_TOKEN"] = "secret"
+    try:
+        mgr = _make_manager(tmp_path)
+        task_id = mgr.create_shell_task("printf '%s' \"$NOVA_TEST_TOKEN\"", "env")
+        time.sleep(0.3)
+        assert "secret" not in mgr.read_task_output(task_id)
+    finally:
+        os.environ.pop("NOVA_TEST_TOKEN", None)
 
 
 # ── Read Task Output ────────────────────────────────────────────────────────

@@ -30,7 +30,8 @@ Nova Agent is a minimalist personal AI agent with explicit token budgets and sma
   - `terminal.py` — Shell command execution with timeout and output truncation
   - `file_ops.py` — read_file, write_file, patch_file tools
   - `search_files.py` — Grep/regex search across project files
-  - `web.py` — Firecrawl Search API v2 web search (optional API key)
+  - `web.py` — Firecrawl web tools: search, scrape, map, crawl, extract, parse, dev search, usage (opt-in, requires `[web]` extra + API key)
+  - `firecrawl_client.py` — Firecrawl SDK client construction, error translation, document formatting
   - `skills_tool.py` — skills_list, skill_view, skill_manage tools
   - `wiki_tool.py` — wiki tool (write/append/read/search/list/delete/maintenance)
 
@@ -92,9 +93,9 @@ nova reset                # Reset session state
 
 **Linting:** Code must pass `ruff check .` with no errors.
 
-**Tests:** All 941 tests must pass.
+**Tests:** All tests must pass; run `pytest` for the current count.
 - Test coverage baseline: CLI 82%, sessions/file_ops 91–100%
-- Use dependency injection: pass mock `http_client`, `session_store`, and `wiki_memory_store` to `NovaAgent`
+- Use dependency injection: pass mock `openai_client`, `session_store`, and `wiki_memory_store` to `NovaAgent`
 - Test files live in `tests/` with names matching source modules (e.g., `tests/test_agent.py` for `nova/agent.py`)
 - New features should include tests
 
@@ -120,10 +121,10 @@ nova reset                # Reset session state
 
 ## Current Status
 
-✅ All 941 tests passing
+✅ Test suite passing (run `pytest` for the current count)
 ✅ Linting clean (ruff)
 ✅ Type checking clean (mypy)
-✅ Coverage: 75.69% (exceeds 70% minimum)
+✅ Coverage exceeds the 70% minimum (run `pytest --cov=nova` for the current value)
 ✅ CLI functional (chat, ask, sessions, reset)
 ✅ 10+ tools available (terminal, read_file, write_file, patch_file, search_files, web_search, skills_list, skill_view, skill_manage, wiki, git, http_client, etc.)
 

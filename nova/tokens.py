@@ -4,6 +4,7 @@ Uses tiktoken for accurate token counting when available,
 falls back to character-based estimation.
 """
 
+import json
 import logging
 import threading
 from typing import Any
@@ -63,6 +64,9 @@ def estimate_messages_tokens(messages: list[dict[str, Any]]) -> int:
                     total += estimate_tokens(part.get("text", "") or "")
                 elif isinstance(part, str):
                     total += estimate_tokens(part)
+        tool_calls = msg.get("tool_calls")
+        if tool_calls:
+            total += estimate_tokens(json.dumps(tool_calls, ensure_ascii=False, default=str))
         # Add overhead for message structure
         total += 4  # role + content framing
     return total

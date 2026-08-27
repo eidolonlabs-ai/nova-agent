@@ -196,11 +196,11 @@ def test_compression_microcompact_savings_logged(
 
     with (
         patch("nova.agent.microcompact_messages") as mock_compact,
-        patch("nova.agent.estimate_messages_tokens") as mock_estimate,
+        patch("nova.agent.estimate_total_request_tokens") as mock_estimate,
         patch("nova.agent.logger") as mock_logger,
     ):
         mock_compact.return_value = agent.messages[-6:]
-        mock_estimate.side_effect = [5000, 3000]
+        mock_estimate.side_effect = [5000, 3000, 3000]
 
         agent.run("test", stream=False)
         mock_logger.info.assert_called()

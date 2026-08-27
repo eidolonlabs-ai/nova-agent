@@ -12,6 +12,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING
@@ -178,6 +179,78 @@ def cmd_model(agent: NovaAgent, args: str) -> None:
         _cprint(f"{_DIM}Model switched to: {args.strip()}{_RST}")
     else:
         _cprint(f"{_DIM}Current model: {agent.config['llm']['model']}{_RST}")
+
+
+@command_handler("config")
+def cmd_config(agent: NovaAgent, args: str) -> None:
+    from nova.display import _DIM, _RST, _cprint
+    from nova.observability import redact
+
+    _cprint(f"{_DIM}{json.dumps(redact(agent.config), indent=2, default=str)}{_RST}")
+
+
+@command_handler("reasoning")
+def cmd_reasoning(agent: NovaAgent, args: str) -> None:
+    from nova.display import _DIM, _RST, _cprint
+
+    value = args.strip().lower()
+    if value in {"show", "hide"}:
+        agent.config.setdefault("ui", {})["show_reasoning"] = value == "show"
+    current = agent.config.get("ui", {}).get("show_reasoning", True)
+    _cprint(f"{_DIM}Reasoning display: {'shown' if current else 'hidden'}{_RST}")
+
+
+@command_handler("retry")
+def cmd_retry(agent: NovaAgent, args: str) -> None:
+    from nova.display import _DIM, _RST, _cprint
+
+    last_user = next(
+        (
+            message.get("content", "")
+            for message in reversed(agent.messages)
+            if message.get("role") == "user"
+        ),
+        "",
+    )
+    if not last_user:
+        _cprint(f"{_DIM}Nothing to retry{_RST}")
+        return
+    while agent.messages and agent.messages[-1].get("role") != "user":
+        agent.messages.pop()
+    agent.run(last_user, stream=False)
+
+
+@command_handler("resume")
+def cmd_resume(agent: NovaAgent, args: str) -> None:
+    from nova.display import _DIM, _RST, _cprint
+
+    session_id = args.strip()
+    if not session_id:
+        _cprint(f"{_DIM}Usage: /resume <session-id>{_RST}")
+        return
+    agent.config["_resume_session_id"] = session_id
+    _cprint(
+        f"{_DIM}Session resume requested: {session_id}. Start a new chat with this ID to load it.{_RST}"
+    )
+
+
+@command_handler("title")
+def cmd_title(agent: NovaAgent, args: str) -> None:
+    from nova.display import _DIM, _RST, _cprint
+
+    title = args.strip()
+    if not title:
+        if not agent.session_id:
+            _cprint(f"{_DIM}Title: (untitled){_RST}")
+            return
+        info = agent.session_store.get_session_info(agent.session_id) or {}
+        _cprint(f"{_DIM}Title: {info.get('title') or '(untitled)'}{_RST}")
+        return
+    if not agent.session_id:
+        _cprint(f"{_DIM}Cannot set a title without an active session{_RST}")
+        return
+    agent.session_store.update_title(agent.session_id, title)
+    _cprint(f"{_DIM}Session title updated{_RST}")
 
 
 @command_handler("tools")

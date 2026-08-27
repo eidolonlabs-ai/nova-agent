@@ -80,6 +80,20 @@ def test_update_system_prompt():
         assert info["system_prompt"] == "You are a test agent."
 
 
+def test_update_title_updates_session_and_search_index():
+    with tempfile.TemporaryDirectory() as tmp:
+        db = Path(tmp) / "test.db"
+        store = SessionStore(db)
+
+        sid = store.create_session(title="Old title")
+        store.update_title(sid, "New title")
+
+        info = store.get_session_info(sid)
+        assert info["title"] == "New title"
+        assert store.search_sessions("New title")[0]["session_id"] == sid
+        assert store.search_sessions("Old title") == []
+
+
 def test_delete_session_exists():
     with tempfile.TemporaryDirectory() as tmp:
         db = Path(tmp) / "test.db"

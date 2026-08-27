@@ -4,9 +4,10 @@ Uses dependency injection to mock OpenAI client, session store, and memory store
 """
 
 import json
+import sqlite3
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from nova.agent import NovaAgent, _normalize_message_history
 from nova.tools.registry import discover_builtin_tools
@@ -218,6 +219,24 @@ def test_agent_run_no_tool_calls(minimal_config, mock_session_store, mock_openai
     mock_openai_client.chat.completions.create.assert_called_once()
     call_kwargs = mock_openai_client.chat.completions.create.call_args[1]
     assert any("meaning of life" in str(m.get("content", "")) for m in call_kwargs["messages"])
+
+
+def test_agent_continues_when_session_persistence_is_locked(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    mock_openai_client.chat.completions.create.return_value = make_openai_response("OK")
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+    )
+
+    with patch.object(
+        mock_session_store,
+        "add_message",
+        side_effect=sqlite3.OperationalError("database is locked"),
+    ):
+        assert agent.run("hello", stream=False) == "OK"
 
 
 def test_agent_run_with_tool_call(minimal_config, mock_session_store, mock_openai_client):

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from nova.harness import VerificationResult
+from nova.tools.path_safety import path_safety_error
 from nova.tools.registry import registry
 
 
@@ -141,52 +142,9 @@ _MAX_WRITE_CHARS = 500000  # 500KB max write
 _MAX_PATCH_CHARS = 100000  # 100KB max patch string
 
 
-def _is_path_safe(path: Path) -> str | None:
+def _is_path_safe(path: Path, **kwargs: Any) -> str | None:
     """Check if a path is safe to access. Returns error message or None if safe."""
-    try:
-        resolved = path.resolve()
-    except (OSError, ValueError):
-        return f"Error: Cannot resolve path: {path}"
-
-    # Check blocked exact paths
-    path_str = str(resolved)
-    if path_str in _BLOCKED_PATHS:
-        return f"Error: Access denied to protected path: {path}"
-
-    # Check blocked prefixes
-    for prefix in _BLOCKED_PREFIXES:
-        if path_str.startswith(prefix):
-            return f"Error: Access denied to protected path: {path}"
-
-    # Check sensitive directories in the path
-    for sensitive in _SENSITIVE_DIRS:
-        if f"/{sensitive}/" in path_str or path_str.endswith(f"/{sensitive}"):
-            return f"Error: Access denied to sensitive directory: {sensitive}"
-
-    # Workspace boundary check — ensure resolved path is within allowed areas
-    # This prevents symlink attacks that resolve to arbitrary paths
-    workspace_dirs = [
-        Path.home(),
-        Path("/tmp").resolve(),
-        Path(tempfile.gettempdir()).resolve(),
-    ]
-    # Also allow the current working directory as a workspace
-    try:
-        cwd = Path.cwd().resolve()
-        workspace_dirs.append(cwd)
-    except OSError:
-        pass
-
-    # If we can identify a workspace, check the path falls within it
-    for ws in workspace_dirs:
-        try:
-            Path(path_str).relative_to(ws)
-            return None  # Path is within a known workspace
-        except ValueError:
-            continue
-
-    logger.warning("Path denied outside known workspaces: %s", path_str)
-    return f"Error: Access denied outside known workspaces: {path}"
+    return path_safety_error(path, **kwargs)
 
 
 def _is_obviously_blocked(path: Path) -> bool:
@@ -204,7 +162,7 @@ def _validate_offset_limit(offset: Any, limit: Any) -> str | None:
     return None
 
 
-def _read_file(args: dict[str, Any], **kwargs) -> str:
+def _read_file(args: dict[str, Any], **kwargs: Any) -> str:
     """Read a file with optional line range."""
     path = Path(args.get("path", "")).expanduser()
     path_str = str(path).strip()
@@ -218,7 +176,7 @@ def _read_file(args: dict[str, Any], **kwargs) -> str:
         return f"Error: File not found: {path}"
 
     # Security check
-    if error := _is_path_safe(path):
+    if error := _is_path_safe(path, **kwargs):
         return error
 
     offset = args.get("offset", 1)
@@ -251,7 +209,7 @@ def _read_file(args: dict[str, Any], **kwargs) -> str:
         return f"Error reading {path}: {e}"
 
 
-def _write_file(args: dict[str, Any], **kwargs) -> str:
+def _write_file(args: dict[str, Any], **kwargs: Any) -> str:
     """Write content to a file atomically."""
     path = Path(args.get("path", "")).expanduser()
     content = args.get("content", "")
@@ -261,7 +219,7 @@ def _write_file(args: dict[str, Any], **kwargs) -> str:
         return "Error: No path provided."
 
     # Security check
-    if error := _is_path_safe(path):
+    if error := _is_path_safe(path, **kwargs):
         return error
 
     # Validate content size
@@ -288,7 +246,7 @@ def _write_file(args: dict[str, Any], **kwargs) -> str:
         return f"Error writing {path}: {e}"
 
 
-def _patch_file(args: dict[str, Any], **kwargs) -> str:
+def _patch_file(args: dict[str, Any], **kwargs: Any) -> str:
     """Apply a search/replace patch."""
     path = Path(args.get("path", "")).expanduser()
     old_string = args.get("old_string", "")
@@ -311,7 +269,7 @@ def _patch_file(args: dict[str, Any], **kwargs) -> str:
         return f"Error: File not found: {path}"
 
     # Security check
-    if error := _is_path_safe(path):
+    if error := _is_path_safe(path, **kwargs):
         return error
 
     try:

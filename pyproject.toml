@@ -35,7 +35,11 @@ dependencies = [
 observability = [
     "langfuse>=3.0,<5",
 ]
+web = [
+    "firecrawl-py>=4.0,<5",
+]
 dev = [
+    "firecrawl-py>=4.0,<5",
     "mypy>=1.0",
     "pip-audit>=2.7",
     "pytest>=8.0",

@@ -35,7 +35,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | Hook/callback system | ✅ Active | Lifecycle events: pre/post tool call, LLM call, session start/end |
 | Cost tracking | ✅ Active | Per-model pricing and dollar cost estimation |
 | Background tasks | ✅ Active | Fire-and-forget shell execution with status tracking |
-| MCP integration | ✅ Active | Connect to external Model Context Protocol servers |
+| MCP integration | 📋 Planned | MCP transport/client implementation exists but is not wired into the agent runtime |
 | Tool registry | ✅ Active | Extensible tools with JSON schema definitions |
 | Skills system | ✅ Active | SKILL.md files with starter skills for coding, git, file editing |
 | Context file discovery | ✅ Active | AGENTS.md, SOUL.md, CLAUDE.md, .cursorrules with injection scanning |
@@ -44,7 +44,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | OpenRouter API | ✅ Active | 100+ models via OpenRouter |
 | Streaming responses | ✅ Active | Rich terminal UI |
 | Wiki memory (Obsidian-compatible) | ✅ Active | Persistent markdown notes with `[[wikilinks]]`, tags, `Core/` auto-inject |
-| Web search | ✅ Active | Firecrawl Search API v2 — optional API key, anonymous requests supported |
+| Web tools (Firecrawl) | ✅ Active | Search, scrape, map, crawl, extract, document parsing — see [GUIDE-015-WEB_TOOLS](docs/GUIDE-015-WEB_TOOLS.md) |
 | Harness verification | ✅ Active | Tool postcondition verification and structured run traces — see [SPEC-001-HARNESS_ENGINEERING](docs/SPEC-001-HARNESS_ENGINEERING.md) |
 | Langfuse observability | ✅ Active | Optional telemetry for runs, LLM calls, tools, policy, verification, timing, and usage |
 
@@ -57,7 +57,14 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `write_file` | Write/overwrite files with atomic saves |
 | `patch_file` | Search/replace patches for targeted edits |
 | `search_files` | Grep/regex search across project files |
-| `web_search` | Web search via Firecrawl Search API v2 (optional API key) |
+| `web_search` | Search the web, optionally scraping each result |
+| `web_scrape` | Scrape 1–10 URLs to clean markdown (handles JS and PDFs) |
+| `web_map` | Discover URLs on a site via sitemap + link graph |
+| `web_crawl` | Crawl a site — job-based: `start`, `status`, `cancel`, `errors` |
+| `web_extract` | LLM-extract structured JSON from pages — job-based: `start`, `status` |
+| `web_parse` | Convert a local PDF/DOCX/XLSX/PPTX to markdown (requires confirmation) |
+| `web_dev_search` | Search code, docs, issues and PRs across GitHub repos |
+| `web_usage` | Report remaining Firecrawl credits, tokens and concurrency |
 | `skills_list` | List all available skills by category |
 | `skill_view` | Load a skill's full instructions |
 | `skill_manage` | Create, update, or delete skills |
@@ -134,6 +141,18 @@ creation/loading, text prompts, streamed assistant and tool-call updates, and
 cancellation.
 
 Developer installs use the repo's local `.venv` and `config.yaml` in the project root. Changes to source code take effect immediately (editable install).
+
+### Optional Firecrawl web tools
+
+The eight `web_*` tools require the Firecrawl SDK and an API key:
+
+```bash
+pip install -e ".[web]"            # or: pip install 'nova-agent[web]'
+export FIRECRAWL_API_KEY=fc-...    # get one at https://firecrawl.dev
+```
+
+Without the SDK or a key the web tools are **not registered**, so they cost
+nothing in tool-schema tokens. See [GUIDE-015-WEB_TOOLS](docs/GUIDE-015-WEB_TOOLS.md).
 
 ### Optional Langfuse observability
 
@@ -302,7 +321,8 @@ nova/
     terminal.py     # Shell command execution with timeout
     file_ops.py     # read_file, write_file, patch_file
     search_files.py # Grep/regex search across project files
-    web.py          # Firecrawl Search API v2 web search
+    web.py          # Firecrawl web tools (search/scrape/map/crawl/extract/parse)
+    firecrawl_client.py # Firecrawl SDK client, error translation, formatting
     skills_tool.py  # skills_list, skill_view, skill_manage
     wiki_tool.py    # wiki tool (write/append/read/search/list/delete/maintenance)
     delegate_tool.py # delegate_task sub-agent spawning (opt-in)
@@ -339,7 +359,7 @@ pip install -e ".[dev]"
 # Run all checks
 ruff check .          # Lint
 mypy nova/            # Type check
- pytest                # Tests (941 passing, 84% coverage)
+pytest                 # Tests and coverage (see CI for current counts)
 
 # Full CI check
 ruff check . && mypy nova/ && pytest

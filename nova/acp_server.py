@@ -9,6 +9,7 @@ from threading import Event
 from typing import Any, cast
 
 from acp import (
+    PROTOCOL_VERSION,
     Agent,
     InitializeResponse,
     LoadSessionResponse,
@@ -23,10 +24,12 @@ from acp.interfaces import Client
 from acp.schema import (
     AgentCapabilities,
     Implementation,
+    PermissionOption,
     PromptCapabilities,
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
+    ToolCallUpdate,
     ToolKind,
 )
 
@@ -56,8 +59,13 @@ class NovaAcpAgent:
         self._client = conn
 
     async def initialize(self, protocol_version: int, **kwargs: Any) -> InitializeResponse:
+        if protocol_version != PROTOCOL_VERSION:
+            raise ValueError(
+                f"Unsupported ACP protocol version {protocol_version}; "
+                f"supported version is {PROTOCOL_VERSION}"
+            )
         return InitializeResponse(
-            protocol_version=protocol_version,
+            protocol_version=PROTOCOL_VERSION,
             agent_capabilities=AgentCapabilities(
                 load_session=True,
                 prompt_capabilities=PromptCapabilities(),
@@ -67,11 +75,16 @@ class NovaAcpAgent:
 
     async def new_session(self, cwd: str, **kwargs: Any) -> NewSessionResponse:
         workspace = self._validate_workspace(cwd)
-        agent = self._agent_factory(config=copy.deepcopy(self._config), workspace=workspace)
+        agent = await asyncio.to_thread(
+            self._agent_factory, config=copy.deepcopy(self._config), workspace=workspace
+        )
         session_id = agent.session_id
         if not session_id:
             agent.close()
             raise RuntimeError("Nova did not create a session ID")
+        agent._confirmation_callback = self._permission_callback(
+            self._client, session_id, asyncio.get_running_loop()
+        )
         self._sessions[session_id] = _Session(agent=agent)
         return NewSessionResponse(session_id=session_id)
 
@@ -86,7 +99,8 @@ class NovaAcpAgent:
             raise RuntimeError("ACP client is not connected")
         if session_id not in self._sessions:
             try:
-                agent = self._agent_factory(
+                agent = await asyncio.to_thread(
+                    self._agent_factory,
                     config=copy.deepcopy(self._config),
                     session_id=session_id,
                     workspace=workspace,
@@ -96,6 +110,9 @@ class NovaAcpAgent:
             if agent.session_id != session_id:
                 agent.close()
                 raise ValueError(f"Unknown Nova session: {session_id}")
+            agent._confirmation_callback = self._permission_callback(
+                self._client, session_id, asyncio.get_running_loop()
+            )
             self._sessions[session_id] = _Session(agent=agent)
 
         for message in self._sessions[session_id].agent.messages:
@@ -211,6 +228,35 @@ class NovaAcpAgent:
 
         return report
 
+    def _permission_callback(
+        self, client: Client | None, session_id: str, loop: asyncio.AbstractEventLoop
+    ) -> Callable[[str, dict[str, Any]], bool]:
+        def request(name: str, arguments: dict[str, Any]) -> bool:
+            if client is None or not callable(getattr(client, "request_permission", None)):
+                return False
+            tool_call = ToolCallUpdate(
+                tool_call_id=f"permission-{session_id}",
+                title=name,
+                kind=self._tool_kind(name),
+                raw_input=arguments,
+                status="pending",
+            )
+            options = [
+                PermissionOption(option_id="allow_once", name="Allow once", kind="allow_once"),
+                PermissionOption(option_id="reject_once", name="Reject", kind="reject_once"),
+            ]
+            future = asyncio.run_coroutine_threadsafe(
+                client.request_permission(session_id, tool_call, options), loop
+            )
+            try:
+                response = future.result()
+            except Exception:
+                return False
+            outcome = getattr(response, "outcome", None)
+            return getattr(outcome, "option_id", None) == "allow_once"
+
+        return request
+
     @staticmethod
     def _tool_kind(name: str) -> ToolKind:
         if name == "read_file":
@@ -221,7 +267,7 @@ class NovaAcpAgent:
             return "search"
         if name == "terminal":
             return "execute"
-        if name in {"web_search", "http_request"}:
+        if name in {"web_search", "http_request"} or name.startswith(("web_", "http_")):
             return "fetch"
         return "other"
 

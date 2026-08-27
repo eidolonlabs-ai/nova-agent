@@ -17,22 +17,41 @@ from nova.tokens import estimate_total_request_tokens
 
 def _confirm_tool(name: str, arguments: dict[str, Any], app: Any = None) -> bool:
     """Ask for explicit approval before executing a mutating tool."""
-    print(f"\nTool '{name}' requests execution with arguments: {arguments}")
+    preview = repr(arguments)
+    if len(preview) > 1000:
+        preview = preview[:1000] + "..."
+    print(f"\nTool '{name}' requests execution with arguments: {preview}")
     prompt = "Allow? [y/N] "
 
     def _ask() -> str:
         if app is None:
             return input(prompt)
+        # The agent runs in a worker thread while prompt_toolkit owns stdin.
+        # Schedule the terminal prompt on the application loop instead of
+        # calling input() from the worker thread.
+        import asyncio
+
+        from prompt_toolkit.application.run_in_terminal import run_in_terminal
+
+        loop = getattr(app, "loop", None)
+        if loop is None or not loop.is_running():
+            raise RuntimeError("interactive confirmation is unavailable while the TUI is active")
+
+        async def ask_in_terminal() -> str:
+            return await run_in_terminal(lambda: input(prompt), render_cli_done=True)
+
+        future = asyncio.run_coroutine_threadsafe(ask_in_terminal(), loop)
         try:
-            suspend_ctx = app.suspend()
-        except Exception:
-            return input(prompt)
-        with suspend_ctx:
-            return input(prompt)
+            return future.result(timeout=120)
+        except Exception as exc:
+            future.cancel()
+            raise RuntimeError("interactive confirmation timed out") from exc
 
     try:
         return _ask().strip().lower() in {"y", "yes"}
-    except (EOFError, KeyboardInterrupt):
+    except (EOFError, KeyboardInterrupt, RuntimeError) as error:
+        if isinstance(error, RuntimeError):
+            print(f"Confirmation unavailable: {error}", file=sys.stderr)
         return False
 
 
@@ -104,9 +123,11 @@ def _chat_loop(agent):
         agent._tool_callback = tool_callback
         # Wire Ctrl+C interrupt into the agent loop
         agent._interrupt_check = tui._interrupt_requested.is_set
-        agent.run(user_input, stream=True, stream_callback=stream_callback)
-        agent._interrupt_check = None
-        display.flush()
+        try:
+            agent.run(user_input, stream=True, stream_callback=stream_callback)
+        finally:
+            agent._interrupt_check = None
+            display.flush()
 
         ctx = estimate_total_request_tokens(
             agent.messages,

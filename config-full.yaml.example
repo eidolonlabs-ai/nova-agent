@@ -20,11 +20,20 @@ llm:
   model: "qwen/qwen3.6-flash"       # Any model supported by your endpoint
   base_url: "https://openrouter.ai/api/v1"
 
-# ── Web Search ───────────────────────────────────────────────────────────────
-# Firecrawl Search API v2. Anonymous requests are supported; an API key raises
-# rate limits. Set FIRECRAWL_API_KEY in the environment.
+# ── Web Tools (Firecrawl) ────────────────────────────────────────────────────
+# Powers web_search, web_scrape, web_map, web_crawl, web_extract, web_parse,
+# web_dev_search and web_usage.
+#
+# Requires the optional SDK:  pip install 'nova-agent[web]'
+# An API key is mandatory — get one at https://firecrawl.dev and set
+# FIRECRAWL_API_KEY in the environment.
+#
+# When the SDK is missing, no key is set, or enabled is false, the eight web
+# tools are not registered, so their ~1.7k tokens of schema cost nothing.
 web:
+  enabled: true                     # false disables all web tools
   firecrawl_api_key: "${FIRECRAWL_API_KEY}"
+  timeout_seconds: 30               # per-request timeout (1-300)
 
 # ── Agent Settings ──────────────────────────────────────────────────────────
 agent:
@@ -58,12 +67,11 @@ context_files:
   - "NOVA.md"
   - "AGENTS.md"
 
-# ── Memory ──────────────────────────────────────────────────────────────────
-# Persistent cross-session facts with LRU eviction.
-memory:
+# ── Wiki Memory ─────────────────────────────────────────────────────────────
+# Obsidian-compatible persistent notes and Core/ auto-injection.
+wiki:
   enabled: true
-  max_entries: 100                  # Max memories before LRU eviction
-  file: "~/.nova/memory.json"
+  directory: "~/.nova/wiki"
 
 # ── Skills ──────────────────────────────────────────────────────────────────
 # Domain-specific knowledge documents (SKILL.md files).
