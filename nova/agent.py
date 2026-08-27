@@ -20,9 +20,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Literal
 
-from anthropic import Anthropic
-from openai import OpenAI
-
 from nova.compression import compress_conversation
 from nova.config import ensure_nova_home, load_config
 from nova.cost_tracker import CostTracker, extract_usage_from_response
@@ -37,10 +34,11 @@ from nova.hooks import (
 )
 from nova.mcp_client import McpToolInfo, build_mcp_client
 from nova.microcompact import microcompact_messages
-from nova.model_metadata import get_model_context_window, load_provider_metadata
+from nova.model_metadata import get_model_context_window
 from nova.observability import create_observability, redact
 from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
+from nova.providers import build_client, maybe_load_model_metadata
 from nova.retry import retry_with_backoff
 from nova.session import SessionStore
 from nova.tokens import (
@@ -115,7 +113,7 @@ class NovaAgent:
         self,
         config: dict | None = None,
         session_id: str | None = None,
-        openai_client: OpenAI | None = None,
+        openai_client: Any | None = None,
         session_store: SessionStore | None = None,
         wiki_memory_store: WikiMemory | None = None,
         prompt_mode: str = "full",
@@ -163,35 +161,12 @@ class NovaAgent:
         else:
             self.wiki = None
 
-        # OpenAI client (injectable for testing)
+        # LLM client (injectable for testing)
         self._owns_client = openai_client is None
-        self.client: Any
-        if openai_client is not None:
-            self.client = openai_client
-        else:
-            llm_config = self.config["llm"]
-            if llm_config.get("provider", "openai") == "anthropic":
-                anthropic_kwargs: dict[str, Any] = {
-                    "api_key": llm_config["api_key"],
-                    "default_headers": {
-                        "anthropic-version": llm_config.get("anthropic_version", "2023-06-01"),
-                        **llm_config.get("anthropic_headers", {}),
-                    },
-                }
-                base_url = llm_config.get("base_url")
-                if base_url and base_url != "https://openrouter.ai/api/v1":
-                    anthropic_kwargs["base_url"] = base_url
-                self.client = Anthropic(**anthropic_kwargs)
-            else:
-                self.client = OpenAI(
-                    api_key=llm_config["api_key"],
-                    base_url=llm_config["base_url"],
-                    timeout=120.0,
-                    max_retries=0,
-                )
-
-        if self.config["llm"].get("provider", "openai") != "anthropic":
-            load_provider_metadata(self.client)
+        self.client: Any = (
+            openai_client if openai_client is not None else build_client(self.config["llm"])
+        )
+        maybe_load_model_metadata(self.client, self.config["llm"])
 
         # Discover tools (pass config so delegation tool can be gated)
         # Must happen before _create_session so system prompt includes tool summaries
