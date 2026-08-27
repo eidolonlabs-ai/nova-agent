@@ -1,7 +1,7 @@
 # GUIDE-012: Session Management
 
 **Status:** ✅ Active  
-**Last Updated:** May 2026  
+**Last Updated:** August 2026  
 **Type:** GUIDE (Developer & User Reference)
 
 > Nova Agent stores every conversation in a SQLite database with FTS5 full-text search. This guide covers how sessions work, how to manage them, and how to recover old conversations.
@@ -50,19 +50,29 @@ CREATE TABLE sessions (
     model TEXT,
     system_prompt TEXT,
     title TEXT,
-    message_count INTEGER DEFAULT 0,
-    tokens_used INTEGER DEFAULT 0,
-    cost_estimate REAL DEFAULT 0
+    message_count INTEGER DEFAULT 0
 );
 
-CREATE VIRTUAL TABLE sessions_fts USING fts5(
-    title,
-    content=sessions,
-    content_rowid=rowid
+CREATE TABLE messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    idx INTEGER NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    tool_calls TEXT,
+    tool_call_id TEXT,
+    reasoning_content TEXT,
+    timestamp TEXT NOT NULL
 );
+
+-- FTS5 virtual tables (trigram tokenizer) for full-text search.
+-- session_fts mirrors searchable session content; triggers keep
+-- session_search in sync. message_search indexes individual messages.
 ```
 
 **FTS5 full-text search** enables searching session titles and content for keyword matching — no regex, no grep. Just human-readable queries.
+
+> ⚠️ The **trigram tokenizer** only indexes terms of 3+ characters. Searches for shorter terms (e.g. `AI`, `go`, or a single letter) return no results. Use a more specific term of 3+ characters to match reliably.
 
 ---
 
@@ -181,10 +191,17 @@ Nova calls `PRAGMA optimize` automatically on session close.
 
 Sessions are **never auto-deleted**. They persist indefinitely until you remove them manually. This is intentional — you might need to pick up a conversation from months ago.
 
-To delete old sessions, edit the SQLite database directly:
+Deleting a session removes its messages **and** purges them from the full-text search index (`session_search` and `message_search`), so deleted conversation content is not recoverable via `search_sessions` or `search_messages`.
+
+To delete old sessions directly:
 
 ```bash
-sqlite3 ~/.nova/sessions/sessions.db "DELETE FROM sessions WHERE created_at < '2026-01-01';"
+sqlite3 ~/.nova/sessions/sessions.db \
+  "DELETE FROM messages       WHERE session_id IN (SELECT session_id FROM sessions WHERE created_at < '2026-01-01');
+   DELETE FROM message_search WHERE session_id IN (SELECT session_id FROM sessions WHERE created_at < '2026-01-01');
+   DELETE FROM session_search WHERE session_id IN (SELECT session_id FROM sessions WHERE created_at < '2026-01-01');
+   DELETE FROM session_fts    WHERE session_id IN (SELECT session_id FROM sessions WHERE created_at < '2026-01-01');
+   DELETE FROM sessions       WHERE created_at < '2026-01-01';"
 ```
 
 ---

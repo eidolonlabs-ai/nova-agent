@@ -19,6 +19,7 @@ llm:
   api_key: "${LLM_API_KEY}"         # or set LLM_API_KEY env var (OPENROUTER_API_KEY also accepted)
   model: "qwen/qwen3.6-flash"       # Any model supported by your endpoint
   base_url: "https://openrouter.ai/api/v1"
+  max_tokens: 8192                  # Max output tokens reserved per response (positive integer)
 
 # ── Web Tools (Firecrawl) ────────────────────────────────────────────────────
 # Powers web_search, web_scrape, web_map, web_crawl, web_extract, web_parse,
@@ -41,24 +42,19 @@ agent:
   max_iterations: 50          # Max tool calls per conversation turn
   temperature: 0.7            # Creativity (0.0 = deterministic, 1.0 = creative)
   top_p: 1.0                  # Nucleus sampling
+  stream_include_usage: true  # Ask the provider for token usage during streaming
 
 # ── Token Budgets ───────────────────────────────────────────────────────────
 # Explicit caps at every layer for predictable token usage.
 budgets:
-  system_prompt_max: 8000           # Max tokens for the entire system prompt
+  system_prompt_max: 16000          # Max tokens for the entire system prompt
   skills_max_chars: 15000           # Max chars for the skills index section
   skills_max_count: 50              # Max number of skills shown in prompt
   context_file_max_chars: 10000     # Max chars per context file (AGENTS.md, etc.)
   context_total_max_chars: 50000    # Max total chars across all context files
   tool_result_max_chars: 8000       # Max chars per tool result returned to the model
-  conversation_turn_limit: 15       # Turns before compression triggers
-
-# ── Context Compression ─────────────────────────────────────────────────────
-compression:
-  enabled: true
-  threshold_percent: 0.40           # Compress at 40% of context window
-  summary_model: "qwen/qwen3.6-flash"  # Cheap model for summarization
-  reserve_tokens: 15000             # Reserve for compaction overhead
+  tool_result_max_tokens: 12000     # Max tokens per tool result returned to the model
+  conversation_turn_limit: 15       # Recent turns kept when resuming a session
 
 # ── Context Files ───────────────────────────────────────────────────────────
 # Files Nova discovers automatically (searched in priority order, cwd → git root).
@@ -71,7 +67,8 @@ context_files:
 # Obsidian-compatible persistent notes and Core/ auto-injection.
 wiki:
   enabled: true
-  directory: "~/.nova/wiki"
+  vault_path: "~/.nova/wiki"
+  max_prompt_notes: 10              # Max wiki notes injected into the system prompt
 
 # ── Skills ──────────────────────────────────────────────────────────────────
 # Domain-specific knowledge documents (SKILL.md files).
@@ -98,14 +95,14 @@ delegation:
   default_timeout_seconds: 60       # Default sub-agent timeout
   subagent_budgets:
     max_iterations: 30              # Max tool calls per sub-agent turn
-    system_prompt_max: 4000         # Smaller system prompt for sub-agents
+    system_prompt_max: 8000         # Smaller system prompt for sub-agents
     tool_result_max_chars: 4000     # Smaller tool result budget
-    tool_result_max_tokens: 1500    # Token limit per tool result
+    tool_result_max_tokens: 4000    # Token limit per tool result
 
 # ── Permission System ───────────────────────────────────────────────────────
 # Defense-in-depth tool execution control.
 permissions:
-  mode: "auto"                      # "auto" (allow all) or "ask" (confirm mutating tools)
+  mode: "ask"                       # "ask" (confirm mutating tools, default) or "auto" (allow all)
   denied_tools: []                  # Tools the agent can never use
   allowed_tools: []                 # Tools that bypass confirmation (ask mode)
   denied_commands: []               # Shell command patterns that are always blocked (fnmatch patterns)
@@ -148,6 +145,12 @@ cost_tracking:
 microcompact:
   enabled: true
   keep_recent: 6                    # Number of recent messages to preserve fully
+
+# ── Background Tasks ─────────────────────────────────────────────────────────
+# Fire-and-forget shell/sub-agent execution with status tracking.
+tasks:
+  max_concurrent: 4                 # Max concurrent background tasks (1-32)
+  max_output_bytes: 100000          # Captured output cap per task (1-10000000)
 
 # ── Retry Logic ─────────────────────────────────────────────────────────────
 # Automatic retry for transient API errors with exponential backoff.

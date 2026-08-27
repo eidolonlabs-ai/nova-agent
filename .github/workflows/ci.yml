@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege default token.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref to save CI minutes.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -19,18 +28,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-          pip install --upgrade mypy pip-audit idna msgpack urllib3
 
       - name: CLI smoke test
         run: |
           bash -n scripts/install.sh
           nova --help
-          python -c 'from nova import __version__; assert __version__ == "0.1.0"'
+          python -c 'from importlib.metadata import version; assert version("nova-agent")'
 
       - name: Lint (ruff)
         run: ruff check .
@@ -42,6 +52,9 @@ jobs:
         run: mypy nova/
 
       - name: Security scan (pip-audit)
+        # Audit the environment as actually installed from pyproject so the
+        # scan reflects what users get. If a transitive CVE needs a pin, add a
+        # constraint to pyproject rather than force-upgrading here.
         run: pip-audit
 
       - name: Test (pytest)

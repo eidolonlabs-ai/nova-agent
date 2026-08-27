@@ -1,7 +1,7 @@
 # Permission System
 
 **Status:** ✅ Active  
-**Last Updated:** May 2026  
+**Last Updated:** August 2026  
 **Type:** GUIDE (Feature Reference)
 
 > Nova Agent includes a configurable permission system that controls tool execution through a defense-in-depth cascade. This prevents accidental or malicious actions while maintaining flexibility.
@@ -19,10 +19,10 @@ permissions:
 
 | Mode | Behavior |
 |------|----------|
-| `auto` | All tools execute without confirmation (current default behavior) |
-| `ask` | Read-only tools execute freely; mutating tools require confirmation |
+| `auto` | All tools execute without confirmation |
+| `ask` | Read-only tools execute freely; mutating tools require confirmation (this is the **default**) |
 
-In CLI mode, `ask` mode logs a confirmation notice but auto-approves (no interactive prompt yet). This is designed for future TUI integration where a real approval dialog would appear.
+In `ask` mode, mutating tool calls prompt for interactive confirmation (`Allow? [y/N]`) both in the TUI and in the plain CLI. If confirmation is unavailable (e.g., no TTY), the tool call is denied rather than silently auto-approved.
 
 ## Defense-in-Depth Cascade
 
@@ -74,13 +74,18 @@ Every tool call is evaluated through these checks, in order:
 Tools are classified as read-only or mutating:
 
 **Read-only** (never need confirmation):
-- `read_file`, `search_files`, `list_files`
-- `web_search`, `web_scrape`, `web_map`, `web_crawl`, `web_extract`, `web_dev_search`, `web_usage`
-- `skills_list`, `skill_view`
+- `read_file`, `search_files`, `list_files`, `search_sessions`
+- `web_search`, `web_scrape`, `web_map`, `web_dev_search`, `web_usage`
+- `http_get`
+- `skills_list`, `skill_view`, `skill_export`
+- `task_status`, `task_list`, `task_output`
 
 **Mutating** (require confirmation in `ask` mode):
 - `write_file`, `patch_file`, `terminal`
 - `skill_manage`, `wiki`, `delegate_task`
+- `http_post`, `http_put`, `http_delete`
+- `task_create`, `task_stop`
+- `web_crawl`, `web_extract` — every page they process costs Firecrawl credits and starts a server-side job
 - `web_parse` — uploads local file contents to a third-party API
 
 ## Tool-Level Permission Checking
@@ -101,7 +106,7 @@ File operation tools (`read_file`, `write_file`, `patch_file`) check sensitive p
 
 ```yaml
 permissions:
-  mode: "auto"                    # "auto" or "ask"
+  mode: "ask"                     # "ask" (confirm mutating tools, default) or "auto"
   denied_tools: []                # Tools the agent can never use
   allowed_tools: []               # Tools that bypass confirmation
   denied_commands: []             # Shell command patterns (fnmatch)

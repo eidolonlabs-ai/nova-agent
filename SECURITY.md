@@ -1,7 +1,7 @@
 # Security Policy
 
 **Status:** ✅ Active  
-**Last Updated:** May 2026
+**Last Updated:** August 2026
 
 ---
 
@@ -75,13 +75,27 @@ config path when those settings are intentionally supplied by a trusted operator
 
 - Sessions are stored in SQLite at `~/.nova/sessions/sessions.db`
 - Contains conversation history, tool calls, and results
+- Deleting a session purges its content from the full-text search index (`session_search`, `message_search`)
 - No encryption at rest — protect your `~/.nova/` directory
 
 ### Memory Data
 
-- Memories are stored in JSON at `~/.nova/memory.json`
-- Contains user preferences, environment details, and tool quirks
-- No encryption at rest
+- Memory is an Obsidian-compatible wiki of Markdown notes under `~/.nova/wiki/`
+- Contains user preferences, environment details, project state, and tool quirks
+- No encryption at rest — protect your `~/.nova/` directory
+
+### MCP (Model Context Protocol)
+
+- stdio server subprocesses run with a **sanitized environment** — common credential variables (`*KEY*`, `*TOKEN*`, `*SECRET*`, `*PASSWORD*`, `*CREDENTIAL*`) are stripped; secrets a server genuinely needs must be passed explicitly via its `env:` config
+- Every stdio request has a 60-second read timeout, so a hung server cannot block the agent loop
+- MCP tool/resource results are truncated and labeled as **untrusted external content**
+- MCP servers cannot be configured by auto-discovered project-local `config.yaml` files
+
+### Web Tools (Firecrawl)
+
+- `web_parse` uploads local file bytes to Firecrawl and runs the same path-safety checks as `read_file`/`write_file` — sensitive paths (`.ssh`, `.aws`, `.env`, …) and files outside known workspaces are denied
+- `web_crawl` and `web_extract` require confirmation in `ask` mode because every page they process costs credits
+- All returned web content is labeled as untrusted data
 
 ## Best Practices
 

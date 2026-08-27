@@ -38,7 +38,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | MCP integration | ✅ Active | Connect configured stdio, HTTP, and SSE Model Context Protocol servers |
 | Tool registry | ✅ Active | Extensible tools with JSON schema definitions |
 | Skills system | ✅ Active | SKILL.md files with starter skills for coding, git, file editing |
-| Context file discovery | ✅ Active | AGENTS.md, SOUL.md, CLAUDE.md, .cursorrules with injection scanning |
+| Context file discovery | ✅ Active | Global personality (SOUL.md) + NOVA.md, AGENTS.md with injection scanning |
 | Session storage | ✅ Active | SQLite with FTS5 full-text search |
 | Prompt mode gating | ✅ Active | Full mode for main agent, minimal for sub-agents |
 | OpenRouter API | ✅ Active | 100+ models via OpenRouter |
@@ -57,6 +57,16 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `write_file` | Write/overwrite files with atomic saves |
 | `patch_file` | Search/replace patches for targeted edits |
 | `search_files` | Grep/regex search across project files |
+| `list_files` | List files/directories under a root |
+| `git_status` | Show working tree status |
+| `git_diff` | Show diffs (working tree, staged, or between revisions) |
+| `git_log` | Show commit history |
+| `git_show` | Show a commit's changes |
+| `git_blame` | Show line-by-line commit attribution for a file |
+| `http_get` | Make a GET request with SSRF-hardened URL/DNS validation |
+| `http_post` | Make a POST request (requires confirmation) |
+| `http_put` | Make a PUT request (requires confirmation) |
+| `http_delete` | Make a DELETE request (requires confirmation) |
 | `web_search` | Search the web, optionally scraping each result |
 | `web_scrape` | Scrape 1–10 URLs to clean markdown (handles JS and PDFs) |
 | `web_map` | Discover URLs on a site via sitemap + link graph |
@@ -68,6 +78,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `skills_list` | List all available skills by category |
 | `skill_view` | Load a skill's full instructions |
 | `skill_manage` | Create, update, or delete skills |
+| `skill_export` | Export a skill as a shareable bundle |
 | `wiki` | Manage Obsidian-compatible wiki notes: write, append, read, search, list, delete, maintenance |
 | `delegate_task` | Spawn a sub-agent to handle an isolated task (opt-in) |
 | `task_create` | Start a background shell command |
@@ -75,6 +86,10 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | `task_output` | Read the tail of a task's log |
 | `task_stop` | Stop a running background task |
 | `task_list` | List all background tasks |
+| `read_session` | Read messages from a past session, optionally centered on an index |
+| `search_sessions` | Full-text search across session titles/summaries |
+| `search_messages` | Full-text search across individual messages |
+| `mcp_read_resource` | Read a resource exposed by a connected MCP server (when MCP is configured) |
 
 ## Installation
 
@@ -329,7 +344,7 @@ nova/
 config/
   SOUL.md.example   # Agent personality template
   NOVA.md.example   # Project instructions template
-  skills/           # 7 starter skills
+  skills/           # starter skills (see config/skills/)
     python-coding/
     git-workflow/
     file-editing/

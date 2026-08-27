@@ -89,6 +89,7 @@ Tools are automatically classified as **read-only** or **mutating** for the perm
 **Mutating tools** (require confirmation in `ask` mode):
 - `write_file`, `patch_file`, `terminal`
 - `skill_manage`, `wiki`, `delegate_task`
+- `web_crawl`, `web_extract` (they look read-only but cost credits per page), `web_parse` (uploads local file bytes)
 
 To mark your custom tool as read-only:
 

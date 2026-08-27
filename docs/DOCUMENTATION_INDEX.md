@@ -67,6 +67,14 @@
 
 ---
 
+## 🚀 Releases (RELEASE-NNN)
+
+| Document | Status | What It Covers |
+|----------|--------|----------------|
+| [RELEASE-001-0.1.0](RELEASE-001-0.1.0.md) | ✅ Active | Customer-facing changelog for the 0.1.0 release |
+
+---
+
 ## 🧩 Starter Skills
 
 Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
@@ -80,6 +88,15 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | `documentation-template-builder` | development | ✅ Active | Generate docs in ai-companions style — README, Roadmap, GUIDE, PRD, PERSONA, SPEC, ADR, RUN, RELEASE, STRATEGY, RESEARCH, GTM, REPORT |
 | `nova-development` | development | ✅ Active | Tool system, permissions, hooks, delegation, testing patterns, config, CI |
 | `nova-debugging` | development | ✅ Active | Loops, hallucinations, context drift, tool failures, permission issues |
+| `debugging` | development | ✅ Active | Reproduce, isolate, bisect, instrument, root-cause analysis, profiling |
+| `refactoring` | development | ✅ Active | Behavior-preserving changes, seams, incremental steps, verification |
+| `test-driven-development` | testing | ✅ Active | Red-green-refactor, test pyramid, mocking, coverage gates |
+| `ci-cd` | devops | ✅ Active | Lint/type/test/coverage gates, GitHub Actions, semver, changelogs, rollback |
+| `operations` | devops | ✅ Active | Monitoring, logging, incident response, on-call, postmortems, runbooks |
+| `planning` | engineering | ✅ Active | User stories, acceptance criteria, task breakdown, estimation, DoD |
+| `system-design` | engineering | ✅ Active | Architecture, components, data models, API contracts, trade-offs, ADRs |
+| `security-review` | security | ✅ Active | Threat modeling, secrets handling, dependency audits, OWASP, prompt injection |
+| `example-skill` | general | ✅ Active | Template demonstrating slash-command-triggered skills |
 
 ---
 
@@ -92,9 +109,9 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | Specs (SPEC-NNN) | 1 | ✅ All current |
 | Releases (RELEASE-NNN) | 1 | ✅ All current |
 | Reports (REPORT-NNN) | 2 | 🟡 ACP work in progress |
-| Starter skills | 7 | ✅ All current |
+| Starter skills | 16 | ✅ All current |
 | Root docs (README, CONTRIBUTING, SECURITY, AGENTS) | 4 | ✅ All current |
-| **Total** | **33** | 🟡 |
+| **Total** | **42** | 🟡 |
 
 **Supported doc type prefixes:** GUIDE · PRD · PERSONA · SPEC · ADR · RUN · RELEASE · STRATEGY · RESEARCH · GTM · REPORT
 

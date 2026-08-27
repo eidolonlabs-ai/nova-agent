@@ -26,6 +26,38 @@ def test_default_config(tmp_path, monkeypatch):
     assert config["agent"]["max_iterations"] == 50
 
 
+@pytest.mark.parametrize(
+    "example",
+    [
+        "config.yaml.example",
+        "config-full.yaml.example",
+        "config-minimal.yaml.example",
+        "config-safe.yaml.example",
+    ],
+)
+def test_example_configs_load_without_unknown_keys(example, tmp_path, monkeypatch, caplog):
+    """Every shipped example config must validate and use only known keys."""
+    import logging
+
+    repo_root = Path(__file__).resolve().parent.parent
+    source = repo_root / example
+    if not source.exists():
+        pytest.skip(f"{example} not present")
+
+    # Point the explicit config path at the example so it is treated as a
+    # trusted (non-automatic) config: credentials/permissions are preserved
+    # and unknown keys are warned about.
+    monkeypatch.setattr("nova.config.get_nova_home", lambda: tmp_path / ".nova")
+    monkeypatch.chdir(tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger="nova.config"):
+        config = load_config(source)
+
+    assert "llm" in config
+    unknown_warnings = [r for r in caplog.records if "Unknown config key" in r.getMessage()]
+    assert not unknown_warnings, f"{example}: {[r.getMessage() for r in unknown_warnings]}"
+
+
 def test_firecrawl_api_key_supports_environment_interpolation():
     with tempfile.TemporaryDirectory() as tmp:
         config_file = Path(tmp) / "config.yaml"

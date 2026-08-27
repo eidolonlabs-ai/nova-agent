@@ -20,7 +20,7 @@ Nova Agent is a lightweight personal AI agent with explicit token budgets and sm
 - `config.py` — YAML config loading with env var resolution, deep merge
 - `context.py` — Context file discovery with budgets, head/tail truncation, injection scanning
 - `wiki_memory.py` — Obsidian-compatible wiki memory (markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance reporting)
-- `model_metadata.py` — Model context window sizes for 20+ OpenRouter models
+- `model_metadata.py` — Model context window and pricing metadata loaded from the provider's models endpoint
 - `prompt.py` — System prompt assembly with mode gating (full/minimal/none)
 - `session.py` — SQLite session storage with FTS5 full-text search
 - `skills.py` — Skill discovery, YAML frontmatter parsing, XML-style prompt generation
@@ -89,12 +89,12 @@ nova reset                # Reset session state
 
 ## Code Quality Standards
 
-**Type hints:** All public functions require type annotations. Verify with `mypy nova/` (0 errors in 36 source files).
+**Type hints:** All public functions require type annotations. Verify with `mypy nova/` (0 errors).
 
 **Linting:** Code must pass `ruff check .` with no errors.
 
 **Tests:** All tests must pass; run `pytest` for the current count.
-- Test coverage baseline: CLI 82%, sessions/file_ops 91–100%
+- Coverage varies by module; run `pytest --cov=nova` for current per-file numbers — don't rely on hardcoded baselines in this doc, they drift.
 - Use dependency injection: pass mock `openai_client`, `session_store`, and `wiki_memory_store` to `NovaAgent`
 - Test files live in `tests/` with names matching source modules (e.g., `tests/test_agent.py` for `nova/agent.py`)
 - New features should include tests

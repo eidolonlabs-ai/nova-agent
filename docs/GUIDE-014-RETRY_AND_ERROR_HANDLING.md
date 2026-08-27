@@ -1,7 +1,7 @@
 # GUIDE-014: Retry & Error Handling
 
 **Status:** ✅ Active  
-**Last Updated:** May 2026  
+**Last Updated:** August 2026  
 **Type:** GUIDE (Developer Reference)
 
 > Nova Agent handles API failures gracefully with configurable retry logic, exponential backoff, and intelligent error classification. This guide explains how retries work and how to tune them.
@@ -14,23 +14,24 @@ Retry logic is enabled by default. No configuration needed for typical use.
 
 ```yaml
 retry:
-  enabled: true
-  max_retries: 3
-  backoff_multiplier: 2      # 1s, 2s, 4s, 8s...
-  jitter: true               # add randomness to prevent thundering herd
+  max_retries: 3       # max attempts per call
+  base_delay: 1.0      # seconds before the first retry
+  max_delay: 60.0      # cap on backoff delay
 ```
+
+`backoff_multiplier` (default `2`) and `jitter` (default `on`) are code-level constants in `nova/retry.py`, not config keys — the config controls the three values above.
 
 ---
 
 ## Error Classification
 
-Nova classifies every error into one of four categories, each with different retry behavior:
+Nova classifies every error into one of five categories, each with different retry behavior:
 
 | Error Type | Behavior | Examples |
 |------------|----------|----------|
 | **Retryable** | Retry with exponential backoff | 429 rate limit, 500/502/503/504 server errors |
 | **Non-retryable** | Fail immediately | 400 bad request, 401 unauthorized, 403 forbidden |
-| **Context overflow** | Trigger deterministic compaction, don't retry | Context window exceeded |
+| **Context overflow** | Compact the request, then retry once | Context window exceeded |
 | **API timeout** | Retry once only | "timeout", "temporary failure" |
 | **Connection timeout** | Retry with backoff | "connection refused", "connection reset" |
 
@@ -85,8 +86,8 @@ wait_time = base_delay * (backoff_multiplier**attempt) + random_jitter
 |-----------|---------|-------------|
 | `base_delay` | 1 second | Starting delay before first retry |
 | `max_retries` | 3 | Maximum number of retry attempts |
-| `backoff_multiplier` | 2 | Exponential growth factor |
-| `jitter` | true | Add ±25% random jitter |
+| `backoff_multiplier` | 2 | Exponential growth factor (code constant) |
+| `jitter` | on | Randomize each delay to 50%–150% of the computed value |
 
 ### Example Timeline
 
@@ -109,12 +110,9 @@ Without jitter, retries from multiple clients would hit the server simultaneousl
 
 ```yaml
 retry:
-  enabled: true               # set to false to disable retries entirely
-  max_retries: 3              # max retry attempts per call
+  max_retries: 3              # max retry attempts per call (0–10)
   base_delay: 1               # seconds before first retry
-  backoff_multiplier: 2       # exponential factor
-  jitter: true                # add randomness to prevent thundering herd
-  max_delay: 30               # cap retry delay at this many seconds
+  max_delay: 60               # cap retry delay at this many seconds
 ```
 
 ### Example Configurations
@@ -124,8 +122,6 @@ retry:
 retry:
   max_retries: 5
   base_delay: 2
-  backoff_multiplier: 2
-  jitter: true
   max_delay: 60
 ```
 
@@ -134,14 +130,13 @@ retry:
 retry:
   max_retries: 1
   base_delay: 0.5
-  backoff_multiplier: 1.5
-  jitter: true
+  max_delay: 30
 ```
 
 **No retries (fail fast, handle manually):**
 ```yaml
 retry:
-  enabled: false
+  max_retries: 0
 ```
 
 ---
@@ -150,10 +145,10 @@ retry:
 
 When the context window is exceeded, retrying won't help. Nova handles this specially:
 
-1. **Detect** — API returns an error indicating context overflow
-2. **Compact** — Reduce active context deterministically (see [GUIDE-011](GUIDE-011-CONTEXT_COMPRESSION.md))
-3. **Retry** — Re-attempt with the compressed context
-4. **Escalate** — If still overflowing after compaction, fail with a clear message
+1. **Detect** — The API returns an error matching context-length patterns (`context length`, `token limit`, `prompt is too long`, …). This is classified as **context overflow**, which is never retried as if it were transient.
+2. **Compact** — The active context is compacted aggressively (the request budget is halved) using deterministic compaction (see [GUIDE-011](GUIDE-011-CONTEXT_COMPRESSION.md)).
+3. **Retry once** — The compacted request is re-sent.
+4. **Escalate** — If the second attempt still overflows, the error propagates to the caller.
 
 This is different from normal retries because it changes the request, not just re-sends it.
 
@@ -161,20 +156,16 @@ This is different from normal retries because it changes the request, not just r
 
 ## Logging
 
-Retry attempts are logged at the `INFO` level. Failed retries after exhausting all attempts are logged at `WARNING`.
+Retry attempts are logged at the `WARNING` level with the classification, attempt count, and delay:
 
 ```
-[INFO] Retrying API call (attempt 2/3) after 429: rate limit exceeded
-[INFO] Retrying API call (attempt 3/3) after 503: service unavailable
-[WARNING] API call failed after 3 retries: 500 Internal Server Error
+[WARNING] API call failed (attempt 2/4, retryable): rate limit exceeded — retrying in 2.0s
+[WARNING] API call failed (attempt 3/4, retryable): service unavailable — retrying in 4.0s
+[ERROR]   API call failed after 3 retries (retryable): 500 Internal Server Error
 ```
 
-Set `NOVA_LOG_LEVEL=DEBUG` for detailed retry timing:
-
-```
-[DEBUG] Retry attempt 2 — waiting 1.83s (base=1.0, mult=2.0, jitter=+0.83)
-[DEBUG] Retry attempt 3 — waiting 4.12s (base=2.0, mult=2.0, jitter=+0.12)
-```
+A context-overflow recovery is logged separately before the compacted retry:
+`[WARNING] Provider reported context overflow; compacting and retrying once`
 
 ---
 
@@ -184,9 +175,9 @@ Set `NOVA_LOG_LEVEL=DEBUG` for detailed retry timing:
 |---------|-------|----------|
 | Too many retries | API is genuinely down | Set `max_retries: 1` for faster failure |
 | Retries are too slow | High `base_delay` or `max_delay` | Reduce `base_delay` to 0.5 |
-| Thundering herd on API recovery | Multiple clients retrying simultaneously | Keep `jitter: true` (default) |
+| Thundering herd on API recovery | Multiple clients retrying simultaneously | Jitter is on by default (50%–150% of delay) |
 | Non-retryable errors being retried | Custom error classification needed | Check error patterns in `retry.py` |
-| Context overflow causing retries | Session is too long | Run `/compact` to free tokens |
+| Context overflow after auto-recovery | Session is very long | Run `/compact` to free tokens proactively |
 
 ---
 

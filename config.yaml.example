@@ -88,9 +88,9 @@ delegation:
     tool_result_max_tokens: 4000  # Token limit per tool result
 
 # Permission system — tool execution approval with defense-in-depth
-# Modes: "auto" (allow all, current default) or "ask" (confirm mutating tools)
+# Modes: "ask" (confirm mutating tools, current default) or "auto" (allow all)
 permissions:
-  mode: "ask"                     # "auto" or "ask"
+  mode: "ask"                     # "ask" or "auto"
   denied_tools: []                # Tools the agent can never use
   allowed_tools: []               # Tools that bypass confirmation (ask mode)
   denied_commands: []             # Shell command patterns that are always blocked (fnmatch patterns)

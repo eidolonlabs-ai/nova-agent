@@ -1,6 +1,9 @@
 # Nova Agent — Project Roadmap
 
-**Updated:** August 2026
+**Status:** ✅ Active
+**Last Updated:** August 2026
+**Type:** GUIDE (Developer Reference)
+
 **Current Phase:** Release hardening
 **Overall Progress:** ACP integration complete; release hardening in progress
 
@@ -39,13 +42,14 @@ Made Nova safe to run and extensible for real-world use.
 
 Making Nova production-ready for teams and long sessions.
 
-- 🟡 **Context window optimization** — adaptive deterministic compaction based on request budgets
+- ✅ **Context window optimization** — proactive deterministic compaction plus reactive recovery when the provider reports context overflow
 - 🟡 **Multi-model fallback** — if one model fails, try another automatically
 - 📋 **Session archival** — move old persisted sessions to cold storage
 - 📋 **Structured output mode** — force JSON responses for tool-heavy workflows
 - 📋 **Plugin system** — third-party tool/skill marketplace
 - ✅ **Parallel tool execution** — run independent read-only tools concurrently
 - ✅ **Harness observability** — optional Langfuse telemetry, secret-safe traces, and file postcondition verification
+- ✅ **Security hardening** — MCP transport hardening (env sanitization, read timeouts, error surfacing, untrusted-content labeling), web-tool credit controls (crawl/extract confirmation, `web_parse` path confinement), reactive context-overflow recovery
 
 ## Phase 4: Team Features 📋 Planned (Sep–Dec 2026)
 

@@ -1,7 +1,7 @@
 # Customizing Nova Agent
 
 **Status:** ✅ Active  
-**Last Updated:** May 2026  
+**Last Updated:** August 2026  
 **Type:** GUIDE (Comprehensive Reference)
 
 > Nova Agent is designed to be personalized. This guide covers every way you can customize it.
@@ -159,7 +159,7 @@ Skills live in `~/.nova/skills/`. Nova discovers them automatically at startup.
 
 ### Starter Skills
 
-Nova ships with 3 starter skills. Copy them to your Nova home:
+Nova ships with 16 starter skills. Copy them to your Nova home:
 
 ```bash
 cp -r config/skills/* ~/.nova/skills/
@@ -170,6 +170,21 @@ cp -r config/skills/* ~/.nova/skills/
 | `python-coding` | development | Python conventions, testing, venvs |
 | `git-workflow` | development | Git branching, committing, pushing |
 | `file-editing` | development | Safe file editing patterns |
+| `code-review` | development | Review conventions and checklists |
+| `debugging` | development | Reproduce, isolate, bisect, instrument |
+| `refactoring` | development | Behavior-preserving refactoring |
+| `nova-development` | development | Contributing to Nova itself |
+| `nova-debugging` | development | Diagnosing agent issues |
+| `documentation-template-builder` | development | Generate ai-companions-style docs |
+| `test-driven-development` | testing | Red-green-refactor workflow |
+| `ci-cd` | devops | Pipelines and release automation |
+| `operations` | devops | Production operations and runbooks |
+| `planning` | engineering | Turn requirements into work |
+| `system-design` | engineering | Architecture and design docs |
+| `security-review` | security | Threat modeling and audits |
+| `example-skill` | general | Template for new skills |
+
+See [DOCUMENTATION_INDEX](../docs/DOCUMENTATION_INDEX.md) for the full inventory.
 
 ## Memory (Wiki)
 

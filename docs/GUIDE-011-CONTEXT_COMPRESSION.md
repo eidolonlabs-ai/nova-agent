@@ -28,6 +28,20 @@ When the active budget is exceeded, Nova:
 
 Compaction is deterministic, has no extra API cost, and produces the same result for the same message history and configuration.
 
+### Reactive recovery from provider-side overflow
+
+Token estimates are estimates. If the provider still rejects a request as exceeding the context window (an error matching context-length patterns), Nova:
+
+1. Detects the overflow error (it is *not* retried like a transient error).
+2. Compacts aggressively — halving the active budget — and retries **once**.
+3. If the second attempt also fails, the error propagates to the caller.
+
+This keeps long sessions alive even when the actual model window is smaller than the configured metadata suggests.
+
+### Unknown context window
+
+When the provider does not report a context window (metadata load fails or a non-OpenRouter endpoint), Nova falls back to a conservative **128,000-token** default rather than assuming an unlimited window, so compaction still engages on small-context models.
+
 ## Information Loss
 
 Old tool output and old conversation turns may be removed from active context. The model cannot use removed content directly, but it can retrieve archived messages when it knows a useful search term.
