@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Literal
 
-from openai import NOT_GIVEN, OpenAI
+from openai import OpenAI
 
 from nova.compression import compress_conversation
 from nova.config import ensure_nova_home, load_config
@@ -340,6 +340,7 @@ class NovaAgent:
             "messages": messages,
             "temperature": agent_config.get("temperature", 0.7),
             "top_p": agent_config.get("top_p", 1.0),
+            "stream_include_usage": agent_config.get("stream_include_usage", True),
         }
 
         if tools:
@@ -356,27 +357,36 @@ class NovaAgent:
         max_delay = retry_cfg.get("max_delay", 60.0)
 
         if stream:
+            stream_output_started = False
+
+            def _stream_callback(text: str) -> None:
+                nonlocal stream_output_started
+                stream_output_started = True
+                if stream_callback:
+                    stream_callback(text)
+
+            def _reasoning_callback(text: str) -> None:
+                nonlocal stream_output_started
+                stream_output_started = True
+                reasoning_callback = getattr(self, "_reasoning_callback", None)
+                if reasoning_callback:
+                    reasoning_callback(text)
+
             response_data: dict = retry_with_backoff(
                 self._stream_response,
                 payload,
-                stream_callback,
-                getattr(self, "_reasoning_callback", None),
+                _stream_callback,
+                _reasoning_callback,
                 max_retries=max_retries,
                 base_delay=base_delay,
                 max_delay=max_delay,
+                retry_if=lambda _error: not stream_output_started,
             )
         else:
 
             def _do_post() -> dict:
-                resp = self.client.chat.completions.create(  # type: ignore[call-overload]
-                    model=payload["model"],
-                    messages=payload["messages"],
-                    temperature=payload.get("temperature", 0.7),
-                    top_p=payload.get("top_p", 1.0),
-                    tools=payload["tools"] if payload.get("tools") else NOT_GIVEN,
-                    tool_choice="auto" if payload.get("tools") else NOT_GIVEN,
-                    extra_body=payload.get("extra_body", NOT_GIVEN),
-                )
+                request_kwargs = self._completion_request_kwargs(payload)
+                resp = self.client.chat.completions.create(**request_kwargs)  # type: ignore[call-overload]
                 message = resp.choices[0].message
                 return {
                     "choices": [
@@ -440,17 +450,9 @@ class NovaAgent:
         interrupted = False
         finish_reason: str | None = None
 
-        with self.client.chat.completions.create(  # type: ignore[call-overload]
-            model=payload["model"],
-            messages=payload["messages"],
-            temperature=payload.get("temperature", 0.7),
-            top_p=payload.get("top_p", 1.0),
-            tools=payload["tools"] if payload.get("tools") else NOT_GIVEN,
-            tool_choice="auto" if payload.get("tools") else NOT_GIVEN,
-            extra_body=payload.get("extra_body", NOT_GIVEN),
-            stream=True,
-            stream_options={"include_usage": True},
-        ) as stream:
+        request_kwargs = self._completion_request_kwargs(payload, stream=True)
+
+        with self.client.chat.completions.create(**request_kwargs) as stream:  # type: ignore[call-overload]
             usage: dict[str, Any] | None = None
             for chunk in stream:
                 if not chunk.choices:
@@ -531,6 +533,25 @@ class NovaAgent:
             ],
             "usage": usage,
         }
+
+    @staticmethod
+    def _completion_request_kwargs(payload: dict[str, Any], stream: bool = False) -> dict[str, Any]:
+        request_kwargs: dict[str, Any] = {
+            "model": payload["model"],
+            "messages": payload["messages"],
+            "temperature": payload.get("temperature", 0.7),
+            "top_p": payload.get("top_p", 1.0),
+        }
+        if payload.get("tools"):
+            request_kwargs["tools"] = payload["tools"]
+            request_kwargs["tool_choice"] = "auto"
+        if "extra_body" in payload:
+            request_kwargs["extra_body"] = payload["extra_body"]
+        if stream:
+            request_kwargs["stream"] = True
+            if payload.get("stream_include_usage", True):
+                request_kwargs["stream_options"] = {"include_usage": True}
+        return request_kwargs
 
     @staticmethod
     def _is_transient_error(error_msg: str) -> bool:

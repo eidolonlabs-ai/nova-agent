@@ -29,6 +29,7 @@ agent:
   max_iterations: 50          # Max tool calls per turn
   temperature: 0.7
   top_p: 1.0
+  stream_include_usage: true    # Include token usage in streaming responses
 
 # Token budgets (explicit caps at every layer)
 budgets:

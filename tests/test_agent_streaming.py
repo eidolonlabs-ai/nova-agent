@@ -157,6 +157,60 @@ def test_stream_response_empty_content(minimal_config, mock_session_store):
     assert result["choices"][0]["message"]["content"] is None
 
 
+def test_stream_response_can_omit_usage_options(minimal_config, mock_session_store):
+    from openai import OpenAI
+
+    mock_client = MagicMock(spec=OpenAI)
+    mock_client.chat.completions.create.return_value = make_mock_stream()
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_client,
+        session_store=mock_session_store,
+    )
+
+    agent._stream_response({"model": "test-model", "messages": [], "stream_include_usage": False})
+
+    call_kwargs = mock_client.chat.completions.create.call_args.kwargs
+    assert "stream_options" not in call_kwargs
+
+
+def test_stream_retry_does_not_duplicate_output_after_partial_failure(
+    minimal_config, mock_session_store
+):
+    from openai import OpenAI
+
+    mock_client = MagicMock(spec=OpenAI)
+    first_stream = make_mock_stream(make_text_chunk("partial"))
+
+    def fail_after_partial():
+        yield make_text_chunk("partial")
+        raise RuntimeError("connection reset")
+
+    class FailingStream:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def __iter__(self):
+            return fail_after_partial()
+
+    mock_client.chat.completions.create.side_effect = [FailingStream(), first_stream]
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_client,
+        session_store=mock_session_store,
+    )
+    output = []
+
+    with pytest.raises(RuntimeError, match="connection reset"):
+        agent._call_llm([], stream=True, stream_callback=output.append)
+
+    assert output == ["partial"]
+    assert mock_client.chat.completions.create.call_count == 1
+
+
 def test_stream_response_captures_usage(minimal_config, mock_session_store):
     from openai import OpenAI
 

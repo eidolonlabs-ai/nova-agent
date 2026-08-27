@@ -42,8 +42,8 @@ def test_classify_429_is_retryable():
     assert classify_error(status_code=429) == ErrorType.RETRYABLE
 
 
-def test_classify_unknown_is_retryable():
-    assert classify_error() == ErrorType.RETRYABLE
+def test_classify_unknown_is_non_retryable():
+    assert classify_error() == ErrorType.NON_RETRYABLE
 
 
 def test_classify_overflow_takes_priority():
@@ -52,6 +52,10 @@ def test_classify_overflow_takes_priority():
         classify_error(status_code=500, message="context length exceeded")
         == ErrorType.CONTEXT_OVERFLOW
     )
+
+
+def test_classify_client_status_takes_priority_over_retryable_text():
+    assert classify_error(status_code=400, message="timeout") == ErrorType.NON_RETRYABLE
 
 
 # ── retry_with_backoff ──────────────────────────────────────────────────────
@@ -126,6 +130,20 @@ def test_retry_non_retryable_raises_immediately():
     assert call_count == 1
 
 
+def test_retry_programming_error_raises_immediately():
+    call_count = 0
+
+    def invalid_request():
+        nonlocal call_count
+        call_count += 1
+        raise TypeError("unexpected keyword argument")
+
+    with contextlib.suppress(TypeError):
+        retry_with_backoff(invalid_request, max_retries=3, base_delay=0.01)
+
+    assert call_count == 1
+
+
 def test_retry_context_overflow_raises_immediately():
     call_count = 0
 
@@ -149,11 +167,11 @@ def test_retry_with_jitter():
     delays = []
 
     def failing():
-        raise ValueError("test")
+        raise RuntimeError("connection reset")
 
     with (
         patch("nova.retry.time.sleep", lambda d: delays.append(d)),
-        contextlib.suppress(ValueError),
+        contextlib.suppress(RuntimeError),
     ):
         retry_with_backoff(failing, max_retries=3, base_delay=1.0, jitter=True)
 
@@ -173,11 +191,11 @@ def test_retry_without_jitter():
     delays = []
 
     def failing():
-        raise ValueError("test")
+        raise RuntimeError("connection reset")
 
     with (
         patch("nova.retry.time.sleep", lambda d: delays.append(d)),
-        contextlib.suppress(ValueError),
+        contextlib.suppress(RuntimeError),
     ):
         retry_with_backoff(failing, max_retries=3, base_delay=1.0, jitter=False)
 
@@ -193,11 +211,11 @@ def test_retry_max_delay_cap():
     delays = []
 
     def failing():
-        raise ValueError("test")
+        raise RuntimeError("connection reset")
 
     with (
         patch("nova.retry.time.sleep", lambda d: delays.append(d)),
-        contextlib.suppress(ValueError),
+        contextlib.suppress(RuntimeError),
     ):
         retry_with_backoff(
             failing,

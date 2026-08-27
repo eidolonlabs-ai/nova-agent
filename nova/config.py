@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
         "max_iterations": 50,
         "temperature": 0.7,
         "top_p": 1.0,
+        "stream_include_usage": True,
     },
     "budgets": {
         "system_prompt_max": 8000,
@@ -139,6 +140,8 @@ def _validate_config(config: dict[str, Any]) -> None:
         value = agent.get(name)
         if not isinstance(value, (int, float)) or not low <= value <= high:
             raise ConfigError(f"agent.{name} must be between {low} and {high}")
+    if not isinstance(agent.get("stream_include_usage"), bool):
+        raise ConfigError("agent.stream_include_usage must be a boolean")
 
     budgets = config["budgets"]
     for name, value in budgets.items():

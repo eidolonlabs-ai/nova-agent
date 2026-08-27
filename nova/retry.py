@@ -8,6 +8,7 @@ error classification.
 import logging
 import random
 import time
+from collections.abc import Callable
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -81,8 +82,15 @@ def classify_error(status_code: int | None = None, message: str = "") -> str:
         if pattern in text:
             return ErrorType.CONTEXT_OVERFLOW
 
-    # Check retryable status codes
+    # HTTP status is authoritative for API responses. Error text can contain
+    # words such as "timeout" even when a request is invalid (for example 400).
     if status_code in _RETRYABLE_STATUS:
+        return ErrorType.RETRYABLE
+
+    if status_code and 400 <= status_code < 500:
+        return ErrorType.NON_RETRYABLE
+
+    if status_code and 500 <= status_code < 600:
         return ErrorType.RETRYABLE
 
     # Check connection-level errors first (transient network issues)
@@ -100,17 +108,10 @@ def classify_error(status_code: int | None = None, message: str = "") -> str:
         if pattern in text:
             return ErrorType.RETRYABLE
 
-    # 4xx errors (except 429) are generally non-retryable
-    if status_code and 400 <= status_code < 500:
-        return ErrorType.NON_RETRYABLE
-
-    # 5xx server errors are retryable
-    if status_code and 500 <= status_code < 600:
-        return ErrorType.RETRYABLE
-
-    # No status code — unknown error, retryable (safer)
+    # Unknown errors are usually programming or SDK errors. Retrying them
+    # hides the original failure and cannot make a deterministic call valid.
     if status_code is None:
-        return ErrorType.RETRYABLE
+        return ErrorType.NON_RETRYABLE
 
     # Default: non-retryable for known non-retryable status codes
     return ErrorType.NON_RETRYABLE
@@ -124,6 +125,7 @@ def retry_with_backoff(
     max_delay: float = 60.0,
     backoff_multiplier: float = 2.0,
     jitter: bool = True,
+    retry_if: Callable[[Exception], bool] | None = None,
     **kwargs: Any,
 ) -> Any:
     """Call a function with exponential backoff retry.
@@ -136,6 +138,7 @@ def retry_with_backoff(
         max_delay: Maximum delay in seconds.
         backoff_multiplier: Multiplier for each retry.
         jitter: Add random jitter to prevent thundering herd.
+        retry_if: Optional callback to reject retries for a specific exception.
         **kwargs: Keyword arguments for the function.
 
     Returns:
@@ -151,6 +154,8 @@ def retry_with_backoff(
             return func(*args, **kwargs)
         except Exception as e:
             last_exception = e
+            if retry_if is not None and not retry_if(e):
+                raise
             error_msg = str(e)
             # httpx.HTTPStatusError stores status_code on .response
             status_code = getattr(e, "status_code", None)

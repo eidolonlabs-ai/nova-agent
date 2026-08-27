@@ -324,6 +324,7 @@ def test_agent_run_no_tool_calls(minimal_config, mock_session_store, mock_openai
     mock_openai_client.chat.completions.create.assert_called_once()
     call_kwargs = mock_openai_client.chat.completions.create.call_args[1]
     assert any("meaning of life" in str(m.get("content", "")) for m in call_kwargs["messages"])
+    assert "extra_body" not in call_kwargs
 
 
 def test_agent_continues_when_session_persistence_is_locked(
