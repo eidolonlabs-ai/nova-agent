@@ -809,6 +809,9 @@ _TOOLS: tuple[tuple[str, dict, Any, str, bool], ...] = (
     ("web_search", WEB_SEARCH_SCHEMA, _web_search, "🔍", True),
     ("web_scrape", WEB_SCRAPE_SCHEMA, _web_scrape, "📄", True),
     ("web_map", WEB_MAP_SCHEMA, _web_map, "🗺️", True),
+    # web_crawl/web_extract look read-only, but every page they process costs
+    # Firecrawl credits — so they are deliberately NOT in the read-only tool
+    # set in registry.py (read_only here only controls ask-mode gating).
     ("web_crawl", WEB_CRAWL_SCHEMA, _web_crawl, "🕷️", True),
     ("web_extract", WEB_EXTRACT_SCHEMA, _web_extract, "🧬", True),
     ("web_dev_search", WEB_DEV_SEARCH_SCHEMA, _web_dev_search, "🐙", True),

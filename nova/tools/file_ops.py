@@ -59,16 +59,6 @@ _BLOCKED_PREFIXES = [
     "/sys/",
     "/dev/",
 ]
-# Sensitive directories that should be blocked
-_SENSITIVE_DIRS = [
-    ".ssh",
-    ".gnupg",
-    ".aws",
-    ".config/gcloud",
-    ".kube",
-    ".docker",
-    ".terraform",
-]
 
 READ_FILE_SCHEMA = {
     "name": "read_file",
@@ -186,17 +176,30 @@ def _read_file(args: dict[str, Any], **kwargs: Any) -> str:
         return error
 
     try:
-        with open(path, encoding="utf-8") as f:
-            lines = f.readlines()
-
         start = max(0, offset - 1)
         end = start + limit
-        selected = lines[start:end]
+
+        # Stream line by line so huge files are never loaded into memory.
+        # Only the requested window is collected; the line count stays exact.
+        total_lines = 0
+        selected: list[str] = []
+        collected_chars = 0
+        truncated = False
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                total_lines += 1
+                if start <= total_lines - 1 < end:
+                    selected.append(line)
+                    collected_chars += len(line)
+                    if collected_chars > _MAX_READ_CHARS:
+                        truncated = True
+                        break
+            if truncated:
+                for _ in f:
+                    total_lines += 1
 
         content = "".join(selected)
-        total_lines = len(lines)
-
-        if len(content) > _MAX_READ_CHARS:
+        if truncated:
             content = content[:_MAX_READ_CHARS]
             shown_end = start + content.count("\n") + 1
             remaining = total_lines - shown_end
@@ -213,6 +216,9 @@ def _write_file(args: dict[str, Any], **kwargs: Any) -> str:
     """Write content to a file atomically."""
     path = Path(args.get("path", "")).expanduser()
     content = args.get("content", "")
+
+    if not isinstance(content, str):
+        return "Error: Content must be a string."
 
     path_str = str(path).strip()
     if not path_str:
@@ -251,6 +257,9 @@ def _patch_file(args: dict[str, Any], **kwargs: Any) -> str:
     path = Path(args.get("path", "")).expanduser()
     old_string = args.get("old_string", "")
     new_string = args.get("new_string", "")
+
+    if not isinstance(old_string, str) or not isinstance(new_string, str):
+        return "Error: old_string and new_string must be strings."
 
     path_str = str(path).strip()
     if not path_str:

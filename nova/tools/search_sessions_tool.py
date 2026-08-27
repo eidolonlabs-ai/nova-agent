@@ -93,7 +93,7 @@ READ_SESSION_SCHEMA = {
             },
             "limit": {
                 "type": "integer",
-                "description": "Maximum number of most-recent messages to return (default: all).",
+                "description": "Maximum number of most-recent messages to return (default: 100).",
             },
         },
         "required": ["session_id"],
@@ -114,11 +114,11 @@ def _read_session_tool(args: dict[str, Any], **kwargs) -> str:
     if info is None:
         return f"Error: Session '{session_id}' not found."
 
-    limit = args.get("limit")
+    raw_limit = args.get("limit", 100)
     try:
-        limit = min(max(int(limit), 1), 200) if limit is not None else None  # Clamp to 1-200
+        limit = min(max(int(raw_limit), 1), 200)  # Clamp to 1-200
     except (ValueError, TypeError):
-        limit = None
+        limit = 100
 
     messages = session_store.get_messages(session_id, limit=limit)
     if not messages:

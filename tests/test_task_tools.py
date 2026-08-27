@@ -277,3 +277,16 @@ def test_task_status_with_return_code(mock_task_manager):
     data = json.loads(result)
     assert data["return_code"] == 0
     assert data["status"] == STATUS_COMPLETED
+
+
+def test_task_stop_unknown_task_returns_failure(mock_task_manager):
+    """Stopping a nonexistent task reports success: false instead of pretending."""
+    mock_task_manager.get_task.return_value = None
+
+    with patch("nova.tools.task_tools.get_task_manager", return_value=mock_task_manager):
+        result = _task_stop({"task_id": "ghost"})
+
+    data = json.loads(result)
+    assert data["success"] is False
+    assert "not found" in data["error"].lower()
+    mock_task_manager.stop_task.assert_not_called()

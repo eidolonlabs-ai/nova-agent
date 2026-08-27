@@ -184,6 +184,9 @@ def _task_stop(args: dict[str, Any], **kwargs) -> str:
         return json.dumps({"success": False, "error": "task_id is required."})
 
     mgr = get_task_manager()
+    task = mgr.get_task(task_id)
+    if not task:
+        return json.dumps({"success": False, "error": f"Task '{task_id}' not found."})
     result = mgr.stop_task(task_id)
     return json.dumps({"success": True, "message": result}, indent=2)
 

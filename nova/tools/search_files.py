@@ -58,6 +58,7 @@ SEARCH_FILES_SCHEMA = {
 
 _MAX_RESULTS = 50
 _MAX_PREVIEW_CHARS = 120
+_MAX_FILE_BYTES = 65536  # per-file read cap — keeps searches bounded on huge files
 
 _SKIP_DIRS = {
     ".git",
@@ -93,21 +94,21 @@ _BLOCKED_PREFIXES: tuple[str, ...] = (
 )
 
 
-def _is_path_safe(path: Path) -> str | None:
-    """Check if a search path is safe to access. Returns error message or None if safe."""
-    return path_safety_error(path)
-
-
 def _search_files(args: dict[str, Any], **kwargs: Any) -> str:
     """Search for a pattern across files."""
     pattern = args.get("pattern", "")
     search_path = Path(args.get("path", ".")).expanduser()
     mode = args.get("mode", "content")
     file_pattern = args.get("file_pattern", "*")
-    max_results = min(args.get("max_results", _MAX_RESULTS), 100)
+    raw_max = args.get("max_results", _MAX_RESULTS)
+    max_results = min(raw_max if isinstance(raw_max, int) else _MAX_RESULTS, 100)
 
-    if not pattern:
+    if not isinstance(pattern, str) or not pattern:
         return "Error: No search pattern provided."
+    if not isinstance(file_pattern, str) or not file_pattern:
+        return "Error: Invalid file_pattern."
+    if mode not in ("regex", "content"):
+        return "Error: Mode must be 'regex' or 'content'."
 
     if not search_path.exists():
         return f"Error: Path not found: {search_path}"
@@ -126,6 +127,7 @@ def _search_files(args: dict[str, Any], **kwargs: Any) -> str:
 
     matches = []
     total_files = 0
+    truncated_files = 0
     done = False
 
     for file_path in search_path.rglob(file_pattern):
@@ -142,7 +144,15 @@ def _search_files(args: dict[str, Any], **kwargs: Any) -> str:
         total_files += 1
 
         try:
-            content = file_path.read_text(encoding="utf-8", errors="ignore")
+            # Read at most _MAX_FILE_BYTES per file so a no-match search over
+            # a large tree never loads the whole tree into memory.
+            if file_path.stat().st_size > _MAX_FILE_BYTES:
+                with file_path.open("rb") as f:
+                    raw = f.read(_MAX_FILE_BYTES)
+                content = raw.decode("utf-8", errors="ignore")
+                truncated_files += 1
+            else:
+                content = file_path.read_text(encoding="utf-8", errors="ignore")
         except (OSError, PermissionError):
             continue
 
@@ -161,11 +171,22 @@ def _search_files(args: dict[str, Any], **kwargs: Any) -> str:
                 break
 
     if not matches:
+        if truncated_files:
+            return (
+                f"No matches found for '{pattern}' (searched {total_files} files; "
+                f"{truncated_files} exceeded the {_MAX_FILE_BYTES:,}-byte read cap and "
+                f"were only searched from their head)."
+            )
         return f"No matches found for '{pattern}' (searched {total_files} files)."
 
     lines = [f"Found {len(matches)} match(es) for '{pattern}' in {total_files} files:\n"]
     for match_path, line_num, preview in matches:
         lines.append(f"   {match_path}:{line_num}: {preview}")
+
+    if truncated_files:
+        lines.append(
+            f"\n[...{truncated_files} file(s) exceeded the {_MAX_FILE_BYTES:,}-byte read cap; only their head was searched...]"
+        )
 
     if len(matches) >= max_results:
         lines.append(f"\n[...limited to {max_results} results, refine your search...]")

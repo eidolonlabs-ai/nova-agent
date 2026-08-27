@@ -4,11 +4,12 @@ Provides skill_view, skills_list, and skill_manage tools for the agent
 to discover and use specialized knowledge.
 """
 
-import json
 import logging
 import re
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from nova.skills import (
     build_skills_prompt,
@@ -157,6 +158,21 @@ def _skill_export(args: dict[str, Any], **kwargs) -> str:
     return result or f"Error: Skill '{skill_name}' not found at {skill_dir_path}."
 
 
+def _build_frontmatter(frontmatter: dict) -> str:
+    """Serialize skill frontmatter with YAML-safe escaping.
+
+    Raw string interpolation breaks on descriptions containing ': ',
+    '#', or newlines — the skill then parses as having no frontmatter
+    and silently disappears from discovery. safe_dump quotes exactly
+    what needs quoting.
+    """
+    return (
+        "---\n"
+        + yaml.safe_dump(frontmatter, allow_unicode=True, sort_keys=False).strip()
+        + "\n---\n\n"
+    )
+
+
 def _skill_manage(args: dict[str, Any], **kwargs) -> str:
     """Create, update, or delete a skill."""
     config = kwargs.get("config", {})
@@ -180,9 +196,18 @@ def _skill_manage(args: dict[str, Any], **kwargs) -> str:
         description = args.get("description", "")
         content = args.get("content", "")
 
+        if not isinstance(content, str):
+            return "Error: 'content' must be a string."
+        if not isinstance(description, str):
+            return "Error: 'description' must be a string."
+        if not isinstance(category, str) or not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9_-]*", category
+        ):
+            return "Error: Invalid category. Use letters, numbers, '-' or '_'."
+
         skill_dir.mkdir(parents=True, exist_ok=True)
-        frontmatter = (
-            f"---\nname: {name}\ncategory: {category}\ndescription: {description}\n---\n\n"
+        frontmatter = _build_frontmatter(
+            {"name": name, "category": category, "description": description}
         )
         skill_file.write_text(frontmatter + content, encoding="utf-8")
         return f"Created skill '{name}' at {skill_file}."
@@ -192,20 +217,16 @@ def _skill_manage(args: dict[str, Any], **kwargs) -> str:
             return f"Error: Skill '{name}' not found."
 
         content = args.get("content", "")
-        if not content:
+        if not isinstance(content, str) or not content:
             return "Error: 'content' is required for patch action."
 
         existing = skill_file.read_text(encoding="utf-8")
         frontmatter_dict, body = parse_frontmatter(existing)
+        if not frontmatter_dict:
+            return f"Error: Skill '{name}' has no valid frontmatter; refusing to overwrite it."
 
-        # Rebuild with updated body
-        fm_text = "---\n"
-        for k, v in frontmatter_dict.items():
-            if isinstance(v, list):
-                fm_text += f"{k}: {json.dumps(v)}\n"
-            else:
-                fm_text += f"{k}: {v}\n"
-        fm_text += "---\n\n"
+        # Rebuild with updated body (safe_dump preserves lists, quotes, and special chars)
+        fm_text = _build_frontmatter(frontmatter_dict)
 
         # Atomic write — same pattern as write_file
         import os as _os

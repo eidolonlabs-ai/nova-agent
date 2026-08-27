@@ -20,7 +20,6 @@ _PROTECTED_DIRS = {
     ".kube",
     ".docker",
     ".terraform",
-    ".config/gcloud",
     ".nova",
 }
 
@@ -57,14 +56,9 @@ def path_safety_error(path: Path, **kwargs: Any) -> str | None:
     parts = resolved.parts
     for index, part in enumerate(parts):
         if part in _PROTECTED_DIRS or part in _PROTECTED_FILES or part.startswith(".env"):
-            if part == ".nova" and (index + 1 >= len(parts) or parts[index + 1] != "config.yaml"):
-                return f"Error: Access denied to sensitive directory: {part}"
-            if part != ".nova":
-                return f"Error: Access denied to sensitive path: {path}"
+            return f"Error: Access denied to sensitive path: {path}"
         if part == ".config" and index + 1 < len(parts) and parts[index + 1] == "gcloud":
             return f"Error: Access denied to sensitive path: {path}"
-    if ".nova" in parts and "config.yaml" in parts[parts.index(".nova") + 1 :]:
-        return f"Error: Access denied to sensitive path: {path}"
 
     configured = _configured_workspace(kwargs)
     workspaces = [configured] if configured else []

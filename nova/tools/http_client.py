@@ -2,17 +2,26 @@
 
 Supports JSON payloads, custom headers, and timeout enforcement.
 Integrates with permission system to control external URLs.
+
+Connections are pinned to a pre-resolved, validated IP address so the
+destination cannot change between validation and connect time (DNS
+rebinding). The original hostname is still used for the Host header and
+TLS SNI/certificate validation.
 """
 
 from __future__ import annotations
 
+import contextlib
+import gzip
+import http.client
 import ipaddress
 import json
 import logging
 import socket
+import ssl
+import urllib.parse
+import zlib
 from typing import Any
-
-import httpx
 
 from nova.tools.registry import registry
 
@@ -145,6 +154,102 @@ _BLOCKED_HOSTS = frozenset(
 )
 
 
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """HTTP connection whose TCP connect targets a pre-validated IP.
+
+    The Host header still uses the original hostname; only the connect
+    is pinned, closing the DNS-rebinding window between validation and
+    connection.
+    """
+
+    def __init__(self, host: str, port: int, ip: str, timeout: int):
+        super().__init__(host, port, timeout=timeout)
+        self._pin_ip = ip
+
+    def connect(self) -> None:
+        self.sock = socket.create_connection((self._pin_ip, self.port), timeout=self.timeout)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS connection pinned to a pre-validated IP.
+
+    TLS SNI and certificate validation still use the original hostname,
+    so secure connections keep working while the TCP destination is pinned.
+    """
+
+    def __init__(self, host: str, port: int, ip: str, timeout: int):
+        self._ctx = ssl.create_default_context()
+        super().__init__(host, port, timeout=timeout, context=self._ctx)
+        self._pin_ip = ip
+
+    def connect(self) -> None:
+        self.sock = socket.create_connection((self._pin_ip, self.port), timeout=self.timeout)
+        self.sock = self._ctx.wrap_socket(self.sock, server_hostname=self.host)
+
+
+def _resolve_pinned_ip(host: str) -> tuple[bool, str, str]:
+    """Resolve a host once and validate every address it maps to.
+
+    Returns (ok, error_message, pinned_ip). The caller must connect only
+    to the returned IP — the connection is pinned to it, so DNS rebinding
+    between this validation and connect time cannot redirect the request.
+    """
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except (socket.gaierror, OSError) as e:
+        return False, f"URL denied: unable to resolve host — {e}", ""
+    if not infos:
+        return False, "URL denied: unable to resolve host — no addresses", ""
+    for info in infos:
+        addr_str = info[4][0]
+        try:
+            addr = ipaddress.ip_address(addr_str)
+        except ValueError:
+            return False, f"URL denied: {addr_str} is not a valid IP", ""
+        if addr.is_private:
+            return False, f"URL denied: {host} resolves to private address {addr_str}", ""
+        if addr.is_loopback:
+            return False, f"URL denied: {host} resolves to loopback address {addr_str}", ""
+        if addr.is_link_local:
+            return False, f"URL denied: {host} resolves to link-local address {addr_str}", ""
+        if addr.is_reserved:
+            return False, f"URL denied: {host} resolves to reserved address {addr_str}", ""
+    # Prefer IPv4 for the pinned address: deterministic, and avoids
+    # IPv6-routing surprises on hosts with both A and AAAA records.
+    ipv4 = [i for i in infos if i[0] == socket.AF_INET]
+    pinned = (ipv4 or infos)[0][4][0]
+    if not isinstance(pinned, str):
+        return False, "URL denied: invalid address", ""
+    return True, "", pinned
+
+
+_EMPTY_PARSE = urllib.parse.ParseResult("", "", "", "", "", "")
+
+
+def _prepare_url(url: str) -> tuple[bool, str, urllib.parse.ParseResult, str]:
+    """Validate, parse, and SSRF-check a URL.
+
+    Returns (ok, error, parsed_url, pinned_ip). The pinned IP is the only
+    address the request may connect to.
+    """
+    valid, msg = _validate_url(url)
+    if not valid:
+        return False, msg, _EMPTY_PARSE, ""
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError as e:
+        return False, f"Invalid URL: {e}", _EMPTY_PARSE, ""
+    host = (parsed.hostname or "").lower()
+    if not host:
+        return False, "URL denied: missing host", _EMPTY_PARSE, ""
+    if host in _BLOCKED_HOSTS:
+        return False, f"URL denied: {host} is a reserved address", _EMPTY_PARSE, ""
+    ok, msg, ip = _resolve_pinned_ip(host)
+    if not ok:
+        return False, msg, _EMPTY_PARSE, ""
+    return True, "", parsed, ip
+
+
 def _is_url_safe(url: str) -> tuple[bool, str]:
     """Validate URL format, scheme, and target safety.
 
@@ -155,48 +260,14 @@ def _is_url_safe(url: str) -> tuple[bool, str]:
     - Unspecified (0.0.0.0)
     - IPv6 loopback/unspecified
     - Well-known SSRF hosts (AWS/Azure/GCP metadata endpoints)
+
+    Every address a host maps to is inspected — a single gethostbyname()
+    call would see only the first A record. The request is additionally
+    pinned to the validated address (see _PinnedHTTPConnection), so the
+    destination cannot change between this check and connect time.
     """
-    valid, msg = _validate_url(url)
-    if not valid:
-        return False, msg
-
-    try:
-        parsed = httpx.URL(url)
-        host = parsed.host
-
-        if not host:
-            return False, "URL denied: missing host"
-
-        # Check blocked hostnames
-        if host.lower() in _BLOCKED_HOSTS:
-            return False, f"URL denied: {host} is a reserved address"
-
-        # Resolve every address the host maps to and check each one. A single
-        # gethostbyname() call returns only the first A record and is checked
-        # before httpx resolves again — DNS rebinding between those two calls
-        # is the classic SSRF bypass. By checking every address returned by
-        # getaddrinfo() we close that window without needing a custom resolver.
-        infos = socket.getaddrinfo(host, None)
-        for info in infos:
-            sockaddr = info[4]
-            addr_str = sockaddr[0]
-            try:
-                addr = ipaddress.ip_address(addr_str)
-            except ValueError:
-                return False, f"URL denied: {addr_str} is not a valid IP"
-            if addr.is_private:
-                return False, f"URL denied: {host} resolves to private address {addr_str}"
-            if addr.is_loopback:
-                return False, f"URL denied: {host} resolves to loopback address {addr_str}"
-            if addr.is_link_local:
-                return False, f"URL denied: {host} resolves to link-local address {addr_str}"
-            if addr.is_reserved:
-                return False, f"URL denied: {host} resolves to reserved address {addr_str}"
-
-    except (socket.gaierror, OSError, ValueError) as e:
-        return False, f"URL denied: unable to resolve host — {e}"
-
-    return True, ""
+    ok, msg, _, _ = _prepare_url(url)
+    return ok, msg
 
 
 def _validate_url(url: str) -> tuple[bool, str]:
@@ -207,11 +278,31 @@ def _validate_url(url: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _coerce_timeout(raw: Any) -> int:
+    """Coerce a timeout arg to an int; 0 signals invalid (rejected by validation)."""
+    if isinstance(raw, bool):
+        return 0
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 0
+    return value
+
+
 def _validate_timeout(timeout: int) -> tuple[bool, str]:
     """Validate timeout value."""
     if not isinstance(timeout, int) or timeout <= 0 or timeout > 300:
         return False, "Timeout must be between 1 and 300 seconds"
     return True, ""
+
+
+def _decode_body(data: bytes, content_encoding: str) -> str:
+    """Decode a response body, transparently decompressing gzip/deflate."""
+    if content_encoding.lower() == "gzip":
+        data = gzip.decompress(data)
+    elif content_encoding.lower() == "deflate":
+        data = zlib.decompress(data)
+    return data.decode("utf-8", errors="replace")
 
 
 def _truncate_response(text: str, max_chars: int = _MAX_RESPONSE_CHARS) -> str:
@@ -231,14 +322,9 @@ def _make_request(
     timeout: int = 30,
 ) -> str:
     """Make an HTTP request and return formatted response."""
-    # Validate URL
-    valid, msg = _validate_url(url)
-    if not valid:
-        return f"Error: {msg}"
-
-    # SSRF safety check
-    safe, msg = _is_url_safe(url)
-    if not safe:
+    # Validate URL + SSRF safety check (also yields the pinned IP)
+    ok, msg, parsed, ip = _prepare_url(url)
+    if not ok:
         return f"Error: {msg}"
 
     # Validate timeout
@@ -249,10 +335,9 @@ def _make_request(
     # Parse headers
     if headers is None:
         headers = {}
-    else:
-        # Ensure headers is dict
-        if not isinstance(headers, dict):
-            return "Error: Headers must be a JSON object"
+    elif not isinstance(headers, dict):
+        return "Error: Headers must be a JSON object"
+    headers = dict(headers)
 
     # Default User-Agent
     if "User-Agent" not in headers:
@@ -261,89 +346,101 @@ def _make_request(
     # Parse body for POST/PUT
     json_body = None
     if body:
+        if not isinstance(body, str):
+            return "Error: Body must be a JSON string"
         try:
             json_body = json.loads(body)
         except json.JSONDecodeError:
             return f"Error: Invalid JSON in body: {body}"
 
     # Add Content-Type header if not set and we have a body
-    if json_body and "Content-Type" not in headers:
+    if json_body is not None and "Content-Type" not in headers:
         headers["Content-Type"] = "application/json"
+
+    scheme = parsed.scheme.lower()
+    host = parsed.hostname or ""
+    try:
+        port = parsed.port or (443 if scheme == "https" else 80)
+    except ValueError:
+        return "Error: URL has an invalid port"
+    path = parsed.path or "/"
+    if parsed.query:
+        path += f"?{parsed.query}"
+
+    request_body = json.dumps(json_body).encode("utf-8") if json_body is not None else None
 
     logger.info("HTTP %s to %s (timeout=%ds)", method, url[:100], timeout)
 
+    conn_cls = _PinnedHTTPSConnection if scheme == "https" else _PinnedHTTPConnection
+    conn = conn_cls(host, port, ip, timeout)
     try:
-        response = httpx.request(
-            method,
-            url,
-            json=json_body,
-            headers=headers,
-            timeout=float(timeout),
-            # Redirect targets are not revalidated by httpx.
-            follow_redirects=False,
-        )
+        conn.request(method, path, body=request_body, headers=headers)
+        resp = conn.getresponse()
 
-        # Log status
-        logger.info("HTTP %s response: %d", method, response.status_code)
+        logger.info("HTTP %s response: %d", method, resp.status)
+
+        body_text = _decode_body(resp.read(), resp.getheader("Content-Encoding", ""))
 
         # Collect response
-        status_line = f"Status: {response.status_code}"
+        status_line = f"Status: {resp.status} {resp.reason}"
         headers_str = "\nHeaders:"
-        for key, val in response.headers.items():
+        for key, val in resp.getheaders():
             headers_str += f"\n  {key}: {val}"
 
-        # Try to parse as JSON; fallback to text
-        try:
-            body_text = json.dumps(response.json(), indent=2)
-        except (json.JSONDecodeError, ValueError):
-            body_text = response.text
+        # Try to parse as JSON; fallback to raw text
+        # Try to parse as JSON; fallback to raw text
+        with contextlib.suppress(json.JSONDecodeError, ValueError):
+            body_text = json.dumps(json.loads(body_text), indent=2)
+        body_text = _truncate_response(body_text)
 
         body_text = _truncate_response(body_text)
 
         return f"{status_line}{headers_str}\n\nBody:\n{body_text}"
 
-    except httpx.TimeoutException:
+    except TimeoutError:
         return f"Error: Request timed out after {timeout}s"
-    except httpx.ConnectError as e:
+    except ssl.SSLError as e:
+        return f"Error: TLS connection failed: {e}"
+    except (OSError, http.client.HTTPException) as e:
         return f"Error: Connection failed: {e}"
-    except httpx.HTTPError as e:
-        return f"Error: HTTP request failed: {e}"
     except Exception as e:
         logger.error("HTTP request unexpected error: %s", e)
         return f"Error: HTTP request failed: {e}"
+    finally:
+        conn.close()
 
 
-def _http_get(args: dict[str, Any], **kwargs) -> str:
+def _http_get(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for http_get."""
     url = args.get("url", "")
     headers = args.get("headers", {})
-    timeout = int(args.get("timeout", 30))
+    timeout = _coerce_timeout(args.get("timeout", 30))
     return _make_request("GET", url, headers=headers, timeout=timeout)
 
 
-def _http_post(args: dict[str, Any], **kwargs) -> str:
+def _http_post(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for http_post."""
     url = args.get("url", "")
     body = args.get("body", "")
     headers = args.get("headers", {})
-    timeout = int(args.get("timeout", 30))
+    timeout = _coerce_timeout(args.get("timeout", 30))
     return _make_request("POST", url, body=body, headers=headers, timeout=timeout)
 
 
-def _http_put(args: dict[str, Any], **kwargs) -> str:
+def _http_put(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for http_put."""
     url = args.get("url", "")
     body = args.get("body", "")
     headers = args.get("headers", {})
-    timeout = int(args.get("timeout", 30))
+    timeout = _coerce_timeout(args.get("timeout", 30))
     return _make_request("PUT", url, body=body, headers=headers, timeout=timeout)
 
 
-def _http_delete(args: dict[str, Any], **kwargs) -> str:
+def _http_delete(args: dict[str, Any], **kwargs: Any) -> str:
     """Handler for http_delete."""
     url = args.get("url", "")
     headers = args.get("headers", {})
-    timeout = int(args.get("timeout", 30))
+    timeout = _coerce_timeout(args.get("timeout", 30))
     return _make_request("DELETE", url, headers=headers, timeout=timeout)
 
 

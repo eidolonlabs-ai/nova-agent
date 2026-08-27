@@ -236,3 +236,13 @@ def test_read_session_shows_title(temp_session_store):
     session_id = next(s["session_id"] for s in sessions if s.get("title") == "Docker Setup")
     result = _read_session_tool({"session_id": session_id}, session_store=temp_session_store)
     assert "Docker Setup" in result
+
+
+def test_read_session_default_limit(temp_session_store):
+    """read_session without an explicit limit caps at 100 messages."""
+    session_id = temp_session_store.create_session(title="Big Session")
+    for i in range(120):
+        temp_session_store.add_message(session_id, "user", f"message {i}")
+
+    result = _read_session_tool({"session_id": session_id}, session_store=temp_session_store)
+    assert result.count("[USER]") == 100

@@ -294,3 +294,56 @@ def test_skill_manage_create_default_category(temp_skills_dir, skills_config):
     skill_file = temp_skills_dir / "default_cat" / "SKILL.md"
     content = skill_file.read_text()
     assert "category: general" in content
+
+
+def test_skill_manage_create_escapes_special_chars(temp_skills_dir, skills_config):
+    """Descriptions with quotes, colons, and newlines must round-trip as valid YAML."""
+    import yaml
+
+    description = 'A "quoted" description: with colons\nand newlines!'
+    result = _skill_manage(
+        {
+            "action": "create",
+            "name": "special_chars",
+            "category": "general",
+            "description": description,
+            "content": "Body text",
+        },
+        config=skills_config,
+    )
+    assert "Created skill" in result
+
+    # Stored frontmatter must be parseable YAML with the exact value intact
+    skill_file = temp_skills_dir / "special_chars" / "SKILL.md"
+    raw = skill_file.read_text(encoding="utf-8")
+    fm = yaml.safe_load(raw.split("---", 2)[1])
+    assert fm["description"] == description
+    assert fm["name"] == "special_chars"
+
+
+def test_skill_manage_patch_preserves_quoted_frontmatter(temp_skills_dir, skills_config):
+    """Patching a skill's body must not corrupt frontmatter with colons/quotes."""
+    import yaml
+
+    _skill_manage(
+        {
+            "action": "create",
+            "name": "patch_me",
+            "category": "general",
+            "description": "plain: description",
+            "content": "v1",
+        },
+        config=skills_config,
+    )
+    result = _skill_manage(
+        {"action": "patch", "name": "patch_me", "content": "v2 body"},
+        config=skills_config,
+    )
+    assert "Updated" in result
+
+    # Frontmatter must survive the body rewrite intact
+    raw = (temp_skills_dir / "patch_me" / "SKILL.md").read_text(encoding="utf-8")
+    assert "v2 body" in raw
+    fm = yaml.safe_load(raw.split("---", 2)[1])
+    assert fm["description"] == "plain: description"
+    assert fm["name"] == "patch_me"

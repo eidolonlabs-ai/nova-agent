@@ -65,13 +65,24 @@ _MAX_OUTPUT_CHARS = 8000
 _MAX_COMMAND_LENGTH = 10000
 
 
-def _truncate_output(output: str, max_chars: int = _MAX_OUTPUT_CHARS) -> str:
-    """Truncate output to fit within budget."""
+def _truncate_output(
+    output: str, max_chars: int = _MAX_OUTPUT_CHARS, total_bytes: int | None = None
+) -> str:
+    """Truncate output to fit within budget.
+
+    total_bytes is the real output size in bytes when the caller only read a
+    slice — used to report an accurate truncation count.
+    """
     if len(output) <= max_chars:
+        if total_bytes is not None and total_bytes > len(output):
+            return (
+                f"{output}\n\n[...{total_bytes - len(output):,} more bytes of output not shown...]"
+            )
         return output
     head = int(max_chars * 0.7)
     tail = int(max_chars * 0.2)
-    return f"{output[:head]}\n\n[...{len(output) - head - tail:,} chars truncated...]\n\n{output[-tail:]}"
+    hidden = (total_bytes - head - tail) if total_bytes is not None else (len(output) - head - tail)
+    return f"{output[:head]}\n\n[...{hidden:,} bytes truncated...]\n\n{output[-tail:]}"
 
 
 def _is_destructive(command: str) -> bool:
@@ -86,7 +97,7 @@ def execute_terminal(args: dict[str, Any], **kwargs: Any) -> str:
     timeout = args.get("timeout", 60)
     workdir = args.get("workdir")
 
-    if not command:
+    if not isinstance(command, str) or not command:
         return "Error: No command provided."
 
     # Validate command length
@@ -147,9 +158,17 @@ def execute_terminal(args: dict[str, Any], **kwargs: Any) -> str:
                 return f"Error: Command timed out after {timeout}s."
             output_file.seek(0)
             raw = output_file.read(_MAX_OUTPUT_CHARS * 4)
+            try:
+                total_bytes = os.path.getsize(output_file.name)
+            except OSError:
+                total_bytes = None
         output = raw.decode("utf-8", errors="replace")
 
-        return f"exit code: {process.returncode}\n{_truncate_output(output) if output else '(no output)'}"
+        if not output:
+            return f"exit code: {process.returncode}\n(no output)"
+        return (
+            f"exit code: {process.returncode}\n{_truncate_output(output, total_bytes=total_bytes)}"
+        )
     except Exception as e:
         return f"Error: {e}"
 

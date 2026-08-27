@@ -216,3 +216,28 @@ def test_search_files_no_results():
 
     result = _search_files({"pattern": "notfound", "path": str(tmpdir)})
     assert "No matches" in result or "no matches" in result.lower() or "No results" in result
+
+
+def test_search_files_large_file_truncated():
+    """Files over the read cap are searched from their head only, with a note."""
+    tmpdir = Path(tempfile.mkdtemp())
+    big = tmpdir / "big.log"
+    # ~68KB of filler lines, needle buried past the 64KB cap
+    big.write_text(("x" * 200 + "\n") * 340 + "needle_here\n", encoding="utf-8")
+
+    result = _search_files({"pattern": "needle_here", "path": str(tmpdir)})
+    assert "No matches" in result
+    assert "read cap" in result  # the truncation note is shown
+
+    (tmpdir / "small.txt").write_text("needle_here\n", encoding="utf-8")
+    result2 = _search_files({"pattern": "needle_here", "path": str(tmpdir)})
+    assert "small.txt" in result2
+
+
+def test_search_files_invalid_max_results():
+    """A non-integer max_results must not crash the handler."""
+    tmpdir = Path(tempfile.mkdtemp())
+    (tmpdir / "a.txt").write_text("hello\n", encoding="utf-8")
+
+    result = _search_files({"pattern": "hello", "path": str(tmpdir), "max_results": "abc"})
+    assert "a.txt" in result
