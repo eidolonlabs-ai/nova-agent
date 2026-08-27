@@ -10,6 +10,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from nova.agent import NovaAgent, _normalize_message_history
+from nova.mcp_client import McpResourceInfo, McpToolInfo
 from nova.tools.registry import discover_builtin_tools
 
 
@@ -142,6 +143,110 @@ def test_agent_creates_session_on_init(minimal_config, mock_session_store, mock_
     assert agent.session_id is not None
     assert agent._system_prompt is not None
     assert "test agent" in agent._system_prompt
+
+
+class FakeMcpClient:
+    def __init__(self):
+        self.connected = False
+        self.calls = []
+        self.resources = [McpResourceInfo("server", "doc", "file://doc")]
+        self.tools = [McpToolInfo("server", "echo", "MCP echo", {"type": "object"})]
+
+    def connect_all(self):
+        self.connected = True
+        return ["server"]
+
+    def list_tools(self):
+        return self.tools
+
+    def list_resources(self):
+        return self.resources
+
+    def is_connected(self, name):
+        return self.connected and name == "server"
+
+    @property
+    def connected_servers(self):
+        return {"server"} if self.connected else set()
+
+    def call_tool(self, server, name, arguments):
+        self.calls.append((server, name, arguments))
+        return "mcp result"
+
+    def read_resource(self, server, uri):
+        self.calls.append((server, uri))
+        return "resource result"
+
+    def disconnect_all(self):
+        self.connected = False
+
+
+def test_mcp_tools_are_agent_local_and_namespaced(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    mcp = FakeMcpClient()
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+        mcp_client=mcp,
+    )
+
+    names = {item["function"]["name"] for item in agent._get_tool_definitions()}
+    assert "mcp__server__echo" in names
+    assert "mcp_read_resource" in names
+    assert "mcp__server__echo" not in agent_module_registry_names()
+
+
+def agent_module_registry_names():
+    from nova.tools.registry import registry
+
+    return registry.all_tool_names
+
+
+def test_mcp_calls_use_normal_permission_path_and_close(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    mcp = FakeMcpClient()
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+        mcp_client=mcp,
+        confirmation_callback=lambda _name, _args: True,
+    )
+    call = {"function": {"name": "mcp__server__echo", "arguments": json.dumps({"value": 1})}}
+    assert agent._execute_tool_call(call) == "mcp result"
+    assert mcp.calls == [("server", "echo", {"value": 1})]
+    assert (
+        agent._execute_tool_call(
+            {
+                "function": {
+                    "name": "mcp_read_resource",
+                    "arguments": json.dumps({"server_name": "server", "uri": "file://doc"}),
+                }
+            }
+        )
+        == "resource result"
+    )
+    agent.close()
+    assert not mcp.connected
+
+
+def test_mcp_resource_arguments_are_validated(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    mcp = FakeMcpClient()
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+        mcp_client=mcp,
+    )
+    result = agent._execute_tool_call(
+        {"function": {"name": "mcp_read_resource", "arguments": json.dumps({"uri": "x"})}}
+    )
+    assert result == "Error: server_name must be a non-empty string"
 
 
 def test_agent_workspace_controls_context_and_relative_tools(

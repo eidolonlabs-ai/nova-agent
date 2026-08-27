@@ -13,6 +13,7 @@ import json
 import logging
 import os
 import subprocess
+import threading
 from dataclasses import dataclass, field
 from typing import Any, Union
 
@@ -447,6 +448,7 @@ class McpClient:
         self._tools: list[McpToolInfo] = []
         self._resources: list[McpResourceInfo] = []
         self._connected: set[str] = set()
+        self._call_lock = threading.RLock()
 
     def add_server(self, config: McpServerConfig) -> None:
         """Register an MCP server configuration.
@@ -527,13 +529,14 @@ class McpClient:
             return f"Error: MCP server '{server_name}' is not connected."
 
         try:
-            response = transport.send_request(
-                "tools/call",
-                {
-                    "name": tool_name,
-                    "arguments": arguments,
-                },
-            )
+            with self._call_lock:
+                response = transport.send_request(
+                    "tools/call",
+                    {
+                        "name": tool_name,
+                        "arguments": arguments,
+                    },
+                )
             return self._extract_tool_result(response)
         except Exception as e:
             logger.error("MCP tool call failed (%s/%s): %s", server_name, tool_name, e)
@@ -546,7 +549,8 @@ class McpClient:
             return f"Error: MCP server '{server_name}' is not connected."
 
         try:
-            response = transport.send_request("resources/read", {"uri": uri})
+            with self._call_lock:
+                response = transport.send_request("resources/read", {"uri": uri})
             result = response.get("result", {})
             contents = result.get("contents", [])
             if contents:
@@ -559,6 +563,11 @@ class McpClient:
     def is_connected(self, server_name: str) -> bool:
         """Check if a server is connected."""
         return server_name in self._connected
+
+    @property
+    def connected_servers(self) -> frozenset[str]:
+        """Return the names of currently connected servers."""
+        return frozenset(self._connected)
 
     def _connect_server(self, name: str, config: McpServerConfig) -> bool:
         """Connect to a single MCP server using the appropriate transport."""
@@ -579,10 +588,13 @@ class McpClient:
 
             self._transports[name] = transport
 
+            discovered_tools: list[McpToolInfo] = []
+            discovered_resources: list[McpResourceInfo] = []
+
             # Discover tools
             tools_response = transport.send_request("tools/list")
             for tool in tools_response.get("result", {}).get("tools", []):
-                self._tools.append(
+                discovered_tools.append(
                     McpToolInfo(
                         server_name=name,
                         name=tool["name"],
@@ -591,10 +603,14 @@ class McpClient:
                     )
                 )
 
-            # Discover resources
-            resources_response = transport.send_request("resources/list")
+            # Resource discovery is optional in MCP.
+            try:
+                resources_response = transport.send_request("resources/list")
+            except Exception:
+                resources_response = {}
+                logger.debug("MCP server '%s' does not expose resources", name)
             for resource in resources_response.get("result", {}).get("resources", []):
-                self._resources.append(
+                discovered_resources.append(
                     McpResourceInfo(
                         server_name=name,
                         name=resource.get("name", resource.get("uri", "")),
@@ -602,6 +618,9 @@ class McpClient:
                         description=resource.get("description", ""),
                     )
                 )
+
+            self._tools.extend(discovered_tools)
+            self._resources.extend(discovered_resources)
 
             self._connected.add(name)
             logger.info(

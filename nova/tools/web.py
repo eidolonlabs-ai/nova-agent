@@ -15,10 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from nova.tools.firecrawl_client import (
-    UNTRUSTED_HEADER,
     FirecrawlUnavailable,
     as_dict,
-    budget,
+    budget_external,
     build_client,
     document_url,
     format_document,
@@ -84,7 +83,7 @@ def _string_list(args: dict[str, Any], key: str) -> list[str] | None:
 
 def _wrap_external(body: str, config: dict[str, Any] | None) -> str:
     """Label and budget attacker-controlled web content."""
-    return budget(f"{UNTRUSTED_HEADER}\n\n{body}", config)
+    return budget_external(body, "Firecrawl", config)
 
 
 def _one_page():
@@ -510,7 +509,7 @@ def _web_crawl(args: dict[str, Any], config: dict[str, Any] | None = None, **kwa
             lines.append("")
             lines.append("Blocked by robots.txt:")
             lines.extend(f"- {url}" for url in blocked)
-        return budget("\n".join(lines), config)
+        return budget_external("\n".join(lines), "Firecrawl crawl errors", config)
     except FirecrawlUnavailable as exc:
         return f"Error: {exc}"
     except Exception as exc:
@@ -672,7 +671,11 @@ def _web_parse(args: dict[str, Any], config: dict[str, Any] | None = None, **kwa
     body = get_field(doc, "markdown") or get_field(doc, "summary") or ""
     if not body:
         return f"Parsed {path.name} but no text content was returned."
-    return budget(f"Parsed {path.name} ({size:,} bytes):\n\n{body}", config)
+    return budget_external(
+        f"Parsed {path.name} ({size:,} bytes):\n\n{body}",
+        f"Firecrawl parser ({path.name})",
+        config,
+    )
 
 
 # ── web_dev_search ──────────────────────────────────────────────────────────

@@ -4,9 +4,10 @@ Provides a task manager for running shell commands and sub-agents
 in the background with status tracking, output tailing, and
 completion notifications.
 
-Design: lightweight, file-based output logs with in-memory task registry.
+Design: lightweight, file-based output logs with JSON task manifests.
 """
 
+import json
 import logging
 import os
 import signal
@@ -92,6 +93,43 @@ class BackgroundTaskManager:
         self._processes: dict[str, subprocess.Popen] = {}
         self._completion_listeners: list[Callable[[TaskRecord], None]] = []
         self._lock = threading.Lock()
+        self._load_manifests()
+
+    def _manifest_path(self, task_id: str) -> Path:
+        return self.tasks_dir / f"{task_id}.json"
+
+    @staticmethod
+    def _serialize_task(task: TaskRecord) -> dict[str, Any]:
+        data = dict(vars(task))
+        data["output_file"] = str(task.output_file) if task.output_file else None
+        return data
+
+    def _persist_task(self, task: TaskRecord) -> None:
+        path = self._manifest_path(task.id)
+        temporary = path.with_suffix(".json.tmp")
+        try:
+            temporary.write_text(json.dumps(self._serialize_task(task)), encoding="utf-8")
+            temporary.chmod(0o600)
+            temporary.replace(path)
+            path.chmod(0o600)
+        except OSError as exc:
+            logger.warning("Could not persist task %s: %s", task.id, type(exc).__name__)
+
+    def _load_manifests(self) -> None:
+        for path in self.tasks_dir.glob("b*.json"):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                output_file = data.pop("output_file", None)
+                task = TaskRecord(**data, output_file=Path(output_file) if output_file else None)
+            except (OSError, TypeError, ValueError):
+                logger.warning("Ignoring malformed task manifest %s", path.name)
+                continue
+            if task.status == STATUS_RUNNING:
+                task.status = STATUS_FAILED
+                task.ended_at = task.ended_at or time.time()
+                task.metadata["error"] = "Task was running when the manager restarted"
+                self._persist_task(task)
+            self._tasks[task.id] = task
 
     def create_shell_task(
         self,
@@ -125,6 +163,7 @@ class BackgroundTaskManager:
 
         with self._lock:
             self._tasks[task_id] = task
+        self._persist_task(task)
 
         # Start the process
         try:
@@ -144,10 +183,10 @@ class BackgroundTaskManager:
                 args=(proc, output_file),
                 daemon=True,
             ).start()
-            task.pid = proc.pid
-
             with self._lock:
+                task.pid = proc.pid
                 self._processes[task_id] = proc
+                self._persist_task(task)
 
             # Start watcher thread
             watcher = threading.Thread(
@@ -162,6 +201,7 @@ class BackgroundTaskManager:
             task.status = STATUS_FAILED
             task.metadata["error"] = str(e)
             task.ended_at = time.time()
+            self._persist_task(task)
             logger.error("Failed to start background task %s: %s", task_id, e)
             self._notify_completion(task)
 
@@ -172,12 +212,15 @@ class BackgroundTaskManager:
         if proc.stdout is None:
             return
         remaining = self.max_output_bytes
-        with output_file.open("wb") as output:
-            while chunk := proc.stdout.read(8192):
-                if remaining > 0:
-                    kept = chunk[:remaining]
-                    output.write(kept)
-                    remaining -= len(kept)
+        try:
+            with output_file.open("wb") as output:
+                while chunk := proc.stdout.read(8192):
+                    if remaining > 0:
+                        kept = chunk[:remaining]
+                        output.write(kept)
+                        remaining -= len(kept)
+        finally:
+            proc.stdout.close()
 
     def get_task(self, task_id: str) -> TaskRecord | None:
         """Get a task record by ID."""
@@ -252,6 +295,7 @@ class BackgroundTaskManager:
             if not proc or proc.poll() is not None:
                 task.status = STATUS_COMPLETED
                 task.ended_at = time.time()
+                self._persist_task(task)
                 finished = True
             else:
                 finished = False
@@ -288,6 +332,7 @@ class BackgroundTaskManager:
                 task.status = STATUS_KILLED
                 task.ended_at = time.time()
                 task.return_code = proc.returncode
+                self._persist_task(task)
                 finalizing = True
             else:
                 finalizing = False
@@ -305,16 +350,17 @@ class BackgroundTaskManager:
         status_note: str | None = None,
     ) -> str:
         """Update mutable task metadata fields."""
-        task = self.get_task(task_id)
-        if not task:
-            return f"Error: Task '{task_id}' not found."
-
-        if description is not None:
-            task.description = description
-        if progress is not None:
-            task.metadata["progress"] = progress
-        if status_note is not None:
-            task.metadata["status_note"] = status_note
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if not task:
+                return f"Error: Task '{task_id}' not found."
+            if description is not None:
+                task.description = description
+            if progress is not None:
+                task.metadata["progress"] = progress
+            if status_note is not None:
+                task.metadata["status_note"] = status_note
+            self._persist_task(task)
 
         return f"Task '{task_id}' updated."
 
@@ -356,6 +402,7 @@ class BackgroundTaskManager:
                     if timed_out
                     else (STATUS_COMPLETED if return_code == 0 else STATUS_FAILED)
                 )
+                self._persist_task(task)
                 should_notify = True
 
         if task and should_notify:
@@ -407,5 +454,12 @@ def reset_task_manager() -> None:
     global _task_manager
     with _task_manager_lock:
         if _task_manager:
+            tasks_dir = _task_manager.tasks_dir
             _task_manager.shutdown()
+            for path in tasks_dir.glob("b*.json"):
+                with suppress(OSError):
+                    path.unlink()
+            for path in tasks_dir.glob("b*.log"):
+                with suppress(OSError):
+                    path.unlink()
         _task_manager = None

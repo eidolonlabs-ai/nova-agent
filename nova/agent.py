@@ -10,7 +10,9 @@ import contextvars
 import copy
 import json
 import logging
+import re
 import sqlite3
+import threading
 import time
 import uuid
 from collections.abc import Callable
@@ -32,6 +34,7 @@ from nova.hooks import (
     EVENT_SESSION_START,
     hooks,
 )
+from nova.mcp_client import McpToolInfo, build_mcp_client
 from nova.microcompact import microcompact_messages
 from nova.model_metadata import get_model_context_window
 from nova.observability import create_observability, redact
@@ -117,6 +120,7 @@ class NovaAgent:
         prompt_mode: str = "full",
         confirmation_callback: Callable[[str, dict[str, Any]], bool] | None = None,
         workspace: Path | None = None,
+        mcp_client: Any | None = None,
     ):
         self.config = copy.deepcopy(config) if config else load_config()
         self._prompt_mode = prompt_mode
@@ -127,6 +131,10 @@ class NovaAgent:
         self._confirmation_callback = confirmation_callback
         self._tool_lifecycle_callback: Callable[[str, str, str, str | None], None] | None = None
         self.workspace = workspace.resolve() if workspace else Path.cwd().resolve()
+        self.mcp_client = mcp_client if mcp_client is not None else build_mcp_client(self.config)
+        self._mcp_call_lock = threading.RLock()
+        self._mcp_tools: dict[str, McpToolInfo] = {}
+        self._mcp_resource_tool_name = "mcp_read_resource"
         # Token estimate cache: hash(content) → token_count (bounded to 2048 entries)
         self._token_cache: dict[int, int] = {}
         self.last_run_trace: Any = None
@@ -170,6 +178,8 @@ class NovaAgent:
         # Discover tools (pass config so delegation tool can be gated)
         # Must happen before _create_session so system prompt includes tool summaries
         discover_builtin_tools(self.config)
+        self.mcp_client.connect_all()
+        self._refresh_mcp_tools()
 
         try:
             # Sub-agent depth tracking
@@ -208,6 +218,33 @@ class NovaAgent:
             observer.shutdown()
         if self._owns_client and hasattr(self.client, "close"):
             self.client.close()
+        if hasattr(self, "mcp_client"):
+            self.mcp_client.disconnect_all()
+
+    @staticmethod
+    def _namespace_mcp_tool(tool: McpToolInfo) -> str:
+        server = re.sub(r"[^A-Za-z0-9_-]", "_", tool.server_name)
+        name = re.sub(r"[^A-Za-z0-9_-]", "_", tool.name)
+        return f"mcp__{server}__{name}"
+
+    def _refresh_mcp_tools(self) -> None:
+        self._mcp_tools = {}
+        for tool in self.mcp_client.list_tools():
+            name = self._namespace_mcp_tool(tool)
+            if name not in self._mcp_tools:
+                self._mcp_tools[name] = tool
+
+    def _mcp_tool_info(self, name: str) -> McpToolInfo | None:
+        return self._mcp_tools.get(name)
+
+    def _mcp_summary(self) -> str:
+        lines = [
+            f"- {name}: {tool.description.split(chr(10))[0][:100]}"
+            for name, tool in sorted(self._mcp_tools.items())
+        ]
+        if self.mcp_client.list_resources() or self.mcp_client.connected_servers:
+            lines.append("- mcp_read_resource: Read a discovered MCP resource")
+        return "\n".join(lines)
 
     def _create_session(self):
         """Create a new session."""
@@ -258,6 +295,7 @@ class NovaAgent:
             cwd=self.workspace,
             mode=resolved_mode,
             wiki_content=wiki_content,
+            extra_tool_summary=self._mcp_summary(),
         )
 
     def _refresh_system_prompt(self, mode: str | None = None):
@@ -581,14 +619,19 @@ class NovaAgent:
             self.observability.tool(name, output_data="invalid_json")
             return f"Error: Invalid JSON arguments: {redact(arguments_str)}"
 
+        if not isinstance(arguments, dict):
+            self.observability.tool(name, output_data="invalid_arguments")
+            return "Error: Tool arguments must be an object"
         arguments = self._apply_workspace_defaults(name, arguments)
 
         # Permission check
         entry = registry.get_tool(name)
-        if entry is None:
+        mcp_tool = self._mcp_tool_info(name)
+        is_mcp_resource = name == self._mcp_resource_tool_name
+        if entry is None and mcp_tool is None and not is_mcp_resource:
             self.observability.tool(name, input_data=arguments, output_data="unknown_tool")
             return f"Error: Unknown tool: {name}"
-        is_read_only = entry.is_read_only if entry else False
+        is_read_only = entry.is_read_only if entry else is_mcp_resource
 
         # Resolve the path-bearing argument used by this tool before policy.
         file_path = self._permission_path(arguments)
@@ -628,15 +671,23 @@ class NovaAgent:
         for attempt in range(max_retries + 1):
             # Pass config, wiki, and agent reference to tool handlers via kwargs
             try:
-                result = registry.dispatch(
-                    name,
-                    arguments,
-                    config=self.config,
-                    wiki=self.wiki,
-                    session_store=self.session_store,
-                    workspace=self.workspace,
-                    agent=self,
-                )
+                if mcp_tool is not None:
+                    with self._mcp_call_lock:
+                        result = self.mcp_client.call_tool(
+                            mcp_tool.server_name, mcp_tool.name, arguments
+                        )
+                elif is_mcp_resource:
+                    result = self._read_mcp_resource(arguments)
+                else:
+                    result = registry.dispatch(
+                        name,
+                        arguments,
+                        config=self.config,
+                        wiki=self.wiki,
+                        session_store=self.session_store,
+                        workspace=self.workspace,
+                        agent=self,
+                    )
                 hooks.emit(EVENT_POST_TOOL_CALL, tool_name=name, args=arguments, result=result)
             except Exception as exc:
                 result = f"Error: Tool '{name}' failed: {type(exc).__name__}"
@@ -686,6 +737,18 @@ class NovaAgent:
         )
         return result
 
+    def _read_mcp_resource(self, arguments: dict[str, Any]) -> str:
+        server_name = arguments.get("server_name")
+        uri = arguments.get("uri")
+        if not isinstance(server_name, str) or not server_name:
+            return "Error: server_name must be a non-empty string"
+        if not isinstance(uri, str) or not uri:
+            return "Error: uri must be a non-empty string"
+        if not self.mcp_client.is_connected(server_name):
+            return f"Error: MCP server '{server_name}' is not connected."
+        with self._mcp_call_lock:
+            return self.mcp_client.read_resource(server_name, uri)
+
     def _apply_workspace_defaults(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         arguments = dict(arguments)
         if name == "terminal" and not arguments.get("workdir"):
@@ -734,7 +797,9 @@ class NovaAgent:
         for idx, tc in enumerate(tool_calls):
             fn_name = tc.get("function", {}).get("name", "")
             entry = registry.get_tool(fn_name)
-            if entry is not None and entry.is_read_only:
+            if (
+                entry is not None and entry.is_read_only
+            ) or fn_name == self._mcp_resource_tool_name:
                 read_only_calls.append((idx, tc))
             else:
                 write_calls.append((idx, tc))
@@ -1173,4 +1238,35 @@ class NovaAgent:
             if name == "delegate_task" and (not delegation_enabled or depth >= max_depth):
                 continue
             available.append(definition)
+        for name, tool in self._mcp_tools.items():
+            schema = tool.input_schema if isinstance(tool.input_schema, dict) else {}
+            available.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": name,
+                        "description": tool.description or f"Call MCP tool {tool.name}",
+                        "parameters": schema,
+                    },
+                }
+            )
+        if self.mcp_client.list_resources() or self.mcp_client.connected_servers:
+            available.append(
+                {
+                    "type": "function",
+                    "function": {
+                        "name": self._mcp_resource_tool_name,
+                        "description": "Read an MCP resource by server name and URI.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "server_name": {"type": "string"},
+                                "uri": {"type": "string"},
+                            },
+                            "required": ["server_name", "uri"],
+                            "additionalProperties": False,
+                        },
+                    },
+                }
+            )
         return available

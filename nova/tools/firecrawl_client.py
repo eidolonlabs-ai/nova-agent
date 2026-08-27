@@ -9,7 +9,7 @@ import logging
 import re
 from typing import Any
 
-from nova.context import truncate_with_head_tail
+from nova.context import label_external_content, truncate_with_head_tail
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +151,13 @@ def _is_firecrawl_error(exc: Exception) -> bool:
 def budget(text: str, config: dict[str, Any] | None) -> str:
     """Truncate text to the configured per-result character budget."""
     return truncate_with_head_tail(text, get_max_chars(config))
+
+
+def budget_external(text: str, source: str, config: dict[str, Any] | None) -> str:
+    """Label external text and budget only its body so the warning survives."""
+    label = label_external_content("", source).rstrip()
+    available = max(0, get_max_chars(config) - len(label) - 2)
+    return label_external_content(truncate_with_head_tail(text, available), source)
 
 
 def as_dict(obj: Any) -> dict[str, Any]:

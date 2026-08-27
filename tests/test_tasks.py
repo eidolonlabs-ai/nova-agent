@@ -90,6 +90,18 @@ def test_read_task_output(tmp_path):
     assert "hello world" in output
 
 
+def test_task_manifest_survives_manager_recreation(tmp_path):
+    first = _make_manager(tmp_path)
+    task_id = first.create_shell_task("printf persisted", "persisted")
+    time.sleep(0.5)
+
+    second = _make_manager(tmp_path)
+    task = second.get_task(task_id)
+    assert task is not None
+    assert task.description == "persisted"
+    assert "persisted" in second.read_task_output(task_id)
+
+
 def test_read_task_output_nonexistent(tmp_path):
     mgr = _make_manager(tmp_path)
     result = mgr.read_task_output("nonexistent")

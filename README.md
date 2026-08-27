@@ -35,7 +35,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | Hook/callback system | ✅ Active | Lifecycle events: pre/post tool call, LLM call, session start/end |
 | Cost tracking | ✅ Active | Per-model pricing and dollar cost estimation |
 | Background tasks | ✅ Active | Fire-and-forget shell execution with status tracking |
-| MCP integration | 📋 Planned | MCP transport/client implementation exists but is not wired into the agent runtime |
+| MCP integration | ✅ Active | Connect configured stdio, HTTP, and SSE Model Context Protocol servers |
 | Tool registry | ✅ Active | Extensible tools with JSON schema definitions |
 | Skills system | ✅ Active | SKILL.md files with starter skills for coding, git, file editing |
 | Context file discovery | ✅ Active | AGENTS.md, SOUL.md, CLAUDE.md, .cursorrules with injection scanning |

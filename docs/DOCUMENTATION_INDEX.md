@@ -28,7 +28,7 @@
 | [GUIDE-004-BACKGROUND_TASKS](GUIDE-004-BACKGROUND_TASKS.md) | ✅ Active | Fire-and-forget shell execution with status tracking |
 | [GUIDE-005-COST_TRACKING](GUIDE-005-COST_TRACKING.md) | ✅ Active | Token usage, dollar cost estimation, per-model pricing |
 | [GUIDE-006-HOOKS](GUIDE-006-HOOKS.md) | ✅ Active | Lifecycle callbacks: pre/post tool call, LLM call, session |
-| [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md) | 📋 Planned | Planned connection of stdio, HTTP, and SSE Model Context Protocol servers |
+| [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md) | ✅ Active | Connect stdio, HTTP, and SSE Model Context Protocol servers |
 | [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) | ✅ Active | Defense-in-depth cascade, allow/deny lists, path rules, opinionated profiles |
 | [GUIDE-009-USING_NOVA](GUIDE-009-USING_NOVA.md) | ✅ Active | Effective use patterns: task descriptions, sessions, wiki memory, tools |
 | [GUIDE-010-ROADMAP](GUIDE-010-ROADMAP.md) | ✅ Active | Project phases, timeline, completed and planned work |

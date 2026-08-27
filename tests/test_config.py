@@ -112,6 +112,24 @@ def test_invalid_config_values_are_rejected(section, key, value):
         _validate_config(config)
 
 
+def test_invalid_mcp_server_config_is_rejected():
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config["mcp"]["servers"] = {"server": {"type": "stdio", "command": ""}}
+    with pytest.raises(ConfigError, match="command"):
+        from nova.config import _validate_config
+
+        _validate_config(config)
+
+
+def test_invalid_mcp_server_type_is_rejected():
+    config = copy.deepcopy(DEFAULT_CONFIG)
+    config["mcp"]["servers"] = {"server": {"type": "telnet", "url": "x"}}
+    with pytest.raises(ConfigError, match="type"):
+        from nova.config import _validate_config
+
+        _validate_config(config)
+
+
 def test_global_config_loaded():
     """Global config (~/.nova/config.yaml) is loaded when it exists."""
     with tempfile.TemporaryDirectory() as tmp:

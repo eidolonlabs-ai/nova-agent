@@ -3,7 +3,6 @@
 Stores conversation sessions with message history, system prompts, and metadata.
 """
 
-import atexit
 import json
 import logging
 import re
@@ -25,7 +24,6 @@ class SessionStore:
         self.db_path.parent.chmod(0o700)
         self._init_db()
         self.db_path.chmod(0o600)
-        atexit.register(self.close)
 
     @contextmanager
     def _connection(self):

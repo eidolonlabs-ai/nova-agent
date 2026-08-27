@@ -212,6 +212,35 @@ def _validate_config(config: dict[str, Any]) -> None:
     ):
         raise ConfigError("web.timeout_seconds must be an integer between 1 and 300")
 
+    mcp = config.get("mcp", {})
+    if not isinstance(mcp, dict):
+        raise ConfigError("Config section 'mcp' must be a mapping")
+    servers = mcp.get("servers", {})
+    if not isinstance(servers, dict):
+        raise ConfigError("mcp.servers must be a mapping")
+    for name, server in servers.items():
+        if not isinstance(name, str) or not name:
+            raise ConfigError("mcp server names must be non-empty strings")
+        if not isinstance(server, dict):
+            raise ConfigError(f"mcp.servers.{name} must be a mapping")
+        server_type = server.get("type", "stdio")
+        if server_type not in {"stdio", "http", "sse"}:
+            raise ConfigError(f"mcp.servers.{name}.type must be stdio, http, or sse")
+        endpoint_key = "command" if server_type == "stdio" else "url"
+        if not isinstance(server.get(endpoint_key), str) or not server[endpoint_key]:
+            raise ConfigError(f"mcp.servers.{name}.{endpoint_key} must be a non-empty string")
+        for key in ("args", "env") if server_type == "stdio" else ("headers",):
+            value = server.get(key, [] if key == "args" else {})
+            expected = list if key == "args" else dict
+            if not isinstance(value, expected):
+                raise ConfigError(
+                    f"mcp.servers.{name}.{key} must be a {key[:-1] if key == 'args' else 'mapping'}"
+                )
+        if server_type != "stdio":
+            timeout = server.get("timeout", 30.0)
+            if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise ConfigError(f"mcp.servers.{name}.timeout must be positive")
+
 
 def _resolve_env_vars(value: Any) -> Any:
     """Resolve ${ENV_VAR} and $ENV_VAR placeholders in config values."""

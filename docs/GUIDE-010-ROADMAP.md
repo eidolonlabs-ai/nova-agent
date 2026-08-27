@@ -27,7 +27,7 @@ Made Nova safe to run and extensible for real-world use.
 - ✅ Hook/callback system (pre/post tool call, LLM call, session lifecycle)
 - ✅ Cost tracking (per-model pricing, dollar estimation)
 - ✅ Background task system (fire-and-forget shell execution)
-- 📋 MCP integration (stdio, HTTP, SSE servers; client implementation not yet wired into runtime)
+- ✅ MCP integration (stdio, HTTP, SSE servers; agent-local namespaced tools)
 - ✅ Sub-agent delegation (worker thread with own budget and timeout)
 - ✅ Automatic retry (exponential backoff + jitter)
 - ✅ Prompt mode gating (full for main agent, minimal for sub-agents)
