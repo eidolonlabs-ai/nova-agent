@@ -47,6 +47,7 @@
 | [ADR-001-SUBAGENT_COMPARISON](ADR-001-SUBAGENT_COMPARISON.md) | ✅ Active | Sub-agent architecture comparison and tradeoffs |
 | [ADR-002-SUBAGENT_DESIGN](ADR-002-SUBAGENT_DESIGN.md) | ✅ Active | Sub-agent design decisions and implementation approach |
 | [ADR-003-TOOL_SYSTEM_REVIEW](ADR-003-TOOL_SYSTEM_REVIEW.md) | ✅ Active | Tool system design review and architectural notes |
+| [ADR-004-SDK_PRODUCTIZATION](ADR-004-SDK_PRODUCTIZATION.md) | ✅ Accepted | Productize Nova as a public Python SDK: contract, semver, docs, publishing |
 
 ---
 
@@ -55,6 +56,8 @@
 | Document | Status | What It Covers |
 |----------|--------|----------------|
 | [SPEC-001-HARNESS_ENGINEERING](SPEC-001-HARNESS_ENGINEERING.md) | ✅ Active | Harness engineering: verification, acceptance states, unified traces, and optional Langfuse telemetry |
+| [SPEC-002-ACP_INTEGRATION](SPEC-002-ACP_INTEGRATION.md) | 📋 Planned | ACP editor parity: client MCP servers, session management, UX features, remote transports |
+| [SPEC-003-NOVA_SDK_PUBLIC_API](SPEC-003-NOVA_SDK_PUBLIC_API.md) | 📋 Planned | Public API surface: NovaAgent, typed options/events, harness traces, stores, PyPI |
 
 ---
 
@@ -64,6 +67,14 @@
 |----------|--------|----------------|
 | [REPORT-001-PROJECT_STATUS_2026-05-02](REPORT-001-PROJECT_STATUS_2026-05-02.md) | ✅ Active | Test coverage baseline, CI status, open work as of May 2026 |
 | [REPORT-002-ACP_IMPLEMENTATION_HANDOFF](REPORT-002-ACP_IMPLEMENTATION_HANDOFF.md) | ✅ Active | ACP implementation state, decisions, verification, and follow-on work |
+
+---
+
+## 🔬 Research (RESEARCH-NNN)
+
+| Document | Status | What It Covers |
+|----------|--------|----------------|
+| [RESEARCH-001-AGENTCORE_HOSTING](RESEARCH-001-AGENTCORE_HOSTING.md) | 📋 Planned | Amazon Bedrock AgentCore as a hosting target: harness vs Runtime, adapter pattern, gaps |
 
 ---
 
@@ -105,13 +116,14 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 | Category | Count | Status |
 |----------|-------|--------|
 | Guides (GUIDE-NNN) | 15 | ✅ All current |
-| ADRs (ADR-NNN) | 3 | ✅ All current |
-| Specs (SPEC-NNN) | 1 | ✅ All current |
+| ADRs (ADR-NNN) | 4 | ✅ All current |
+| Specs (SPEC-NNN) | 3 | ✅ All current |
+| Research (RESEARCH-NNN) | 1 | ✅ Current |
 | Releases (RELEASE-NNN) | 1 | ✅ All current |
 | Reports (REPORT-NNN) | 2 | ✅ Current |
 | Starter skills | 16 | ✅ All current |
 | Root docs (README, CONTRIBUTING, SECURITY, AGENTS) | 4 | ✅ All current |
-| **Total** | **42** | ✅ Current |
+| **Total** | **46** | ✅ Current |
 
 **Supported doc type prefixes:** GUIDE · PRD · PERSONA · SPEC · ADR · RUN · RELEASE · STRATEGY · RESEARCH · GTM · REPORT
 
