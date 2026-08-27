@@ -818,7 +818,7 @@ def print_footer(
         filled = round((pct / 100) * bar_w)
         bar = "█" * filled + "░" * (bar_w - filled)
 
-        # Format like Hermes: 15.5k/128k
+        # Format like Hermes: 15.5k/256k
         def _fmt(n: int) -> str:
             return f"{n / 1000:.1f}k" if n >= 1000 else str(n)
 

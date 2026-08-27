@@ -31,12 +31,17 @@ MODEL_CONTEXT_WINDOWS: dict[str, int] = {
     "mistralai/mistral-large-2411": 131_000,
     "mistralai/mistral-small-2503": 131_000,
     # DeepSeek
+    # Note: deepseek-v4-flash / deepseek-v4-pro support 1M context (api.deepseek.com docs).
+    # Bare names (e.g. "deepseek-v4-flash") aren't listed here, so they resolve via
+    # DEFAULT_CONTEXT_WINDOW below — bump to 1_000_000 if you want full headroom.
     "deepseek/deepseek-chat": 128_000,
     "deepseek/deepseek-r1": 128_000,
 }
 
-# Default context window when model is not in the lookup table
-DEFAULT_CONTEXT_WINDOW = 128_000
+# Default context window when model is not in the lookup table.
+# Conservative working cap: many modern models support far more (DeepSeek V4 = 1M),
+# but 256k keeps compression math sane without risking over-stuffing context.
+DEFAULT_CONTEXT_WINDOW = 256_000
 
 
 def get_model_context_window(model: str) -> int:
