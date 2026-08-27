@@ -6,7 +6,11 @@ from pathlib import Path
 import pytest
 
 from nova.session import SessionStore
-from nova.tools.search_sessions_tool import _read_session_tool, _search_sessions_tool
+from nova.tools.search_sessions_tool import (
+    _read_session_tool,
+    _search_messages_tool,
+    _search_sessions_tool,
+)
 
 
 @pytest.fixture
@@ -181,6 +185,26 @@ def test_search_sessions_message_content_search(temp_session_store):
     assert "Docker Setup" in result
 
 
+def test_search_messages_returns_matching_message(temp_session_store):
+    result = _search_messages_tool({"query": "Dockerfile"}, session_store=temp_session_store)
+    assert "Docker Setup" in result
+    assert "Historical data:" in result
+    assert "message" in result
+
+
+def test_search_messages_can_filter_session(temp_session_store):
+    session_id = next(
+        session["session_id"]
+        for session in temp_session_store.list_sessions()
+        if session["title"] == "Python Tips"
+    )
+    result = _search_messages_tool(
+        {"query": "How", "session_id": session_id}, session_store=temp_session_store
+    )
+    assert "Python Tips" in result
+    assert "Docker Setup" not in result
+
+
 # --- read_session tests ---
 
 
@@ -218,6 +242,20 @@ def test_read_session_with_limit(temp_session_store):
         {"session_id": session_id, "limit": 1}, session_store=temp_session_store
     )
     assert "[USER]" in result or "[ASSISTANT]" in result
+
+
+def test_read_session_around_message(temp_session_store):
+    session_id = next(
+        session["session_id"]
+        for session in temp_session_store.list_sessions()
+        if session["title"] == "Python Tips"
+    )
+    result = _read_session_tool(
+        {"session_id": session_id, "around_idx": 2, "radius": 0},
+        session_store=temp_session_store,
+    )
+    assert "[USER]" in result
+    assert "example" in result
     # Only 1 message returned — count role markers
     assert result.count("[USER]") + result.count("[ASSISTANT]") == 1
 

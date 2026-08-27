@@ -227,7 +227,7 @@ git diff HEAD   # everything since last commit
 
 - Use `/usage` to check token consumption for the current session
 - Use a cheaper model for simple tasks (`/model qwen/qwen3.6-flash`)
-- Lower `budgets.conversation_turn_limit` if you hit compression frequently
+- Lower `budgets.conversation_turn_limit` if active context grows too large
 - Use `nova ask` instead of `nova chat` for one-shot queries — no session overhead
 - Compact long sessions before switching to a new subtask
 

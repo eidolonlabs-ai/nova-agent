@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 class ErrorType:
     RETRYABLE = "retryable"  # Transient — should retry
     NON_RETRYABLE = "non_retryable"  # Permanent — should not retry
-    CONTEXT_OVERFLOW = "overflow"  # Context too long — needs compression
+    CONTEXT_OVERFLOW = "overflow"  # Context too long — needs deterministic compaction
     API_TIMEOUT = "api_timeout"  # API-level timeout — retry once only
     CONNECTION_TIMEOUT = "connection_timeout"  # Connection issue — retry with backoff
 

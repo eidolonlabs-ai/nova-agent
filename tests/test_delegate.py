@@ -51,7 +51,6 @@ def _minimal_config(delegation_enabled: bool = False, depth: int = 0) -> dict:
         "wiki": {"enabled": False},
         "session": {"directory": str(tempfile.mkdtemp())},
         "skills": {"enabled": False},
-        "compression": {"enabled": False},
         "context_files": [],
         "delegation": {
             "enabled": delegation_enabled,

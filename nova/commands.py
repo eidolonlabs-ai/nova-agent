@@ -38,7 +38,7 @@ COMMAND_REGISTRY: list[CommandDef] = [
     CommandDef("sessions", "List recent sessions", "Session"),
     CommandDef("resume", "Resume a previous session", "Session", args_hint="[id]"),
     CommandDef("title", "Set a title for this session", "Session", args_hint="[name]"),
-    CommandDef("compact", "Summarise and compress context", "Session"),
+    CommandDef("compact", "Reduce active conversation context", "Session"),
     # Configuration
     CommandDef("model", "Show or switch model", "Configuration", args_hint="[model]"),
     CommandDef("config", "Show current configuration", "Configuration"),

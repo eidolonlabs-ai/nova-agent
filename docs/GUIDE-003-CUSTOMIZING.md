@@ -54,20 +54,6 @@ llm:
   # model: "openai/gpt-4.1"                      # Good all-rounder
 ```
 
-### Summarization Model
-
-When context compression is triggered, Nova uses a separate (cheaper) model for summarization. The default is also **`qwen/qwen3.6-flash`**:
-
-```yaml
-compression:
-  enabled: true
-  threshold_percent: 0.40
-  summary_model: "qwen/qwen3.6-flash"  # Cheap model for summarization
-  reserve_tokens: 15000
-```
-
-You can use a different model here if you prefer — it only runs during compression, so cost impact is minimal.
-
 ### Token Budgets
 
 Nova enforces explicit token budgets at every layer. Adjust these based on your needs:
@@ -80,7 +66,7 @@ budgets:
   context_file_max_chars: 10000     # Max chars per context file (AGENTS.md, etc.)
   context_total_max_chars: 50000    # Max total chars across all context files
   tool_result_max_chars: 8000       # Max chars per tool result returned to the model
-  conversation_turn_limit: 15       # Turns before compression triggers
+  conversation_turn_limit: 15       # Recent turns loaded into active context
 ```
 
 **Lower budgets = fewer tokens = cheaper/faster.** Start conservative and increase if the agent needs more context.
@@ -433,31 +419,17 @@ cost_tracking:
   enabled: false
 ```
 
-## Context Compression
+## Context Compaction
 
-Nova uses a three-tier compaction strategy to manage context windows. See [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) for the full strategy, trade-offs, and configuration reference.
-
-**Tier 1: Microcompact** — Strips old tool result content while preserving message structure. Cheap, no LLM call needed.
-
-**Tier 2: LLM Summarization** — When microcompact isn't enough, Nova calls a summarization model to condense older messages into a summary, preserving recent context and tool call structure.
+Nova compacts context deterministically without making an additional LLM call. It first strips old tool output, then removes complete oldest turns when the active request exceeds its model budget. Recent messages and valid tool-call/result pairs are preserved. See [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md).
 
 ```yaml
-compression:
-  enabled: true
-  threshold_percent: 0.40       # Compress at 40% of context window
-  summary_model: "qwen/qwen3.6-flash"  # Model for summarization
-  reserve_tokens: 15000         # Reserve for compaction overhead
-
 microcompact:
-  enabled: true                 # Enable Tier 1 (cheap, no LLM call)
-  keep_recent: 6                # Recent messages to preserve fully
+  enabled: true
+  keep_recent: 6
 ```
 
-The compression flow is:
-1. Check if total tokens exceed threshold (context_window × threshold_percent - reserve_tokens)
-2. **Tier 1**: Strip old tool content → if still over threshold →
-3. **Tier 2**: LLM summarizes older messages, injects summary as system message
-4. **Tier 3**: User runs `/new` to start a fresh session (manual reset)
+Raw session history remains searchable with `search_messages`. Use `read_session` with `around_idx` to retrieve a small historical context window.
 
 ## Retry Logic
 
@@ -473,7 +445,7 @@ retry:
 **Error classification:**
 - **Retryable**: 429 (rate limit), 5xx (server errors), timeout, connection errors
 - **Non-retryable**: 4xx (bad request, auth errors) — raised immediately
-- **Context overflow**: Triggers compression instead of retry
+- **Context overflow**: Triggers deterministic compaction instead of retry
 
 ## Tips
 
@@ -486,7 +458,7 @@ retry:
 7. **Use `permissions.mode: "ask"`** — for safer tool execution (future TUI will show approval dialogs)
 8. **Use background tasks** — for long-running commands like test suites or builds
 9. **Connect MCP servers** — for filesystem, GitHub, database, and other external tool access
-10. **Use a cheap model for `summary_model`** — compression runs frequently, so cost matters
+10. **Use historical search** — recover older decisions with `search_messages` and `read_session`
 11. **Increase `max_retries` for rate-limited models** — if you hit 429s often, more retries help
 
 ---

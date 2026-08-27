@@ -32,7 +32,7 @@ Create → Active → Compact → Persisted / Resumed / Deleted
 
 1. **Create** — A new session starts when you run `nova chat` or call `/new`. Each session gets a UUID.
 2. **Active** — Messages flow in and out. The session accumulates history, token usage, and tool call records.
-3. **Compact** — When the context approaches its budget, Nova runs microcompact or LLM compression (see [GUIDE-011](GUIDE-011-CONTEXT_COMPRESSION.md)).
+3. **Compact** — When the context approaches its budget, Nova deterministically compacts old tool output and removes complete old turns (see [GUIDE-011](GUIDE-011-CONTEXT_COMPRESSION.md)).
 4. **Persisted** — The session is saved to disk. It remains available after the chat ends.
 5. **Resumed** — You can pick up a persisted session later with `/resume`.
 
@@ -133,13 +133,12 @@ Delegation: 0 sub-agents spawned
 
 ## Session Configuration
 
-Sessions inherit their budget from the `context` config:
+Sessions use the model context window and token budgets for active context:
 
 ```yaml
-context:
-  budget: 128000        # total token budget
-  threshold_percent: 85 # trigger compression
-  preserve_recent: 6    # always keep these messages intact
+microcompact:
+  enabled: true
+  keep_recent: 6         # protect recent messages from tool-output compaction
 ```
 
 ### Session-Specific Overrides

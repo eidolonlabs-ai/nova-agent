@@ -1,7 +1,7 @@
 """Main agent loop.
 
 Handles the conversation loop with tool calling, streaming,
-context compression, and session management.
+deterministic context management, and session management.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
-from nova.compression import compress_conversation
 from nova.config import ensure_nova_home, load_config
 from nova.cost_tracker import CostTracker, extract_usage_from_response
 from nova.harness import HarnessTrace, VerificationResult, derive_run_status
@@ -34,7 +33,7 @@ from nova.hooks import (
     hooks,
 )
 from nova.mcp_client import McpToolInfo, build_mcp_client
-from nova.microcompact import microcompact_messages
+from nova.microcompact import compact_to_token_budget
 from nova.model_metadata import get_model_context_window
 from nova.observability import create_observability, redact
 from nova.permissions import PermissionChecker, build_permission_checker
@@ -925,23 +924,6 @@ class NovaAgent:
         api_messages = [{"role": "system", "content": self._system_prompt or ""}]
         api_messages.extend(self.messages)
 
-        # Proactive history trimming: keep recent turns within budget
-        turn_limit = self.config["budgets"].get("conversation_turn_limit", 15)
-        max_messages = turn_limit * 4  # ~4 msgs per turn (user + assistant + tool pairs)
-        if len(self.messages) > max_messages:
-            # Keep the most recent messages, drop the oldest
-            trim_count = len(self.messages) - max_messages
-            logger.info(
-                "Trimming %d oldest messages from conversation history "
-                "(keeping last %d messages / ~%d turns)",
-                trim_count,
-                max_messages,
-                turn_limit,
-            )
-            self.messages = _normalize_message_history(self.messages[-max_messages:])
-            api_messages = [{"role": "system", "content": self._system_prompt or ""}]
-            api_messages.extend(self.messages)
-
         # Get tool definitions
         tools = self._get_tool_definitions()
 
@@ -958,87 +940,40 @@ class NovaAgent:
         while iteration < max_iterations:
             iteration += 1
 
-            # Check context window — apply microcompact if approaching budget
-            total_tokens = estimate_total_request_tokens(
-                api_messages,
-                system_prompt="",
-                tools=tools,
-            )
-            compression_cfg = self.config.get("compression", {})
+            # Keep requests below the model window without making another LLM call.
+            total_tokens = estimate_total_request_tokens(api_messages, tools=tools)
+            context_window = get_model_context_window(self.config["llm"]["model"])
+            response_reserve = max(1024, int(self.config["llm"].get("max_tokens", 8192)))
+            safety_margin = 1024
+            active_budget = max(1, context_window - response_reserve - safety_margin)
             microcompact_cfg = self.config.get("microcompact", {})
-            if compression_cfg.get("enabled"):
-                # Use model-specific context window
-                context_window = get_model_context_window(
-                    self.config["llm"]["model"],
+            if total_tokens > active_budget:
+                keep_recent = int(microcompact_cfg.get("keep_recent", 6))
+                compacted = compact_to_token_budget(
+                    api_messages,
+                    max_tokens=active_budget - estimate_total_request_tokens([], tools=tools),
+                    keep_recent=keep_recent,
+                    strip_tool_results=microcompact_cfg.get("enabled", True),
                 )
-                reserve_tokens = max(0, int(compression_cfg.get("reserve_tokens", 0)))
-                threshold = max(
-                    1,
-                    int(context_window * compression_cfg.get("threshold_percent", 0.40))
-                    - reserve_tokens,
-                )
-
-                # Tier 1: Microcompact — strip old tool content (cheap, no LLM call)
-                if microcompact_cfg.get("enabled", True) and total_tokens >= threshold:
-                    keep_recent = microcompact_cfg.get("keep_recent", 6)
-                    compacted = microcompact_messages(api_messages, keep_recent=keep_recent)
-                    compacted_tokens = estimate_total_request_tokens(
-                        compacted, system_prompt="", tools=tools
+                compacted = _normalize_message_history(compacted)
+                compacted_tokens = estimate_total_request_tokens(compacted, tools=tools)
+                if compacted_tokens < total_tokens:
+                    logger.info(
+                        "Deterministic compaction: %d → %d tokens (saved %d)",
+                        total_tokens,
+                        compacted_tokens,
+                        total_tokens - compacted_tokens,
                     )
-                    savings = total_tokens - compacted_tokens
-                    if savings > 0:
-                        logger.info(
-                            "Microcompact saved %d tokens (%d → %d)",
-                            savings,
-                            total_tokens,
-                            compacted_tokens,
-                        )
-                        api_messages = _normalize_message_history(compacted)
-                        # Sync self.messages with compacted state so token
-                        # estimates stay accurate for the remainder of the turn.
-                        self.messages = self._conversation_messages_from_api(compacted)
-                        total_tokens = compacted_tokens
-
-                # Tier 2: LLM-based context compression
-                if total_tokens >= threshold:
-                    summary_model = compression_cfg.get(
-                        "summary_model",
-                        self.config["llm"]["model"],
+                    api_messages = compacted
+                    self.messages = self._conversation_messages_from_api(compacted)
+                    total_tokens = compacted_tokens
+                if total_tokens > active_budget:
+                    logger.warning(
+                        "Context remains above active budget: %d > %d tokens; "
+                        "historical retrieval may be needed",
+                        total_tokens,
+                        active_budget,
                     )
-                    preserve_recent = microcompact_cfg.get("keep_recent", 6)
-                    tokens_before_t2 = total_tokens
-                    compressed = compress_conversation(
-                        messages=api_messages,
-                        openai_client=self.client,
-                        model=summary_model,
-                        preserve_recent=preserve_recent,
-                        provider=self.config["llm"].get("provider", "openai"),
-                    )
-                    if compressed:
-                        api_messages = _normalize_message_history(compressed)
-                        # Sync self.messages with compressed state.
-                        self.messages = self._conversation_messages_from_api(compressed)
-                        total_tokens = estimate_total_request_tokens(
-                            api_messages, system_prompt="", tools=tools
-                        )
-                        t2_savings = tokens_before_t2 - total_tokens
-                        logger.info(
-                            "LLM compression: %d → %d tokens (saved %d, %.0f%%)",
-                            tokens_before_t2,
-                            total_tokens,
-                            t2_savings,
-                            100 * t2_savings / tokens_before_t2 if tokens_before_t2 else 0,
-                        )
-                    else:
-                        logger.warning(
-                            "Context approaching compression threshold: %d >= %d tokens "
-                            "(model: %s, window: %d). "
-                            "Consider starting a new session.",
-                            total_tokens,
-                            threshold,
-                            self.config["llm"]["model"],
-                            context_window,
-                        )
 
             # Call LLM
             response = self._call_llm(

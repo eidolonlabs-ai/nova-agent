@@ -53,13 +53,6 @@ budgets:
   tool_result_max_tokens: 12000     # Token cap per tool result
   conversation_turn_limit: 15       # DM session turn limit before compression
 
-# Context compression
-compression:
-  enabled: true
-  threshold_percent: 0.40    # Compress at 40% of context window
-  summary_model: "qwen/qwen3.6-flash"  # Cheap model for summarization
-  reserve_tokens: 30000      # Reserve for compaction overhead
-
 # Context files to discover (project-level context, in priority order)
 # Note: Global personality file (~/.nova/SOUL.md) is loaded separately via load_global_personality()
 context_files:

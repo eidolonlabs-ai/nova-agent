@@ -99,7 +99,6 @@ def test_env_var_unchanged_if_missing():
         ("agent", "max_iterations", 0),
         ("agent", "temperature", 3.0),
         ("budgets", "tool_result_max_chars", -1),
-        ("compression", "threshold_percent", 1.5),
         ("retry", "max_retries", 11),
     ],
 )

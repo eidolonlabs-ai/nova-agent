@@ -359,17 +359,28 @@ def cmd_undo(agent: NovaAgent, args: str) -> None:
 def cmd_compact(agent: NovaAgent, args: str) -> None:
     from nova.agent import _normalize_message_history
     from nova.display import _DIM, _RST, _cprint
+    from nova.microcompact import compact_to_token_budget
+    from nova.model_metadata import get_model_context_window
+    from nova.tokens import estimate_messages_tokens, estimate_total_request_tokens
 
-    _cprint(f"{_DIM}Compacting context…{_RST}")
-    # Keep system prompt + recent messages, cut at a safe boundary so no tool
-    # result loses its parent assistant tool_calls message.
-    if len(agent.messages) > 4:
-        cut = len(agent.messages) - 4
-        while cut > 0 and agent.messages[cut].get("role") != "user":
-            cut -= 1
-        agent.messages = _normalize_message_history(agent.messages[cut:])
-        if agent.session_id:
-            agent.session_store.replace_messages(agent.session_id, agent.messages)
+    _cprint(f"{_DIM}Reducing active context…{_RST}")
+    api_messages = [{"role": "system", "content": agent._system_prompt or ""}]
+    api_messages.extend(agent.messages)
+    tools = agent._get_tool_definitions()
+    context_window = get_model_context_window(agent.config["llm"]["model"])
+    reserve = max(1024, int(agent.config["llm"].get("max_tokens", 8192))) + 1024
+    budget = max(1, context_window - reserve)
+    tool_tokens = estimate_total_request_tokens([], tools=tools)
+    keep_recent = int(agent.config.get("microcompact", {}).get("keep_recent", 6))
+    forced_target = estimate_messages_tokens([*api_messages[:1], *api_messages[-keep_recent:]])
+    compacted = compact_to_token_budget(
+        api_messages,
+        max_tokens=min(max(1, budget - tool_tokens), forced_target),
+        keep_recent=keep_recent,
+    )
+    agent.messages = _normalize_message_history(agent._conversation_messages_from_api(compacted))
+    if agent.session_id:
+        agent.session_store.replace_messages(agent.session_id, agent.messages)
     _cprint(f"{_DIM}Context compacted to {len(agent.messages)} messages{_RST}")
 
 

@@ -48,12 +48,6 @@ DEFAULT_CONFIG = {
         "tool_result_max_tokens": 12000,
         "conversation_turn_limit": 15,
     },
-    "compression": {
-        "enabled": True,
-        "threshold_percent": 0.40,
-        "summary_model": "qwen/qwen3.6-flash",
-        "reserve_tokens": 30000,
-    },
     "context_files": ["NOVA.md", "AGENTS.md"],
     "wiki": {
         "enabled": True,
@@ -133,7 +127,7 @@ class ConfigError(ValueError):
 
 def _validate_config(config: dict[str, Any]) -> None:
     """Validate resource and model controls before they reach the agent loop."""
-    sections = ("llm", "agent", "budgets", "compression", "microcompact", "retry")
+    sections = ("llm", "agent", "budgets", "microcompact", "retry")
     for section in sections:
         if not isinstance(config.get(section), dict):
             raise ConfigError(f"Config section '{section}' must be a mapping")
@@ -171,11 +165,6 @@ def _validate_config(config: dict[str, Any]) -> None:
     for name, value in budgets.items():
         if not isinstance(value, int) or value < 1:
             raise ConfigError(f"budgets.{name} must be a positive integer")
-
-    compression = config["compression"]
-    threshold = compression.get("threshold_percent")
-    if not isinstance(threshold, (int, float)) or not 0.05 <= threshold <= 0.95:
-        raise ConfigError("compression.threshold_percent must be between 0.05 and 0.95")
 
     microcompact = config["microcompact"]
     if not isinstance(microcompact.get("keep_recent"), int) or microcompact["keep_recent"] < 0:

@@ -29,7 +29,7 @@ Nova Agent combines the best patterns from two mature agent frameworks:
 | Feature | Status | Details |
 |---------|--------|---------|
 | Explicit token budgets | ✅ Active | Budgets at every layer — system prompt, skills, context, history |
-| Smart context management | ✅ Active | Head/tail truncation (70/20), microcompact, LLM compression |
+| Smart context management | ✅ Active | Head/tail truncation (70/20), deterministic compaction, searchable history |
 | Automatic retry | ✅ Active | Exponential backoff and jitter for transient API errors |
 | Permission system | ✅ Active | Defense-in-depth cascade (sensitive paths, deny/allow lists) |
 | Hook/callback system | ✅ Active | Lifecycle events: pre/post tool call, LLM call, session start/end |
@@ -314,7 +314,6 @@ nova/
   skills.py         # Skill discovery, frontmatter parsing, prompt gen
   tasks.py          # Background task manager
   tokens.py         # Token estimation via tiktoken
-  compression.py    # LLM-based context compression (Tier 2)
   tools/
     __init__.py
     registry.py     # Central tool registry with auto-discovery
@@ -380,7 +379,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development guidelines.
 | [MCP Integration](docs/GUIDE-007-MCP_INTEGRATION.md) | GUIDE | ✅ Active | Connect to MCP servers (stdio, HTTP, SSE) |
 | [Cost Tracking](docs/GUIDE-005-COST_TRACKING.md) | GUIDE | ✅ Active | Token usage, dollar cost estimation |
 | [Roadmap](docs/GUIDE-010-ROADMAP.md) | GUIDE | ✅ Active | Project phases, timeline, and targets |
-| [Context Compression](docs/GUIDE-011-CONTEXT_COMPRESSION.md) | GUIDE | ✅ Active | Three-tier context management: microcompact, LLM compress, reset |
+| [Context Compaction](docs/GUIDE-011-CONTEXT_COMPRESSION.md) | GUIDE | ✅ Active | Deterministic compaction and searchable historical retrieval |
 | [Session Management](docs/GUIDE-012-SESSION_MANAGEMENT.md) | GUIDE | ✅ Active | SQLite sessions, FTS5 search, slash commands |
 | [Memory System](docs/GUIDE-013-MEMORY_SYSTEM.md) | GUIDE | ✅ Active | Obsidian-compatible wiki memory: markdown notes, wikilinks, `Core/` auto-inject, maintenance |
 | [Retry & Error Handling](docs/GUIDE-014-RETRY_AND_ERROR_HANDLING.md) | GUIDE | ✅ Active | Exponential backoff, error classification, retries |

@@ -36,7 +36,6 @@ def minimal_config():
         "wiki": {"enabled": False},
         "session": {"directory": str(tempfile.mkdtemp())},
         "skills": {"enabled": False},
-        "compression": {"enabled": False},
         "context_files": [],
     }
 

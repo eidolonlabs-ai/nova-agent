@@ -12,7 +12,7 @@ The foundation: tool registry, context management, and the chat interface.
 
 - ✅ Tool registry with JSON schema definitions
 - ✅ Explicit token budgets at every layer (system, skills, context, history)
-- ✅ Smart context management (head/tail truncation, LLM compression)
+- ✅ Smart context management (head/tail truncation, deterministic compaction, searchable history)
 - ✅ Session storage with SQLite + FTS5 full-text search
 - ✅ Core tool set (terminal, file ops, search, HTTP, git)
 - ✅ Skills system with SKILL.md discovery
@@ -39,7 +39,7 @@ Made Nova safe to run and extensible for real-world use.
 
 Making Nova production-ready for teams and long sessions.
 
-- 🟡 **Context window optimization** — adaptive compression based on session length
+- 🟡 **Context window optimization** — adaptive deterministic compaction based on request budgets
 - 🟡 **Multi-model fallback** — if one model fails, try another automatically
 - 📋 **Session archival** — move old persisted sessions to cold storage
 - 📋 **Structured output mode** — force JSON responses for tool-heavy workflows
@@ -84,7 +84,7 @@ The following are explicitly **not** on the roadmap (trade-offs, not oversights)
 ## Next Steps
 
 1. **Release hardening** — validate security boundaries, supported Python versions, and installation paths
-2. **Context window optimization** — adaptive compression unblocks long-session reliability
+2. **Context window optimization** — adaptive compaction and historical retrieval unblock long-session reliability
 3. **Multi-model fallback** — reduces outage risk from OpenRouter downtime
 
 ---

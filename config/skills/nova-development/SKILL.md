@@ -84,7 +84,7 @@ nova/memory.py         — file-based memory with LRU eviction
 nova/tasks.py          — background task manager (fire-and-forget shell execution)
 nova/mcp_client.py     — MCP client: stdio, HTTP, SSE transports
 nova/cost_tracker.py   — per-model token usage and dollar cost estimation
-nova/compression.py    — LLM-based context compression (Tier 2)
+nova/microcompact.py   — Deterministic context compaction
 nova/microcompact.py   — cheap context compaction without LLM call (Tier 1)
 ```
 

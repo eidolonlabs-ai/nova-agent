@@ -119,15 +119,15 @@ nova ask "what is the current permissions mode?"
 /usage       — token usage and dollar cost for this session
 ```
 
-If compression is triggering too aggressively:
+If context is compacting too aggressively:
 ```yaml
 budgets:
   conversation_turn_limit: 20    # default 15 — increase for longer sessions
-compression:
-  threshold_percent: 0.60        # default 0.40 — compress less aggressively
+microcompact:
+  keep_recent: 10                # protect more recent messages
 ```
 
-If responses are slow or context feels stale after compression, `/new` and paste only the relevant context back in.
+If context feels stale after compaction, search historical messages or use `/new` and paste only the relevant context back in.
 
 ## Debugging a Failing CI Check
 

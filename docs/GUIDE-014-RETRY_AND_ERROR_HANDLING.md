@@ -30,7 +30,7 @@ Nova classifies every error into one of four categories, each with different ret
 |------------|----------|----------|
 | **Retryable** | Retry with exponential backoff | 429 rate limit, 500/502/503/504 server errors |
 | **Non-retryable** | Fail immediately | 400 bad request, 401 unauthorized, 403 forbidden |
-| **Context overflow** | Trigger compression, don't retry | Context window exceeded |
+| **Context overflow** | Trigger deterministic compaction, don't retry | Context window exceeded |
 | **API timeout** | Retry once only | "timeout", "temporary failure" |
 | **Connection timeout** | Retry with backoff | "connection refused", "connection reset" |
 
@@ -151,9 +151,9 @@ retry:
 When the context window is exceeded, retrying won't help. Nova handles this specially:
 
 1. **Detect** — API returns an error indicating context overflow
-2. **Compress** — Trigger context compression (see [GUIDE-011](GUIDE-011-CONTEXT_COMPRESSION.md))
+2. **Compact** — Reduce active context deterministically (see [GUIDE-011](GUIDE-011-CONTEXT_COMPRESSION.md))
 3. **Retry** — Re-attempt with the compressed context
-4. **Escalate** — If still overflowing after compression, fail with a clear message
+4. **Escalate** — If still overflowing after compaction, fail with a clear message
 
 This is different from normal retries because it changes the request, not just re-sends it.
 

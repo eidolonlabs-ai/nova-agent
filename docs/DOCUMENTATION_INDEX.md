@@ -32,7 +32,7 @@
 | [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) | ✅ Active | Defense-in-depth cascade, allow/deny lists, path rules, opinionated profiles |
 | [GUIDE-009-USING_NOVA](GUIDE-009-USING_NOVA.md) | ✅ Active | Effective use patterns: task descriptions, sessions, wiki memory, tools |
 | [GUIDE-010-ROADMAP](GUIDE-010-ROADMAP.md) | ✅ Active | Project phases, timeline, completed and planned work |
-| [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) | ✅ Active | Three-tier context management: microcompact, LLM compress, session reset |
+| [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) | ✅ Active | Deterministic compaction and searchable historical retrieval |
 | [GUIDE-012-SESSION_MANAGEMENT](GUIDE-012-SESSION_MANAGEMENT.md) | ✅ Active | SQLite session storage, FTS5 search, commands, lifecycle |
 | [GUIDE-013-MEMORY_SYSTEM](GUIDE-013-MEMORY_SYSTEM.md) | ✅ Active | Obsidian-compatible wiki memory: markdown notes, `[[wikilinks]]`, `Core/` auto-inject, maintenance |
 | [GUIDE-014-RETRY_AND_ERROR_HANDLING](GUIDE-014-RETRY_AND_ERROR_HANDLING.md) | ✅ Active | Exponential backoff, error classification, retry configuration |
@@ -104,6 +104,6 @@ Skills live in `config/skills/` — copy to `~/.nova/skills/` to activate.
 
 1. **Can't connect to LLM API** → Check `LLM_API_KEY` env var or `llm.api_key` in `config.yaml`
 2. **Tool blocked unexpectedly** → See [GUIDE-008-PERMISSIONS](GUIDE-008-PERMISSIONS.md) — check `denied_tools` and `path_rules`
-3. **Context too long / compression triggering** → See [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) — adjust `threshold_percent`
+3. **Context too long / compaction** → See [GUIDE-011-CONTEXT_COMPRESSION](GUIDE-011-CONTEXT_COMPRESSION.md) — adjust active context and retrieval settings
 4. **MCP server not appearing** → See [GUIDE-007-MCP_INTEGRATION](GUIDE-007-MCP_INTEGRATION.md#troubleshooting)
 5. **Skills not loading** → Check `~/.nova/skills/<name>/SKILL.md` exists with valid YAML frontmatter

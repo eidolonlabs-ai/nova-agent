@@ -119,22 +119,32 @@ class SessionStore:
         The trigram tokenizer enables substring and fuzzy matching. Existing
         databases using the default unicode tokenizer are migrated automatically
         by dropping and repopulating from session_fts (which is the source of truth).
-        user_version 1 marks the migration as complete.
+        user_version 3 marks the migrations as complete.
         """
         version = conn.execute("PRAGMA user_version").fetchone()[0]
-        if version >= 2:
-            return
-
-        conn.execute("DROP TABLE IF EXISTS session_search")
-        conn.execute(
-            "CREATE VIRTUAL TABLE session_search "
-            "USING fts5(session_id UNINDEXED, title, content, tokenize='trigram')"
-        )
-        conn.execute(
-            "INSERT INTO session_search(session_id, title, content) "
-            "SELECT session_id, title, content FROM session_fts"
-        )
-        conn.execute("PRAGMA user_version = 2")
+        if version < 2:
+            conn.execute("DROP TABLE IF EXISTS session_search")
+            conn.execute(
+                "CREATE VIRTUAL TABLE session_search "
+                "USING fts5(session_id UNINDEXED, title, content, tokenize='trigram')"
+            )
+            conn.execute(
+                "INSERT INTO session_search(session_id, title, content) "
+                "SELECT session_id, title, content FROM session_fts"
+            )
+            version = 2
+        if version < 3:
+            conn.execute("DROP TABLE IF EXISTS message_search")
+            conn.execute(
+                "CREATE VIRTUAL TABLE message_search "
+                "USING fts5(message_id UNINDEXED, session_id UNINDEXED, idx UNINDEXED, "
+                "role UNINDEXED, content, tokenize='trigram')"
+            )
+            conn.execute(
+                "INSERT INTO message_search(message_id, session_id, idx, role, content) "
+                "SELECT id, session_id, idx, role, content FROM messages"
+            )
+            conn.execute("PRAGMA user_version = 3")
 
     def create_session(
         self,
@@ -189,7 +199,7 @@ class SessionStore:
                 )
                 idx = cursor.fetchone()[0] + 1
 
-                conn.execute(
+                cursor = conn.execute(
                     "INSERT INTO messages "
                     "(session_id, idx, role, content, tool_calls, tool_call_id, reasoning_content, timestamp) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -203,6 +213,11 @@ class SessionStore:
                         reasoning_content,
                         now,
                     ),
+                )
+                conn.execute(
+                    "INSERT INTO message_search(message_id, session_id, idx, role, content) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (cursor.lastrowid, session_id, idx, role, content),
                 )
                 conn.execute(
                     "UPDATE sessions SET updated_at = ?, message_count = message_count + 1 WHERE session_id = ?",
@@ -220,10 +235,23 @@ class SessionStore:
 
         return idx
 
-    def get_messages(self, session_id: str, limit: int | None = None) -> list[dict]:
+    def get_messages(
+        self,
+        session_id: str,
+        limit: int | None = None,
+        around_idx: int | None = None,
+        radius: int = 2,
+    ) -> list[dict]:
         """Get all messages for a session, optionally limited."""
         with self._connection() as conn:
-            if limit:
+            if around_idx is not None:
+                radius = max(0, min(int(radius), 20))
+                query = (
+                    "SELECT role, content, tool_calls, tool_call_id, reasoning_content FROM messages "
+                    "WHERE session_id = ? AND idx BETWEEN ? AND ? ORDER BY idx"
+                )
+                cursor = conn.execute(query, (session_id, around_idx - radius, around_idx + radius))
+            elif limit:
                 # Use parameterized query to prevent SQL injection
                 query = (
                     "SELECT role, content, tool_calls, tool_call_id, reasoning_content FROM messages "
@@ -314,6 +342,7 @@ class SessionStore:
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            conn.execute("DELETE FROM message_search WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM session_fts WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM session_search WHERE session_id = ?", (session_id,))
             content_parts: list[str] = []
@@ -321,7 +350,7 @@ class SessionStore:
                 content = message.get("content") or ""
                 role = message.get("role", "")
                 tool_calls = message.get("tool_calls")
-                conn.execute(
+                cursor = conn.execute(
                     "INSERT INTO messages "
                     "(session_id, idx, role, content, tool_calls, tool_call_id, reasoning_content, timestamp) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -335,6 +364,11 @@ class SessionStore:
                         message.get("reasoning_content"),
                         now,
                     ),
+                )
+                conn.execute(
+                    "INSERT INTO message_search(message_id, session_id, idx, role, content) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (cursor.lastrowid, session_id, idx, role, content),
                 )
                 if role in ("user", "assistant") and content:
                     content_parts.append(content)
@@ -400,6 +434,9 @@ class SessionStore:
                 placeholders = ",".join("?" for _ in old_ids)
                 conn.execute(f"DELETE FROM messages WHERE session_id IN ({placeholders})", old_ids)
                 conn.execute(
+                    f"DELETE FROM message_search WHERE session_id IN ({placeholders})", old_ids
+                )
+                conn.execute(
                     f"DELETE FROM session_fts WHERE session_id IN ({placeholders})", old_ids
                 )
                 conn.execute(
@@ -440,4 +477,45 @@ class SessionStore:
             # FTS5 treats characters like ( ) : ^ - as query syntax; a hostile
             # or accidental operator string must degrade to no results.
             logger.warning("Session search rejected query %r: %s", fts_query[:80], e)
+            return []
+
+    def search_messages(
+        self, query: str, limit: int = 10, session_id: str | None = None
+    ) -> list[dict]:
+        """Search individual messages using the FTS5 trigram index."""
+        tokens = re.findall(r"\S+", query.strip())
+        if not tokens:
+            return []
+        fts_query = " ".join(f'"{token.replace(chr(34), chr(34) * 2)}"' for token in tokens)
+        try:
+            limit = max(1, min(int(limit), 50))
+            with self._connection() as conn:
+                sql = (
+                    "SELECT m.message_id, m.session_id, m.idx, m.role, "
+                    "snippet(message_search, 4, '[', ']', '...', 24), "
+                    "s.title, s.updated_at "
+                    "FROM message_search m JOIN sessions s ON s.session_id = m.session_id "
+                    "WHERE message_search MATCH ?"
+                )
+                params: list[object] = [fts_query]
+                if session_id:
+                    sql += " AND m.session_id = ?"
+                    params.append(session_id)
+                sql += " ORDER BY rank LIMIT ?"
+                params.append(limit)
+                rows = conn.execute(sql, params).fetchall()
+                return [
+                    {
+                        "message_id": row[0],
+                        "session_id": row[1],
+                        "idx": row[2],
+                        "role": row[3],
+                        "snippet": row[4],
+                        "title": row[5],
+                        "updated_at": row[6],
+                    }
+                    for row in rows
+                ]
+        except (sqlite3.OperationalError, ValueError, TypeError) as e:
+            logger.warning("Message search rejected query %r: %s", fts_query[:80], e)
             return []

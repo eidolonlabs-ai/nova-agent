@@ -53,7 +53,6 @@ def test_delegate_timeout_triggered():
         "llm": {"model": "test", "base_url": "http://test", "api_key": "test"},
         "agent": {"max_iterations": 3},
         "budgets": {"system_prompt_max": 8000},
-        "compression": {"enabled": False},
         "microcompact": {"enabled": True},
         "wiki": {"enabled": False},
         "session": {"directory": "/tmp"},

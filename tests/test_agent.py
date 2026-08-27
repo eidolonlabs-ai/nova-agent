@@ -378,9 +378,11 @@ def test_agent_run_with_tool_call(minimal_config, mock_session_store, mock_opena
     assert mock_openai_client.chat.completions.create.call_count == 2
 
 
-def test_agent_history_truncation(minimal_config, mock_session_store, mock_openai_client):
-    """Test that conversation history is trimmed when it exceeds the turn limit."""
-    minimal_config["budgets"]["conversation_turn_limit"] = 2
+def test_agent_history_compacts_to_token_budget(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    """Test that old complete turns are removed when the active budget is exceeded."""
+    minimal_config["llm"]["max_tokens"] = 100
 
     mock_openai_client.chat.completions.create.return_value = make_openai_response(content="OK")
 
@@ -391,14 +393,16 @@ def test_agent_history_truncation(minimal_config, mock_session_store, mock_opena
     )
 
     for i in range(10):
-        agent.messages.append({"role": "user", "content": f"msg {i}"})
-        agent.messages.append({"role": "assistant", "content": f"reply {i}"})
+        agent.messages.append({"role": "user", "content": f"msg {i} " * 100})
+        agent.messages.append({"role": "assistant", "content": f"reply {i} " * 100})
 
     assert len(agent.messages) == 20
 
-    agent.run("latest message", stream=False)
+    with patch("nova.agent.get_model_context_window", return_value=2000):
+        agent.run("latest message", stream=False)
 
-    assert len(agent.messages) <= 12  # 8 (trimmed) + 2 (new user+assistant)
+    assert len(agent.messages) < 22
+    assert not any("msg 0" in message.get("content", "") for message in agent.messages)
 
 
 def test_agent_execute_tool_call_invalid_json(

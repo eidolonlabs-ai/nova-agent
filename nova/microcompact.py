@@ -119,3 +119,32 @@ def estimate_savings(
         "compacted_tokens": compacted_tokens,
         "saved_tokens": original_tokens - compacted_tokens,
     }
+
+
+def compact_to_token_budget(
+    messages: list[dict[str, Any]],
+    max_tokens: int,
+    keep_recent: int = _DEFAULT_KEEP_RECENT,
+    strip_tool_results: bool = True,
+) -> list[dict[str, Any]]:
+    """Compact tool output and remove oldest complete turns to fit a budget."""
+    from nova.tokens import estimate_messages_tokens
+
+    result = (
+        microcompact_messages(messages, keep_recent=keep_recent)
+        if strip_tool_results
+        else list(messages)
+    )
+    while estimate_messages_tokens(result) > max_tokens:
+        user_indexes = [
+            index for index, message in enumerate(result) if message.get("role") == "user"
+        ]
+        if len(user_indexes) < 2:
+            break
+
+        # Remove one complete turn, ending immediately before the next user turn.
+        start = user_indexes[0]
+        end = user_indexes[1]
+        del result[start:end]
+
+    return result

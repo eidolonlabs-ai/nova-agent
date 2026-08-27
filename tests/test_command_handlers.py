@@ -325,11 +325,11 @@ def test_cmd_undo_does_nothing_with_one_message(agent):
 # ─── cmd_compact ─────────────────────────────────────────────────────────────
 
 
-def test_cmd_compact_trims_to_last_four_messages(agent):
+def test_cmd_compact_trims_to_configured_recent_messages(agent):
     agent.messages = [{"role": "user", "content": f"msg {i}"} for i in range(10)]
     with patch("nova.display._cprint"):
         dispatch_command("compact", agent, "")
-    assert len(agent.messages) == 4
+    assert len(agent.messages) == 6
 
 
 def test_cmd_compact_leaves_short_history_unchanged(agent):
