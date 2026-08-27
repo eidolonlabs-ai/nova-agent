@@ -17,6 +17,7 @@ import time
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
@@ -38,7 +39,13 @@ from nova.model_metadata import get_model_context_window
 from nova.observability import create_observability, redact
 from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
-from nova.providers import build_client, maybe_load_model_metadata
+from nova.providers import (
+    anthropic_messages,
+    build_client,
+    call_anthropic,
+    is_anthropic,
+    maybe_load_model_metadata,
+)
 from nova.retry import retry_with_backoff
 from nova.session import SessionStore
 from nova.tokens import (
@@ -328,9 +335,9 @@ class NovaAgent:
         agent_config = self.config["agent"]
         retry_cfg = self.config.get("retry", {})
 
-        if llm_config.get("provider", "openai") == "anthropic":
+        if is_anthropic(llm_config):
             anthropic_response = retry_with_backoff(
-                self._call_anthropic,
+                partial(call_anthropic, self.client, llm_config, agent_config),
                 messages,
                 tools,
                 stream,
@@ -456,156 +463,7 @@ class NovaAgent:
     def _anthropic_messages(
         messages: list[dict[str, Any]],
     ) -> tuple[str | None, list[dict[str, Any]]]:
-        system: str | None = None
-        converted: list[dict[str, Any]] = []
-        for message in messages:
-            role = message.get("role")
-            if role == "system":
-                system = (
-                    f"{system}\n\n{message.get('content') or ''}"
-                    if system
-                    else message.get("content") or ""
-                )
-                continue
-            if role == "tool":
-                block = {
-                    "type": "tool_result",
-                    "tool_use_id": message.get("tool_call_id", ""),
-                    "content": message.get("content", ""),
-                }
-                if converted and converted[-1].get("role") == "user":
-                    existing = converted[-1].get("content")
-                    if isinstance(existing, list):
-                        existing.append(block)
-                        continue
-                converted.append({"role": "user", "content": [block]})
-                continue
-            if role == "assistant" and message.get("tool_calls"):
-                blocks: list[dict[str, Any]] = []
-                if message.get("content"):
-                    blocks.append({"type": "text", "text": message["content"]})
-                for call in message["tool_calls"]:
-                    function = call.get("function", {})
-                    try:
-                        arguments = json.loads(function.get("arguments", "{}"))
-                    except (TypeError, json.JSONDecodeError):
-                        arguments = {}
-                    blocks.append(
-                        {
-                            "type": "tool_use",
-                            "id": call.get("id", ""),
-                            "name": function.get("name", ""),
-                            "input": arguments,
-                        }
-                    )
-                converted.append({"role": "assistant", "content": blocks})
-                continue
-            converted.append({"role": role, "content": message.get("content") or ""})
-        return system, converted
-
-    @staticmethod
-    def _anthropic_tools(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
-        return [
-            {
-                "name": tool["function"]["name"],
-                "description": tool["function"].get("description", ""),
-                "input_schema": tool["function"].get(
-                    "parameters", {"type": "object", "properties": {}}
-                ),
-            }
-            for tool in (tools or [])
-        ]
-
-    def _normalize_anthropic_response(self, response: Any) -> dict[str, Any]:
-        content: str | None = None
-        tool_calls: list[dict[str, Any]] = []
-        text_parts: list[str] = []
-        for block in response.content:
-            block_type = getattr(block, "type", None)
-            if block_type == "text":
-                text_parts.append(block.text)
-            elif block_type == "tool_use":
-                tool_calls.append(
-                    {
-                        "id": block.id,
-                        "type": "function",
-                        "function": {
-                            "name": block.name,
-                            "arguments": json.dumps(block.input),
-                        },
-                    }
-                )
-        if text_parts:
-            content = "".join(text_parts)
-        usage = getattr(response, "usage", None)
-        usage_data = None
-        if usage:
-            cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
-            cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
-            usage_data = {
-                "prompt_tokens": getattr(usage, "input_tokens", 0) + cache_read + cache_write,
-                "completion_tokens": getattr(usage, "output_tokens", 0),
-            }
-            if cache_read:
-                usage_data["cache_read_input_tokens"] = cache_read
-            if cache_write:
-                usage_data["cache_creation_input_tokens"] = cache_write
-        return {
-            "choices": [
-                {
-                    "finish_reason": "tool_calls" if tool_calls else "stop",
-                    "message": {
-                        "role": "assistant",
-                        "content": content,
-                        "tool_calls": tool_calls or None,
-                    },
-                }
-            ],
-            "usage": usage_data,
-        }
-
-    def _call_anthropic(
-        self,
-        messages: list[dict[str, Any]],
-        tools: list[dict[str, Any]] | None,
-        stream: bool,
-        stream_callback: Callable[[str], None] | None,
-    ) -> dict[str, Any]:
-        llm_config = self.config["llm"]
-        system, converted = self._anthropic_messages(messages)
-        request: dict[str, Any] = {
-            "model": llm_config["model"],
-            "messages": converted,
-            "max_tokens": llm_config.get("max_tokens", 8192),
-            "temperature": self.config["agent"].get("temperature", 0.7),
-            "top_p": self.config["agent"].get("top_p", 1.0),
-        }
-        if system:
-            if llm_config.get("prompt_caching", {}).get("enabled") and llm_config.get(
-                "prompt_caching", {}
-            ).get("cache_system_prompt", True):
-                request["system"] = [
-                    {
-                        "type": "text",
-                        "text": system,
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ]
-            else:
-                request["system"] = system
-        anthropic_tools = self._anthropic_tools(tools)
-        if anthropic_tools:
-            caching = llm_config.get("prompt_caching", {})
-            if caching.get("enabled") and caching.get("cache_tools", True):
-                anthropic_tools[-1]["cache_control"] = {"type": "ephemeral"}
-            request["tools"] = anthropic_tools
-        if stream:
-            with self.client.messages.stream(**request) as stream_response:
-                for text in stream_response.text_stream:
-                    if stream_callback:
-                        stream_callback(text)
-                return self._normalize_anthropic_response(stream_response.get_final_message())
-        return self._normalize_anthropic_response(self.client.messages.create(**request))
+        return anthropic_messages(messages)
 
     def _stream_response(
         self,
