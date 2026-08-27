@@ -54,6 +54,7 @@ pytest                         # all 941 tests must pass
 - No secrets, API keys, or credentials in code
 - No shell injection risk in commands built from user input
 - Prompt injection scanning is in place for any new content-loading code
+- Run the full checklist from the **security-review** skill (threat model, dependency audit, OWASP, supply chain) — security is a blocking review gate, not a later phase
 
 ## What to Skip
 
@@ -91,8 +92,9 @@ question: why does this need to parse frontmatter again here rather than reusing
 1. Read `gh pr view 42` — understand intent before reading code
 2. Read `gh pr diff 42` — look at the whole diff before commenting on parts
 3. Run CI checks locally if they aren't green
-4. Leave comments grouped by file/concern, not line-by-line nitpicking
-5. Summarize at the end: approve, request changes, or ask a question
+4. Run the security checklist (see **security-review** skill) — secrets scan, dependency audit, injection review
+5. Leave comments grouped by file/concern, not line-by-line nitpicking
+6. Summarize at the end: approve, request changes, or ask a question
 
 ```bash
 # Approve

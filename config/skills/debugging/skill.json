@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "debugging",
+  "version": "1.0.0",
+  "description": "Debugging workflow — reproduce, isolate, bisect, instrument with logging/pdb, root-cause analysis, and performance profiling",
+  "category": "development",
+  "tags": ["debugging", "bisect", "pdb", "profiling", "root-cause"],
+  "entrypoint": "SKILL.md"
+}

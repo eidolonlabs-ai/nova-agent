@@ -62,6 +62,25 @@ git pull --rebase                        # sync with remote
 git branch -d feat/short-description     # clean up merged branch
 ```
 
+## Worktrees
+
+Use git worktrees to work on multiple branches or PRs without switching context:
+
+```bash
+git worktree add ../nova-agent-feature -b feat/thing   # new worktree + branch
+git worktree list                                      # see all worktrees
+git worktree remove ../nova-agent-feature              # clean up when merged
+```
+
+When creating or entering a worktree, it is a fresh checkout — set it up before working in it:
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+.venv/bin/pytest          # verify isolation before making changes
+```
+
+Always use `.venv/bin/python`, `.venv/bin/pytest`, and `.venv/bin/ruff` — never global binaries.
+
 ## GitHub CLI — PRs
 
 ```bash
@@ -143,7 +162,26 @@ git restore <file>             # discard unstaged changes
 git restore --staged <file>    # unstage
 git revert HEAD                # revert last commit (safe on shared branches)
 git stash / git stash pop      # temporarily shelve changes
+
+# Finding things
+git log --oneline --grep="refactor"      # commits by message
+git log -S "function_name" --oneline     # commits that added/removed a string
+git reflog                                # everything that moved HEAD (recover lost commits)
+git cherry-pick <sha>                     # apply one commit onto current branch
+
+# Bisect — find the commit that introduced a bug
+git bisect start
+git bisect bad            # current commit is broken
+git bisect good <sha>     # this older commit was fine
+# git checks out midpoints; run your repro and mark: git bisect good / git bisect bad
+git bisect reset          # done — return to your branch
 ```
+
+## Release Hygiene
+
+- Tag releases: `git tag v1.2.0 && git push --tags`
+- A release commit bumps the version + changelog together (see ci-cd skill)
+- Never tag from a feature branch — tags belong on main at merge commits
 
 ## Pitfalls
 

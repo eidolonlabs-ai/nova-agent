@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "security-review",
+  "version": "1.0.0",
+  "description": "Security review — threat modeling, secrets handling, dependency auditing, OWASP Top 10, prompt injection, and supply-chain checks",
+  "category": "security",
+  "tags": ["security", "threat-modeling", "owasp", "secrets", "prompt-injection", "supply-chain"],
+  "entrypoint": "SKILL.md"
+}

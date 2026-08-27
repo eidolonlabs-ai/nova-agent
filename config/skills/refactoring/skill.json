@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "refactoring",
+  "version": "1.0.0",
+  "description": "Safe refactoring — behavior-preserving changes, seams, incremental steps, and verification with the existing test suite",
+  "category": "development",
+  "tags": ["refactoring", "clean-code", "code-quality"],
+  "entrypoint": "SKILL.md"
+}

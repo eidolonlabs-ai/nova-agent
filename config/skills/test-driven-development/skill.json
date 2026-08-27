@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "test-driven-development",
+  "version": "1.0.0",
+  "description": "TDD workflow — red-green-refactor cycles, test pyramid, mocking, coverage gates, and which layer each test belongs in",
+  "category": "testing",
+  "tags": ["testing", "tdd", "pytest", "mocking", "coverage"],
+  "entrypoint": "SKILL.md"
+}

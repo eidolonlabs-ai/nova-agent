@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "operations",
+  "version": "1.0.0",
+  "description": "Production operations — monitoring, logging, incident response, on-call, postmortems, and deployment/rollback runbooks",
+  "category": "devops",
+  "tags": ["operations", "monitoring", "incident-response", "runbooks", "postmortem"],
+  "entrypoint": "SKILL.md"
+}

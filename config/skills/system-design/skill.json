@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "system-design",
+  "version": "1.0.0",
+  "description": "System design — architecture, components, data models, API contracts, trade-offs, and ADRs. Use when designing a new system, feature, or integration before implementation.",
+  "category": "engineering",
+  "tags": ["architecture", "design", "data-model", "api", "adr"],
+  "entrypoint": "SKILL.md"
+}

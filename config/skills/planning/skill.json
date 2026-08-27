@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "planning",
+  "version": "1.0.0",
+  "description": "Software planning — turn requirements into actionable work: user stories, acceptance criteria, task breakdown, estimation, and definition of done. Use before writing any code.",
+  "category": "engineering",
+  "tags": ["planning", "requirements", "user-stories", "estimation"],
+  "entrypoint": "SKILL.md"
+}

@@ -1,0 +1,9 @@
+{
+  "schema": "nova-skill-v1",
+  "name": "ci-cd",
+  "version": "1.0.0",
+  "description": "CI/CD pipelines and release automation — lint/type/test/coverage gates, GitHub Actions, semantic versioning, changelogs, and rollback",
+  "category": "devops",
+  "tags": ["ci", "cd", "github-actions", "release", "semver", "changelog"],
+  "entrypoint": "SKILL.md"
+}

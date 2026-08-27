@@ -25,6 +25,7 @@ description: Python coding conventions, testing, type hints, ruff, mypy, and bes
 - Use `tmp_path` fixture (built into pytest) for temporary files — not `tempfile.mkdtemp()`
 - Test error paths, not just happy paths
 - One assertion concept per test; use multiple `assert` statements only when they test the same thing
+- Write tests first (see the **test-driven-development** skill); refactor with the suite green (see **refactoring**); debug failures methodically (see **debugging**)
 
 ## Virtual Environments
 
