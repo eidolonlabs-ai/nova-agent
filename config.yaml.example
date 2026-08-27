@@ -7,23 +7,13 @@
 #   OpenAI:      base_url: "https://api.openai.com/v1"
 #   Ollama:      base_url: "http://localhost:11434/v1"
 llm:
-  provider: "openai"             # "openai" or native "anthropic"
+  provider: "openai"             # OpenAI-compatible endpoints only
   api_key: "${LLM_API_KEY}"   # or set LLM_API_KEY env var (OPENROUTER_API_KEY also accepted)
   model: "qwen/qwen3.6-flash" # Any model supported by your endpoint
   base_url: "https://openrouter.ai/api/v1"
   # Optional OpenRouter reasoning controls, for example: {enabled: true}
   # reasoning:
   #   enabled: true
-  # Native Anthropic options:
-  # provider: "anthropic"
-  # base_url: "https://api.anthropic.com"
-  # anthropic_version: "2023-06-01"
-  # max_tokens: 8192
-  # anthropic_headers: {}        # Optional beta or provider-specific headers
-  # prompt_caching:
-  #   enabled: true
-  #   cache_system_prompt: true
-  #   cache_tools: true
 
 # Web tools — Firecrawl (search, scrape, map, crawl, extract, parse)
 # Requires: pip install 'nova-agent[web]' and an API key from firecrawl.dev.

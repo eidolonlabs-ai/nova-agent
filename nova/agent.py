@@ -17,7 +17,6 @@ import time
 import uuid
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from functools import partial
 from pathlib import Path
 from typing import Any, Literal
 
@@ -34,17 +33,13 @@ from nova.hooks import (
 )
 from nova.mcp_client import McpToolInfo, build_mcp_client
 from nova.microcompact import compact_to_token_budget
-from nova.model_metadata import get_model_context_window
+from nova.model_metadata import get_model_context_window, load_provider_metadata
 from nova.observability import create_observability, redact
 from nova.permissions import PermissionChecker, build_permission_checker
 from nova.prompt import build_system_prompt
 from nova.providers import (
-    anthropic_messages,
     build_client,
-    call_anthropic,
     chat_completion,
-    is_anthropic,
-    maybe_load_model_metadata,
     stream_response,
 )
 from nova.retry import retry_with_backoff
@@ -174,7 +169,7 @@ class NovaAgent:
         self.client: Any = (
             openai_client if openai_client is not None else build_client(self.config["llm"])
         )
-        maybe_load_model_metadata(self.client, self.config["llm"])
+        load_provider_metadata(self.client)
 
         # Discover tools (pass config so delegation tool can be gated)
         # Must happen before _create_session so system prompt includes tool summaries
@@ -328,35 +323,13 @@ class NovaAgent:
         stream: bool = False,
         stream_callback: Callable[[str], None] | None = None,
     ) -> dict:
-        """Make an API call to OpenRouter with retry logic."""
+        """Make an API call to the OpenAI-compatible endpoint with retry logic."""
         # Fire pre_llm_call hook
         hooks.emit(EVENT_PRE_LLM_CALL, messages=messages, tools=tools)
 
         llm_config = self.config["llm"]
         agent_config = self.config["agent"]
         retry_cfg = self.config.get("retry", {})
-
-        if is_anthropic(llm_config):
-            anthropic_response = retry_with_backoff(
-                partial(call_anthropic, self.client, llm_config, agent_config),
-                messages,
-                tools,
-                stream,
-                stream_callback,
-                max_retries=retry_cfg.get("max_retries", 3),
-                base_delay=retry_cfg.get("base_delay", 1.0),
-                max_delay=retry_cfg.get("max_delay", 60.0),
-            )
-            self.observability.llm(
-                llm_config["model"],
-                input_data=messages,
-                output_data=anthropic_response,
-                usage=extract_usage_from_response(anthropic_response),
-            )
-            if self.cost_tracker:
-                self.cost_tracker.add_usage(**extract_usage_from_response(anthropic_response))
-            hooks.emit(EVENT_POST_LLM_CALL, response=anthropic_response)
-            return anthropic_response
 
         payload = {
             "model": llm_config["model"],
@@ -433,12 +406,6 @@ class NovaAgent:
         hooks.emit(EVENT_POST_LLM_CALL, response=response_data)
 
         return response_data
-
-    @staticmethod
-    def _anthropic_messages(
-        messages: list[dict[str, Any]],
-    ) -> tuple[str | None, list[dict[str, Any]]]:
-        return anthropic_messages(messages)
 
     def _stream_response(
         self,

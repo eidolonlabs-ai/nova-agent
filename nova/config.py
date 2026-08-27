@@ -17,9 +17,6 @@ DEFAULT_CONFIG = {
         "model": "qwen/qwen3.6-flash",
         "base_url": "https://openrouter.ai/api/v1",
         "max_tokens": 8192,
-        "anthropic_version": "2023-06-01",
-        "anthropic_headers": {},
-        "prompt_caching": {"enabled": False, "cache_system_prompt": True, "cache_tools": True},
     },
     "web": {
         "enabled": True,
@@ -134,22 +131,14 @@ def _validate_config(config: dict[str, Any]) -> None:
 
     agent = config["agent"]
     llm = config["llm"]
-    if llm.get("provider", "openai") not in {"openai", "anthropic"}:
-        raise ConfigError("llm.provider must be 'openai' or 'anthropic'")
+    if llm.get("provider", "openai") != "openai":
+        raise ConfigError("llm.provider must be 'openai'")
     if not isinstance(llm.get("model"), str) or not llm["model"]:
         raise ConfigError("llm.model must be a non-empty string")
     if not isinstance(llm.get("api_key", ""), str):
         raise ConfigError("llm.api_key must be a string")
     if not isinstance(llm.get("base_url", ""), str):
         raise ConfigError("llm.base_url must be a string")
-    if not isinstance(llm.get("anthropic_headers", {}), dict):
-        raise ConfigError("llm.anthropic_headers must be a mapping")
-    caching = llm.get("prompt_caching", {})
-    if not isinstance(caching, dict) or not isinstance(caching.get("enabled", False), bool):
-        raise ConfigError("llm.prompt_caching.enabled must be a boolean")
-    for name in ("cache_system_prompt", "cache_tools"):
-        if not isinstance(caching.get(name, True), bool):
-            raise ConfigError(f"llm.prompt_caching.{name} must be a boolean")
     if not isinstance(llm.get("max_tokens", 8192), int) or llm.get("max_tokens", 8192) < 1:
         raise ConfigError("llm.max_tokens must be a positive integer")
     if not isinstance(agent.get("max_iterations"), int) or not 1 <= agent["max_iterations"] <= 1000:
