@@ -13,8 +13,6 @@ system-level message.
 import logging
 from typing import Any
 
-from openai import OpenAI
-
 from nova.tokens import estimate_messages_tokens
 
 logger = logging.getLogger(__name__)
@@ -38,10 +36,11 @@ _COMPACT_SYSTEM_PROMPT = (
 
 def compress_conversation(
     messages: list[dict[str, Any]],
-    openai_client: OpenAI,
+    openai_client: Any,
     model: str,
     preserve_recent: int = _DEFAULT_PRESERVE_RECENT,
     temperature: float = 0.0,
+    provider: str = "openai",
 ) -> list[dict[str, Any]] | None:
     """Compress older messages using LLM summarization.
 
@@ -81,13 +80,33 @@ def compress_conversation(
     ]
 
     try:
-        response = openai_client.chat.completions.create(  # type: ignore[call-overload]
-            model=model,
-            messages=summary_messages,  # type: ignore[arg-type]
-            temperature=temperature,
-            max_tokens=2000,
-        )
-        summary = response.choices[0].message.content or ""
+        if provider == "anthropic":
+            system = summary_messages[0]["content"]
+            response = openai_client.messages.create(
+                model=model,
+                system=system,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "\n\n".join(
+                            str(message.get("content") or "") for message in summary_messages[1:]
+                        ),
+                    }
+                ],
+                temperature=temperature,
+                max_tokens=2000,
+            )
+            summary = "".join(
+                block.text for block in response.content if getattr(block, "type", None) == "text"
+            )
+        else:
+            response = openai_client.chat.completions.create(  # type: ignore[call-overload]
+                model=model,
+                messages=summary_messages,  # type: ignore[arg-type]
+                temperature=temperature,
+                max_tokens=2000,
+            )
+            summary = response.choices[0].message.content or ""
 
         if not summary:
             logger.warning("Compression returned empty summary — falling back to microcompact")

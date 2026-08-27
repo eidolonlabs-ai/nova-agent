@@ -1,11 +1,7 @@
 """Tests for the cost tracker."""
 
-from nova.cost_tracker import (
-    _MODEL_PRICING,
-    CostTracker,
-    UsageSnapshot,
-    extract_usage_from_response,
-)
+from nova.cost_tracker import CostTracker, UsageSnapshot, extract_usage_from_response
+from nova.model_metadata import load_provider_metadata
 
 # ── UsageSnapshot ───────────────────────────────────────────────────────────
 
@@ -64,9 +60,9 @@ def test_add_usage_cumulative_costs():
 def test_cost_estimation_from_model_pricing():
     tracker = CostTracker(model="qwen/qwen3.6-flash")
     tracker.add_usage(input_tokens=1_000_000, output_tokens=1_000_000)
-    # qwen3.6-flash: $0.03/1M input, $0.09/1M output
-    assert abs(tracker.total.input_cost - 0.03) < 1e-10
-    assert abs(tracker.total.output_cost - 0.09) < 1e-10
+    # Unknown provider metadata uses the documented fallback.
+    assert abs(tracker.total.input_cost - 0.10) < 1e-10
+    assert abs(tracker.total.output_cost - 0.30) < 1e-10
 
 
 def test_cost_estimation_unknown_model_uses_default():
@@ -75,6 +71,30 @@ def test_cost_estimation_unknown_model_uses_default():
     # Default: $0.10/1M input, $0.30/1M output
     assert abs(tracker.total.input_cost - 0.10) < 1e-10
     assert abs(tracker.total.output_cost - 0.30) < 1e-10
+
+
+def test_cost_estimation_uses_provider_pricing():
+    class Client:
+        models = None
+
+        def __init__(self):
+            self.models = self
+
+        def list(self):
+            return {
+                "data": [
+                    {
+                        "id": "provider/model",
+                        "pricing": {"prompt": "0.000003", "completion": "0.000007"},
+                    }
+                ]
+            }
+
+    load_provider_metadata(Client())
+    tracker = CostTracker(model="provider/model")
+    tracker.add_usage(input_tokens=1_000_000, output_tokens=1_000_000)
+    assert tracker.total.input_cost == 3.0
+    assert tracker.total.output_cost == 7.0
 
 
 def test_reset_tracker():
@@ -151,18 +171,23 @@ def test_extract_usage_from_response_none_usage_does_not_crash():
     assert usage["output_tokens"] == 0
 
 
-# ── Model Pricing Table ─────────────────────────────────────────────────────
+def test_extract_usage_from_response_with_cache_tokens():
+    usage = extract_usage_from_response(
+        {
+            "usage": {
+                "prompt_cache_hit_tokens": 90,
+                "prompt_cache_miss_tokens": 10,
+                "completion_tokens": 5,
+            }
+        }
+    )
+    assert usage["input_tokens"] == 100
+    assert usage["cache_read_tokens"] == 90
+    assert usage["cache_write_tokens"] == 10
 
 
-def test_model_pricing_has_entries():
-    assert len(_MODEL_PRICING) > 0
-    assert "qwen/qwen3.6-flash" in _MODEL_PRICING
-    assert "openai/gpt-4o" in _MODEL_PRICING
-
-
-def test_model_pricing_structure():
-    for _model, pricing in _MODEL_PRICING.items():
-        assert "input" in pricing
-        assert "output" in pricing
-        assert pricing["input"] > 0
-        assert pricing["output"] > 0
+def test_cache_tokens_are_included_in_cost_summary():
+    tracker = CostTracker(model="unknown/model")
+    tracker.add_usage(input_tokens=100, output_tokens=10, cache_read_tokens=90)
+    assert tracker.total.cache_read_tokens == 90
+    assert "Cache: 90 read" in tracker.format_summary()

@@ -1,14 +1,13 @@
 """Cost tracking — token counts and dollar costs per session.
 
-Tracks cumulative input/output tokens and estimated dollar costs
-based on per-model pricing from OpenRouter response headers.
+Tracks cumulative input/output tokens and estimated dollar costs using
+provider model metadata and reported response usage when available.
 """
 
-import logging
 from dataclasses import dataclass, field
 from typing import TypedDict
 
-logger = logging.getLogger(__name__)
+from nova.model_metadata import get_model_metadata
 
 
 class UsageDelta(TypedDict, total=False):
@@ -23,26 +22,9 @@ class UsageDelta(TypedDict, total=False):
     input_cost: float
     output_cost: float
     total_cost: float
+    cache_read_tokens: int
+    cache_write_tokens: int
 
-
-# Approximate per-model pricing (USD per 1M tokens)
-# Sourced from OpenRouter pricing. These are defaults — actual costs
-# come from OpenRouter response headers when available.
-_MODEL_PRICING: dict[str, dict[str, float]] = {
-    "qwen/qwen3.6-flash": {"input": 0.03, "output": 0.09},
-    "qwen/qwen3.5-flash": {"input": 0.03, "output": 0.09},
-    "qwen/qwen3-235b-a22b": {"input": 0.10, "output": 0.30},
-    "openai/gpt-4o-mini": {"input": 0.15, "output": 0.60},
-    "openai/gpt-4o": {"input": 2.50, "output": 10.00},
-    "openai/o3-mini": {"input": 1.10, "output": 4.40},
-    "anthropic/claude-3.5-haiku": {"input": 0.80, "output": 4.00},
-    "anthropic/claude-3.5-sonnet": {"input": 3.00, "output": 15.00},
-    "anthropic/claude-sonnet-4-20250514": {"input": 3.00, "output": 15.00},
-    "google/gemini-2.5-flash": {"input": 0.15, "output": 0.60},
-    "google/gemini-2.5-pro": {"input": 1.25, "output": 10.00},
-    "meta-llama/llama-3.3-70b-instruct": {"input": 0.12, "output": 0.30},
-    "meta-llama/llama-4-maverick": {"input": 0.20, "output": 0.80},
-}
 
 # Default pricing for unknown models (cheap model assumption)
 _DEFAULT_PRICING = {"input": 0.10, "output": 0.30}
@@ -56,6 +38,10 @@ class UsageSnapshot:
     output_tokens: int = 0
     input_cost: float = 0.0
     output_cost: float = 0.0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+    cache_read_cost: float = 0.0
+    cache_write_cost: float = 0.0
     reported_total_cost: float | None = None
 
     @property
@@ -66,7 +52,7 @@ class UsageSnapshot:
     def total_cost(self) -> float:
         if self.reported_total_cost is not None:
             return self.reported_total_cost
-        return self.input_cost + self.output_cost
+        return self.input_cost + self.output_cost + self.cache_read_cost + self.cache_write_cost
 
 
 @dataclass
@@ -86,15 +72,13 @@ class CostTracker:
     _usage: UsageSnapshot = field(default_factory=UsageSnapshot)
     _reported_total_cost: float | None = None
 
-    def __post_init__(self) -> None:
-        if self.model and self.model not in _MODEL_PRICING:
-            logger.warning("No pricing data for model %r; using default estimate", self.model)
-
     def add_usage(
         self,
         *,
         input_tokens: int = 0,
         output_tokens: int = 0,
+        cache_read_tokens: int = 0,
+        cache_write_tokens: int = 0,
         input_cost: float | None = None,
         output_cost: float | None = None,
         total_cost: float | None = None,
@@ -104,18 +88,21 @@ class CostTracker:
         If costs are not provided, they are estimated from the model's
         pricing table.
         """
-        if input_tokens < 0 or output_tokens < 0:
+        if input_tokens < 0 or output_tokens < 0 or cache_read_tokens < 0 or cache_write_tokens < 0:
             raise ValueError("token counts cannot be negative")
         for cost in (input_cost, output_cost, total_cost):
             if cost is not None and cost < 0:
                 raise ValueError("costs cannot be negative")
 
+        estimated: dict[str, float] = {}
         if total_cost is not None:
             self._reported_total_cost = (self._reported_total_cost or 0.0) + total_cost
             input_cost = 0.0
             output_cost = 0.0
         elif input_cost is None or output_cost is None:
-            estimated = self._estimate_cost(input_tokens, output_tokens)
+            estimated = self._estimate_cost(
+                input_tokens, output_tokens, cache_read_tokens, cache_write_tokens
+            )
             if input_cost is None:
                 input_cost = estimated["input"]
             if output_cost is None:
@@ -126,15 +113,38 @@ class CostTracker:
             output_tokens=self._usage.output_tokens + output_tokens,
             input_cost=self._usage.input_cost + input_cost,
             output_cost=self._usage.output_cost + output_cost,
+            cache_read_tokens=self._usage.cache_read_tokens + cache_read_tokens,
+            cache_write_tokens=self._usage.cache_write_tokens + cache_write_tokens,
+            cache_read_cost=self._usage.cache_read_cost + estimated.get("cache_read", 0.0)
+            if total_cost is None
+            else self._usage.cache_read_cost,
+            cache_write_cost=self._usage.cache_write_cost + estimated.get("cache_write", 0.0)
+            if total_cost is None
+            else self._usage.cache_write_cost,
             reported_total_cost=self._reported_total_cost,
         )
 
-    def _estimate_cost(self, input_tokens: int, output_tokens: int) -> dict[str, float]:
+    def _estimate_cost(
+        self, input_tokens: int, output_tokens: int, cache_read_tokens: int, cache_write_tokens: int
+    ) -> dict[str, float]:
         """Estimate dollar cost from token counts using model pricing."""
-        pricing = _MODEL_PRICING.get(self.model, _DEFAULT_PRICING)
+        metadata = get_model_metadata(self.model)
+        input_price = metadata.input_price_per_million if metadata else None
+        output_price = metadata.output_price_per_million if metadata else None
+        cache_read_price = metadata.cache_read_price_per_million if metadata else None
+        cache_write_price = metadata.cache_write_price_per_million if metadata else None
+        if input_price is None or output_price is None:
+            input_price = input_price if input_price is not None else _DEFAULT_PRICING["input"]
+            output_price = output_price if output_price is not None else _DEFAULT_PRICING["output"]
+        cache_read_price = cache_read_price if cache_read_price is not None else input_price
+        cache_write_price = cache_write_price if cache_write_price is not None else input_price
         return {
-            "input": input_tokens * pricing["input"] / 1_000_000,
-            "output": output_tokens * pricing["output"] / 1_000_000,
+            "input": max(0, input_tokens - cache_read_tokens - cache_write_tokens)
+            * input_price
+            / 1_000_000,
+            "output": output_tokens * output_price / 1_000_000,
+            "cache_read": cache_read_tokens * cache_read_price / 1_000_000,
+            "cache_write": cache_write_tokens * cache_write_price / 1_000_000,
         }
 
     @property
@@ -153,6 +163,8 @@ class CostTracker:
         lines = [
             f"Tokens: {t.total_tokens:,} total ({t.input_tokens:,} in, {t.output_tokens:,} out)",
         ]
+        if t.cache_read_tokens or t.cache_write_tokens:
+            lines.append(f"Cache: {t.cache_read_tokens:,} read, {t.cache_write_tokens:,} written")
         total_cost = (
             self._reported_total_cost if self._reported_total_cost is not None else t.total_cost
         )
@@ -173,9 +185,20 @@ def extract_usage_from_response(response_data: dict) -> UsageDelta:
     input_cost, output_cost from headers — splat-safe into add_usage().
     """
     usage = response_data.get("usage") or {}
+    cache_read_tokens = usage.get(
+        "cache_read_input_tokens", usage.get("prompt_cache_hit_tokens", 0)
+    )
+    cache_write_tokens = usage.get(
+        "cache_creation_input_tokens", usage.get("prompt_cache_miss_tokens", 0)
+    )
+    input_tokens = usage.get("prompt_tokens", usage.get("input_tokens", 0))
+    if not input_tokens:
+        input_tokens = cache_read_tokens + cache_write_tokens
     result: UsageDelta = {
-        "input_tokens": usage.get("prompt_tokens", 0),
-        "output_tokens": usage.get("completion_tokens", 0),
+        "input_tokens": input_tokens,
+        "output_tokens": usage.get("completion_tokens", usage.get("output_tokens", 0)),
+        "cache_read_tokens": cache_read_tokens,
+        "cache_write_tokens": cache_write_tokens,
     }
 
     if "cost" in usage:

@@ -12,9 +12,14 @@ import yaml
 
 DEFAULT_CONFIG = {
     "llm": {
+        "provider": "openai",
         "api_key": "",
         "model": "qwen/qwen3.6-flash",
         "base_url": "https://openrouter.ai/api/v1",
+        "max_tokens": 8192,
+        "anthropic_version": "2023-06-01",
+        "anthropic_headers": {},
+        "prompt_caching": {"enabled": False, "cache_system_prompt": True, "cache_tools": True},
     },
     "web": {
         "enabled": True,
@@ -34,20 +39,20 @@ DEFAULT_CONFIG = {
         "stream_include_usage": True,
     },
     "budgets": {
-        "system_prompt_max": 8000,
+        "system_prompt_max": 16000,
         "skills_max_chars": 15000,
         "skills_max_count": 50,
         "context_file_max_chars": 10000,
         "context_total_max_chars": 50000,
         "tool_result_max_chars": 8000,
-        "tool_result_max_tokens": 3000,
+        "tool_result_max_tokens": 12000,
         "conversation_turn_limit": 15,
     },
     "compression": {
         "enabled": True,
         "threshold_percent": 0.40,
         "summary_model": "qwen/qwen3.6-flash",
-        "reserve_tokens": 15000,
+        "reserve_tokens": 30000,
     },
     "context_files": ["NOVA.md", "AGENTS.md"],
     "wiki": {
@@ -73,9 +78,9 @@ DEFAULT_CONFIG = {
         "default_timeout_seconds": 60,
         "subagent_budgets": {
             "max_iterations": 30,
-            "system_prompt_max": 4000,
+            "system_prompt_max": 8000,
             "tool_result_max_chars": 4000,
-            "tool_result_max_tokens": 1500,
+            "tool_result_max_tokens": 4000,
         },
     },
     "permissions": {
@@ -134,6 +139,25 @@ def _validate_config(config: dict[str, Any]) -> None:
             raise ConfigError(f"Config section '{section}' must be a mapping")
 
     agent = config["agent"]
+    llm = config["llm"]
+    if llm.get("provider", "openai") not in {"openai", "anthropic"}:
+        raise ConfigError("llm.provider must be 'openai' or 'anthropic'")
+    if not isinstance(llm.get("model"), str) or not llm["model"]:
+        raise ConfigError("llm.model must be a non-empty string")
+    if not isinstance(llm.get("api_key", ""), str):
+        raise ConfigError("llm.api_key must be a string")
+    if not isinstance(llm.get("base_url", ""), str):
+        raise ConfigError("llm.base_url must be a string")
+    if not isinstance(llm.get("anthropic_headers", {}), dict):
+        raise ConfigError("llm.anthropic_headers must be a mapping")
+    caching = llm.get("prompt_caching", {})
+    if not isinstance(caching, dict) or not isinstance(caching.get("enabled", False), bool):
+        raise ConfigError("llm.prompt_caching.enabled must be a boolean")
+    for name in ("cache_system_prompt", "cache_tools"):
+        if not isinstance(caching.get(name, True), bool):
+            raise ConfigError(f"llm.prompt_caching.{name} must be a boolean")
+    if not isinstance(llm.get("max_tokens", 8192), int) or llm.get("max_tokens", 8192) < 1:
+        raise ConfigError("llm.max_tokens must be a positive integer")
     if not isinstance(agent.get("max_iterations"), int) or not 1 <= agent["max_iterations"] <= 1000:
         raise ConfigError("agent.max_iterations must be an integer between 1 and 1000")
     for name, low, high in (("temperature", 0.0, 2.0), ("top_p", 0.0, 1.0)):

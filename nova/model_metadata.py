@@ -1,59 +1,90 @@
-"""Model metadata — context window sizes for common OpenRouter models.
+"""Model metadata loaded from an OpenAI-compatible provider endpoint."""
 
-Used to calibrate context compression thresholds and history limits.
-"""
+from dataclasses import dataclass
+from typing import Any
 
-# Known context windows for popular models (tokens)
-# Source: OpenRouter model pages, provider documentation
-MODEL_CONTEXT_WINDOWS: dict[str, int] = {
-    # Anthropic
-    "anthropic/claude-sonnet-4-20250514": 200_000,
-    "anthropic/claude-opus-4-20250514": 200_000,
-    "anthropic/claude-3-5-sonnet-20241022": 200_000,
-    "anthropic/claude-3-5-haiku-20241022": 200_000,
-    # OpenAI
-    "openai/gpt-4o": 128_000,
-    "openai/gpt-4o-mini": 128_000,
-    "openai/o1": 200_000,
-    "openai/o3-mini": 200_000,
-    # Google
-    "google/gemini-2.5-pro": 1_000_000,
-    "google/gemini-2.0-flash-exp:free": 1_000_000,
-    "google/gemini-2.0-flash": 1_000_000,
-    # Qwen
-    "qwen/qwen3.6-flash": 131_072,
-    "qwen/qwen3-235b-a22b": 131_072,
-    "qwen/qwen-plus": 131_072,
-    # Meta
-    "meta-llama/llama-3.3-70b-instruct": 131_072,
-    "meta-llama/llama-3.1-405b-instruct": 131_072,
-    # Mistral
-    "mistralai/mistral-large-2411": 131_000,
-    "mistralai/mistral-small-2503": 131_000,
-    # DeepSeek
-    # Note: deepseek-v4-flash / deepseek-v4-pro support 1M context (api.deepseek.com docs).
-    # Bare names (e.g. "deepseek-v4-flash") aren't listed here, so they resolve via
-    # DEFAULT_CONTEXT_WINDOW below — bump to 1_000_000 if you want full headroom.
-    "deepseek/deepseek-chat": 128_000,
-    "deepseek/deepseek-r1": 128_000,
-}
+DEFAULT_CONTEXT_WINDOW = 1_000_000
 
-# Default context window when model is not in the lookup table.
-# Conservative working cap: many modern models support far more (DeepSeek V4 = 1M),
-# but 256k keeps compression math sane without risking over-stuffing context.
-DEFAULT_CONTEXT_WINDOW = 256_000
+
+@dataclass(frozen=True)
+class ModelMetadata:
+    context_window: int | None = None
+    input_price_per_million: float | None = None
+    output_price_per_million: float | None = None
+    cache_read_price_per_million: float | None = None
+    cache_write_price_per_million: float | None = None
+
+
+_MODEL_METADATA: dict[str, ModelMetadata] = {}
+
+
+def _value(item: Any, key: str, default: Any = None) -> Any:
+    if isinstance(item, dict):
+        return item.get(key, default)
+    return getattr(item, key, default)
+
+
+def _price(pricing: Any, name: str) -> float | None:
+    try:
+        value = float(_value(pricing, name))
+        return value * 1_000_000 if value >= 0 else None
+    except (TypeError, ValueError):
+        return None
+
+
+def load_provider_metadata(client: Any) -> dict[str, ModelMetadata]:
+    """Load model context and pricing metadata from ``client.models.list()``.
+
+    Metadata is optional because some compatible providers do not implement the
+    models endpoint or return incomplete records. In either case, callers retain
+    safe defaults and the error is intentionally non-fatal.
+    """
+    _MODEL_METADATA.clear()
+    try:
+        response = client.models.list()
+        records = _value(response, "data", []) or []
+    except Exception:
+        return {}
+
+    loaded: dict[str, ModelMetadata] = {}
+    for record in records:
+        model_id = _value(record, "id")
+        if not isinstance(model_id, str) or not model_id:
+            continue
+
+        context = _value(record, "context_length")
+        pricing = _value(record, "pricing", {}) or {}
+        try:
+            context_value = int(context) if context is not None and int(context) > 0 else None
+        except (TypeError, ValueError):
+            context_value = None
+
+        loaded[model_id] = ModelMetadata(
+            context_window=context_value,
+            input_price_per_million=_price(pricing, "prompt"),
+            output_price_per_million=_price(pricing, "completion"),
+            cache_read_price_per_million=_price(pricing, "cache_read"),
+            cache_write_price_per_million=_price(pricing, "cache_write"),
+        )
+
+    _MODEL_METADATA.update(loaded)
+    return loaded
+
+
+def get_model_metadata(model: str) -> ModelMetadata | None:
+    """Return exact or partial-match metadata for a model identifier."""
+    if model in _MODEL_METADATA:
+        return _MODEL_METADATA[model]
+    model_lower = model.lower()
+    for key, value in _MODEL_METADATA.items():
+        if key.lower() in model_lower or model_lower in key.lower():
+            return value
+    return None
 
 
 def get_model_context_window(model: str) -> int:
-    """Return the context window size for a model, or the default."""
-    # Exact match
-    if model in MODEL_CONTEXT_WINDOWS:
-        return MODEL_CONTEXT_WINDOWS[model]
-
-    # Partial match (e.g., user specifies a variant)
-    model_lower = model.lower()
-    for key, value in MODEL_CONTEXT_WINDOWS.items():
-        if key.lower() in model_lower or model_lower in key.lower():
-            return value
-
-    return DEFAULT_CONTEXT_WINDOW
+    """Return the provider-reported context window, or a 1M-token default."""
+    metadata = get_model_metadata(model)
+    return (
+        metadata.context_window if metadata and metadata.context_window else DEFAULT_CONTEXT_WINDOW
+    )

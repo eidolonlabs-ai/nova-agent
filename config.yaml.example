@@ -7,12 +7,23 @@
 #   OpenAI:      base_url: "https://api.openai.com/v1"
 #   Ollama:      base_url: "http://localhost:11434/v1"
 llm:
+  provider: "openai"             # "openai" or native "anthropic"
   api_key: "${LLM_API_KEY}"   # or set LLM_API_KEY env var (OPENROUTER_API_KEY also accepted)
   model: "qwen/qwen3.6-flash" # Any model supported by your endpoint
   base_url: "https://openrouter.ai/api/v1"
   # Optional OpenRouter reasoning controls, for example: {enabled: true}
   # reasoning:
   #   enabled: true
+  # Native Anthropic options:
+  # provider: "anthropic"
+  # base_url: "https://api.anthropic.com"
+  # anthropic_version: "2023-06-01"
+  # max_tokens: 8192
+  # anthropic_headers: {}        # Optional beta or provider-specific headers
+  # prompt_caching:
+  #   enabled: true
+  #   cache_system_prompt: true
+  #   cache_tools: true
 
 # Web tools — Firecrawl (search, scrape, map, crawl, extract, parse)
 # Requires: pip install 'nova-agent[web]' and an API key from firecrawl.dev.
@@ -33,12 +44,13 @@ agent:
 
 # Token budgets (explicit caps at every layer)
 budgets:
-  system_prompt_max: 8000           # Total system prompt tokens
+  system_prompt_max: 16000          # Total system prompt tokens
   skills_max_chars: 15000           # Skills section character limit
   skills_max_count: 50              # Max skills in prompt
   context_file_max_chars: 10000     # Per context file
   context_total_max_chars: 50000    # Total across all context files
   tool_result_max_chars: 8000       # Per tool result
+  tool_result_max_tokens: 12000     # Token cap per tool result
   conversation_turn_limit: 15       # DM session turn limit before compression
 
 # Context compression
@@ -46,7 +58,7 @@ compression:
   enabled: true
   threshold_percent: 0.40    # Compress at 40% of context window
   summary_model: "qwen/qwen3.6-flash"  # Cheap model for summarization
-  reserve_tokens: 15000      # Reserve for compaction overhead
+  reserve_tokens: 30000      # Reserve for compaction overhead
 
 # Context files to discover (project-level context, in priority order)
 # Note: Global personality file (~/.nova/SOUL.md) is loaded separately via load_global_personality()
@@ -88,9 +100,9 @@ delegation:
   # Budget overrides for sub-agents (smaller than parent defaults)
   subagent_budgets:
     max_iterations: 30            # Max tool calls per sub-agent turn
-    system_prompt_max: 4000       # Smaller system prompt for sub-agents
+    system_prompt_max: 8000       # Smaller system prompt for sub-agents
     tool_result_max_chars: 4000   # Smaller tool result budget
-    tool_result_max_tokens: 1500  # Token limit per tool result
+    tool_result_max_tokens: 4000  # Token limit per tool result
 
 # Permission system — tool execution approval with defense-in-depth
 # Modes: "auto" (allow all, current default) or "ask" (confirm mutating tools)

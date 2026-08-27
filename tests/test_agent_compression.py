@@ -33,7 +33,7 @@ def test_compression_tier1_triggered_at_threshold(
     """Test that microcompact tier 1 is triggered when message tokens exceed threshold."""
     minimal_config["compression"]["enabled"] = True
     minimal_config["compression"]["threshold_percent"] = (
-        0.01  # 1% = very low threshold to trigger easily
+        0.001  # 0.1% = very low threshold to trigger easily
     )
     minimal_config["microcompact"]["enabled"] = True
     minimal_config["microcompact"]["keep_recent"] = 6
@@ -85,7 +85,7 @@ def test_compression_tier1_skipped_under_threshold(
 def test_compression_tier2_llm_compression(minimal_config, mock_session_store, mock_openai_client):
     """Test that LLM-based tier 2 compression is triggered when tier 1 is insufficient."""
     minimal_config["compression"]["enabled"] = True
-    minimal_config["compression"]["threshold_percent"] = 0.01
+    minimal_config["compression"]["threshold_percent"] = 0.001
     minimal_config["microcompact"]["enabled"] = True
     minimal_config["agent"]["max_iterations"] = 1
 
@@ -118,7 +118,7 @@ def test_compression_tier2_summary_survives_next_turn(
 ):
     """Tier 2 summaries are retained in agent history after compression."""
     minimal_config["compression"]["enabled"] = True
-    minimal_config["compression"]["threshold_percent"] = 0.01
+    minimal_config["compression"]["threshold_percent"] = 0.001
     minimal_config["microcompact"]["enabled"] = False
     minimal_config["agent"]["max_iterations"] = 1
 
@@ -178,7 +178,7 @@ def test_compression_microcompact_savings_logged(
 ):
     """Test that microcompact tier 1 logs token savings."""
     minimal_config["compression"]["enabled"] = True
-    minimal_config["compression"]["threshold_percent"] = 0.01
+    minimal_config["compression"]["threshold_percent"] = 0.001
     minimal_config["microcompact"]["enabled"] = True
     minimal_config["agent"]["max_iterations"] = 1
 
@@ -213,7 +213,7 @@ def test_compression_tier2_warning_when_exceeds_threshold(
 ):
     """Test warning logged when compression tier 2 cannot reduce below threshold."""
     minimal_config["compression"]["enabled"] = True
-    minimal_config["compression"]["threshold_percent"] = 0.01
+    minimal_config["compression"]["threshold_percent"] = 0.001
     minimal_config["microcompact"]["enabled"] = True
     minimal_config["agent"]["max_iterations"] = 1
 
@@ -245,7 +245,7 @@ def test_compression_preserves_recent_messages(
 ):
     """Test that compression preserves recent messages (keep_recent parameter)."""
     minimal_config["compression"]["enabled"] = True
-    minimal_config["compression"]["threshold_percent"] = 0.01
+    minimal_config["compression"]["threshold_percent"] = 0.001
     minimal_config["microcompact"]["enabled"] = True
     minimal_config["microcompact"]["keep_recent"] = 5
     minimal_config["agent"]["max_iterations"] = 1
@@ -275,7 +275,7 @@ def test_compression_state_persisted_to_session(
 ):
     """Test that compression works without breaking agent execution."""
     minimal_config["compression"]["enabled"] = True
-    minimal_config["compression"]["threshold_percent"] = 0.01
+    minimal_config["compression"]["threshold_percent"] = 0.001
     minimal_config["microcompact"]["enabled"] = True
     minimal_config["agent"]["max_iterations"] = 1
 
