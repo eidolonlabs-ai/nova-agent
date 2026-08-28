@@ -475,6 +475,24 @@ def test_compaction_injects_recovery_note(minimal_config, mock_session_store, mo
     )
 
 
+def test_context_window_override_flows_to_lookup(
+    minimal_config, mock_session_store, mock_openai_client
+):
+    """llm.context_window config is passed as the override to the window lookup."""
+    minimal_config["llm"]["context_window"] = 1_000_000
+    mock_openai_client.chat.completions.create.return_value = make_openai_response(content="OK")
+
+    agent = NovaAgent(
+        config=minimal_config,
+        openai_client=mock_openai_client,
+        session_store=mock_session_store,
+    )
+    with patch("nova.agent.get_model_context_window", return_value=1_000_000) as lookup:
+        agent.run("hello", stream=False)
+
+    lookup.assert_called_once_with("test-model", override=1_000_000)
+
+
 def test_agent_execute_tool_call_invalid_json(
     minimal_config, mock_session_store, mock_openai_client
 ):

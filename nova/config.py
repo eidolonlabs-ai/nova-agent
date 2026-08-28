@@ -17,6 +17,10 @@ DEFAULT_CONFIG = {
         "model": "qwen/qwen3.6-flash",
         "base_url": "https://openrouter.ai/api/v1",
         "max_tokens": 8192,
+        # 0 = auto: use provider-reported context window, else the 128k
+        # fallback. Set explicitly (e.g. 1_000_000 for 1M-token models)
+        # to override what the provider reports.
+        "context_window": 0,
     },
     "web": {
         "enabled": True,
@@ -141,6 +145,8 @@ def _validate_config(config: dict[str, Any]) -> None:
         raise ConfigError("llm.base_url must be a string")
     if not isinstance(llm.get("max_tokens", 8192), int) or llm.get("max_tokens", 8192) < 1:
         raise ConfigError("llm.max_tokens must be a positive integer")
+    if not isinstance(llm.get("context_window", 0), int) or llm.get("context_window", 0) < 0:
+        raise ConfigError("llm.context_window must be a non-negative integer (0 = auto)")
     if not isinstance(agent.get("max_iterations"), int) or not 1 <= agent["max_iterations"] <= 1000:
         raise ConfigError("agent.max_iterations must be an integer between 1 and 1000")
     for name, low, high in (("temperature", 0.0, 2.0), ("top_p", 0.0, 1.0)):

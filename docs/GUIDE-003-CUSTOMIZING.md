@@ -52,6 +52,11 @@ llm:
   # model: "anthropic/claude-opus-4-20250514"    # Most capable
   # model: "google/gemini-2.5-pro"               # Large context window
   # model: "openai/gpt-4.1"                      # Good all-rounder
+  context_window: 0                    # 0 = auto (provider-reported, else 128k).
+                                       # Set explicitly, e.g. 1_000_000, for
+                                       # 1M-token models whose provider doesn't
+                                       # report a context window. Overrides the
+                                       # provider value when positive.
 ```
 
 ### Token Budgets

@@ -74,7 +74,10 @@ def _chat_loop(agent):
         print_message_history(agent.messages)
 
     model = agent.config["llm"]["model"]
-    context_window = get_model_context_window(model)
+    context_window = get_model_context_window(
+        model,
+        override=agent.config.get("llm", {}).get("context_window") or None,
+    )
     tui = NovaTUI(model=model, context_window=context_window, config=agent.config)
     agent._reasoning_callback = None
     agent._confirmation_callback = lambda name, arguments: _confirm_tool(

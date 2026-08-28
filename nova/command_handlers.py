@@ -320,7 +320,10 @@ def cmd_usage(agent: NovaAgent, args: str) -> None:
         agent.messages,
         system_prompt=agent._system_prompt or "",
     )
-    cw = get_model_context_window(agent.config["llm"]["model"])
+    cw = get_model_context_window(
+        agent.config["llm"]["model"],
+        override=agent.config.get("llm", {}).get("context_window") or None,
+    )
     pct = int(ctx / cw * 100) if cw else 0
     _cprint(f"{_DIM}Context used: {ctx:,} / {cw:,} tokens ({pct}%){_RST}")
     if agent.cost_tracker:
@@ -358,7 +361,10 @@ def cmd_compact(agent: NovaAgent, args: str) -> None:
     api_messages = [{"role": "system", "content": agent._system_prompt or ""}]
     api_messages.extend(agent.messages)
     tools = agent._get_tool_definitions()
-    context_window = get_model_context_window(agent.config["llm"]["model"])
+    context_window = get_model_context_window(
+        agent.config["llm"]["model"],
+        override=agent.config.get("llm", {}).get("context_window") or None,
+    )
     reserve = max(1024, int(agent.config["llm"].get("max_tokens", 8192))) + 1024
     budget = max(1, context_window - reserve)
     tool_tokens = estimate_total_request_tokens([], tools=tools)

@@ -900,7 +900,10 @@ class NovaAgent:
         target budget is halved to shed context aggressively.
         """
         total_tokens = estimate_total_request_tokens(api_messages, tools=tools)
-        context_window = get_model_context_window(self.config["llm"]["model"])
+        context_window = get_model_context_window(
+            self.config["llm"]["model"],
+            override=self.config["llm"].get("context_window") or None,
+        )
         response_reserve = max(1024, int(self.config["llm"].get("max_tokens", 8192)))
         safety_margin = 1024
         active_budget = max(1, context_window - response_reserve - safety_margin)
