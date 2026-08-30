@@ -4,8 +4,11 @@ import contextlib
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from nova.retry import (
+    _API_TIMEOUT_PATTERNS,
+    _CONNECTION_ERROR_PATTERNS,
     _OVERFLOW_PATTERNS,
     _RETRYABLE_PATTERNS,
     _RETRYABLE_STATUS,
@@ -18,24 +21,24 @@ from nova.retry import (
 # ── classify_error ──────────────────────────────────────────────────────────
 
 
-def test_classify_context_overflow():
-    for pattern in _OVERFLOW_PATTERNS:
-        assert classify_error(message=pattern) == ErrorType.CONTEXT_OVERFLOW
+@pytest.mark.parametrize("pattern", _OVERFLOW_PATTERNS)
+def test_classify_context_overflow(pattern):
+    assert classify_error(message=pattern) == ErrorType.CONTEXT_OVERFLOW
 
 
-def test_classify_retryable_status():
-    for status in _RETRYABLE_STATUS:
-        assert classify_error(status_code=status) == ErrorType.RETRYABLE
+@pytest.mark.parametrize("status", sorted(_RETRYABLE_STATUS))
+def test_classify_retryable_status(status):
+    assert classify_error(status_code=status) == ErrorType.RETRYABLE
 
 
-def test_classify_retryable_patterns():
-    for pattern in _RETRYABLE_PATTERNS:
-        assert classify_error(message=pattern) == ErrorType.RETRYABLE
+@pytest.mark.parametrize("pattern", _RETRYABLE_PATTERNS)
+def test_classify_retryable_patterns(pattern):
+    assert classify_error(message=pattern) == ErrorType.RETRYABLE
 
 
-def test_classify_non_retryable_4xx():
-    for status in [400, 401, 403, 404, 405, 409, 422]:
-        assert classify_error(status_code=status) == ErrorType.NON_RETRYABLE
+@pytest.mark.parametrize("status", [400, 401, 403, 404, 405, 409, 422])
+def test_classify_non_retryable_4xx(status):
+    assert classify_error(status_code=status) == ErrorType.NON_RETRYABLE
 
 
 def test_classify_429_is_retryable():
@@ -56,6 +59,69 @@ def test_classify_overflow_takes_priority():
 
 def test_classify_client_status_takes_priority_over_retryable_text():
     assert classify_error(status_code=400, message="timeout") == ErrorType.NON_RETRYABLE
+
+
+@pytest.mark.parametrize("pattern", _CONNECTION_ERROR_PATTERNS)
+def test_classify_connection_error_patterns(pattern):
+    assert classify_error(message=f"request failed: {pattern}") == ErrorType.CONNECTION_TIMEOUT
+
+
+@pytest.mark.parametrize("pattern", _API_TIMEOUT_PATTERNS)
+def test_classify_api_timeout_patterns(pattern):
+    assert classify_error(message=f"request failed: {pattern}") == ErrorType.API_TIMEOUT
+
+
+@pytest.mark.parametrize("status", [500, 501, 502, 503, 504, 505, 508, 599])
+def test_classify_5xx_is_retryable(status):
+    # Any 5xx falls through the 500-599 branch even when not in _RETRYABLE_STATUS
+    assert classify_error(status_code=status) == ErrorType.RETRYABLE
+
+
+def test_classify_connection_patterns_take_priority_over_api_timeout():
+    # "connection timeout" also contains "timeout"; connection-level must win
+    assert classify_error(message="connection timeout after 30s") == ErrorType.CONNECTION_TIMEOUT
+
+
+def test_classify_case_insensitive_matching():
+    assert classify_error(message="RATE LIMIT exceeded") == ErrorType.RETRYABLE
+    assert classify_error(message="Context Length Exceeded") == ErrorType.CONTEXT_OVERFLOW
+    assert classify_error(message="Connection Refused") == ErrorType.CONNECTION_TIMEOUT
+    assert classify_error(message="Request TIMED OUT") == ErrorType.API_TIMEOUT
+
+
+def test_classify_empty_message_is_non_retryable():
+    assert classify_error(message="") == ErrorType.NON_RETRYABLE
+    assert classify_error(status_code=None, message="") == ErrorType.NON_RETRYABLE
+
+
+def test_classify_none_status_unknown_message_is_non_retryable():
+    assert classify_error(message="something completely unusual") == ErrorType.NON_RETRYABLE
+
+
+def test_classify_message_with_no_matching_pattern():
+    assert classify_error(message="invalid api key") == ErrorType.NON_RETRYABLE
+
+
+def test_classify_overflow_beats_api_timeout_pattern():
+    # "input length" (overflow) vs "timeout"-bearing message: overflow must win
+    assert classify_error(message="timeout: input length exceeded") == ErrorType.CONTEXT_OVERFLOW
+
+
+def test_classify_overflow_beats_connection_pattern():
+    # message matching both an overflow pattern and a connection pattern
+    assert (
+        classify_error(message="connection reset: context window exceeded")
+        == ErrorType.CONTEXT_OVERFLOW
+    )
+
+
+def test_classify_status_wins_over_api_timeout_text():
+    # 503 is retryable even if text says "temporary failure" (status is authoritative)
+    assert classify_error(status_code=503, message="temporary failure") == ErrorType.RETRYABLE
+
+
+def test_classify_other_1xx_3xx_status_is_non_retryable():
+    assert classify_error(status_code=302) == ErrorType.NON_RETRYABLE
 
 
 # ── retry_with_backoff ──────────────────────────────────────────────────────
